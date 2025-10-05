@@ -39,8 +39,11 @@ UPLOADCARE_PUBLIC_KEY = os.getenv("UPLOADCARE_PUBLIC_KEY", "9bbcfab1a72a8d1311ba
 UPLOADCARE_SECRET_KEY = os.getenv("UPLOADCARE_SECRET_KEY", "0ac770a85532060f0ed9")
 
 # Прокси-настройки
-SOCKS_PROXY_URL = os.getenv("SOCKS_PROXY_URL", "socks5://127.0.0.1:10808")
-ENABLE_SOCKS_PROXY = os.getenv("ENABLE_SOCKS_PROXY", "false").lower() == "true"
+SOCKS_PROXY_URL = os.getenv(
+    "SOCKS_PROXY",
+    os.getenv("SOCKS_PROXY_URL", "socks5://127.0.0.1:10808"),
+)
+ENABLE_SOCKS_PROXY = os.getenv("ENABLE_SOCKS_PROXY", "true").lower() == "true"
 
 # Другие настройки
 APP_NAME = os.getenv("APP_NAME", "Smart Closet")
