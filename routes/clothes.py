@@ -148,6 +148,12 @@ def _insights_to_autofill(insights: schemas.ClothesInsights) -> schemas.ClothesA
     primary_season = insights.season[0] if insights.season else "Универсальная"
     primary_color = ", ".join(insights.colors) if insights.colors else "Неопределённый"
     description = insights.catalog_description.strip()
+    temp_min, temp_max = None, None
+    if insights.temp_c_range:
+        if len(insights.temp_c_range) == 2:
+            temp_min, temp_max = insights.temp_c_range
+        elif len(insights.temp_c_range) == 1:
+            temp_min = insights.temp_c_range[0]
 
     return schemas.ClothesAutoFill(
         name=insights.title.strip(),
@@ -157,6 +163,8 @@ def _insights_to_autofill(insights: schemas.ClothesInsights) -> schemas.ClothesA
         material=insights.material.strip() if insights.material else None,
         prompt_description=description,
         ai_metadata=insights,
+        temperature_min=temp_min,
+        temperature_max=temp_max,
     )
 
 @router.post("/autofill", response_model=schemas.ClothesAutoFill)
@@ -177,6 +185,9 @@ async def add_clothes(
     color: Optional[str] = Form(None),
     material: Optional[str] = Form(None),
     prompt_description: Optional[str] = Form(None),
+    temperature_min: Optional[int] = Form(None),
+    temperature_max: Optional[int] = Form(None),
+    ai_metadata: Optional[str] = Form(None),
     auto_fill: bool = Form(False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
@@ -186,15 +197,22 @@ async def add_clothes(
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Файл изображения пустой")
+    autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
     if auto_fill or not all([name, category, season, color]):
         insights = await _analyze_image_bytes(image_bytes)
-        auto_data = _insights_to_autofill(insights)
-        name = name or auto_data.name
-        category = category or auto_data.category
-        season = season or auto_data.season
-        color = color or auto_data.color
-        material = material or auto_data.material
-        prompt_description = prompt_description or auto_data.prompt_description
+        autofilled_metadata = _insights_to_autofill(insights)
+        name = name or autofilled_metadata.name
+        category = category or autofilled_metadata.category
+        season = season or autofilled_metadata.season
+        color = color or autofilled_metadata.color
+        material = material or autofilled_metadata.material
+        prompt_description = prompt_description or autofilled_metadata.prompt_description
+        if autofilled_metadata.temperature_min is not None:
+            temperature_min = autofilled_metadata.temperature_min
+        if autofilled_metadata.temperature_max is not None:
+            temperature_max = autofilled_metadata.temperature_max
+        if autofilled_metadata.ai_metadata:
+            ai_metadata = autofilled_metadata.ai_metadata.model_dump_json()
 
     if not all([name, category, season, color]):
         raise HTTPException(status_code=422, detail="Не удалось определить обязательные поля одежды")
@@ -214,6 +232,33 @@ async def add_clothes(
     else:
         image_url = f"/{unique_name}"
 
+    metadata_payload = None
+    if ai_metadata:
+        try:
+            if autofilled_metadata and isinstance(ai_metadata, str):
+                metadata_payload = autofilled_metadata.ai_metadata.model_dump()
+            else:
+                metadata_payload = schemas.ClothesInsights.model_validate_json(ai_metadata).model_dump()
+        except Exception:
+            metadata_payload = None
+
+    if metadata_payload:
+        temp_range = metadata_payload.get("temp_c_range")  # type: ignore[assignment]
+        if isinstance(temp_range, (list, tuple)) and temp_range:
+            try:
+                if len(temp_range) >= 2:
+                    if temperature_min is None:
+                        temperature_min = int(temp_range[0])
+                    if temperature_max is None:
+                        temperature_max = int(temp_range[1])
+                elif len(temp_range) == 1:
+                    if temperature_min is None:
+                        temperature_min = int(temp_range[0])
+                    if temperature_max is None:
+                        temperature_max = int(temp_range[0])
+            except (TypeError, ValueError):
+                temperature_min = temperature_min
+
     new_clothes = models.Clothes(
         user_id=user_id,
         name=name,
@@ -222,7 +267,10 @@ async def add_clothes(
         color=color,
         material=material,
         image_url=image_url,
-        prompt_description=prompt_description or ""
+        prompt_description=prompt_description or "",
+        temperature_min=temperature_min,
+        temperature_max=temperature_max,
+        ai_metadata=metadata_payload,
     )
 
     db.add(new_clothes)

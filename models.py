@@ -27,6 +27,9 @@ class Clothes(Base):
     image_url = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
+    temperature_min = Column(Integer, nullable=True)
+    temperature_max = Column(Integer, nullable=True)
+    ai_metadata = Column(JSON, nullable=True)
 
 class Weather(Base):
     __tablename__ = "weather"

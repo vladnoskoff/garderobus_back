@@ -45,7 +45,8 @@ else:
 
 SYSTEM_INSTRUCTIONS = (
     "You are a fashion product analyst. Identify garment details strictly from the image. "
-    "Return ONLY valid JSON that matches the provided JSON Schema."
+    "Return ONLY valid JSON that matches the provided JSON Schema. "
+    "All textual values (titles, descriptions, prompts, hints, tags, etc.) must be written in Russian."
 )
 
 JSON_SCHEMA = {
@@ -107,6 +108,8 @@ def _build_messages(image_url_or_b64: str, is_b64: bool):
             "content": [
                 {"type": "text", "text": (
                     "Проанализируй одежду и верни JSON по схеме. "
+                    "Все текстовые поля (включая title, catalog_description, gen_prompt, pairing_hints, tags) "
+                    "должны быть на русском языке. "
                     "Сформируй лаконичный 'catalog_description' и нейтральный 'gen_prompt' для манекена "
                     "(студийный свет, белый фон, без логотипов/текста). Добавь 3–5 'pairing_hints'."
                 )},

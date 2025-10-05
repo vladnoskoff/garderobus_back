@@ -46,6 +46,9 @@ class ClothesCreate(BaseModel):
     color: str
     material: Optional[str] = None
     image_url: Optional[str] = None
+    temperature_min: Optional[int] = None
+    temperature_max: Optional[int] = None
+    ai_metadata: Optional[dict] = None
 
 class ClothesResponse(ClothesCreate):
     id: int
@@ -83,6 +86,8 @@ class ClothesAutoFill(BaseModel):
     material: Optional[str] = None
     prompt_description: str
     ai_metadata: ClothesInsights
+    temperature_min: Optional[int] = None
+    temperature_max: Optional[int] = None
 
 
 class WeatherSnapshot(BaseModel):
