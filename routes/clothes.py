@@ -201,16 +201,28 @@ async def add_clothes(
     if auto_fill or not all([name, category, season, color]):
         insights = await _analyze_image_bytes(image_bytes)
         autofilled_metadata = _insights_to_autofill(insights)
-        name = name or autofilled_metadata.name
-        category = category or autofilled_metadata.category
-        season = season or autofilled_metadata.season
-        color = color or autofilled_metadata.color
-        material = material or autofilled_metadata.material
-        prompt_description = prompt_description or autofilled_metadata.prompt_description
-        if autofilled_metadata.temperature_min is not None:
-            temperature_min = autofilled_metadata.temperature_min
-        if autofilled_metadata.temperature_max is not None:
-            temperature_max = autofilled_metadata.temperature_max
+        def _merge_field(current: Optional[str], generated: Optional[str]) -> Optional[str]:
+            if auto_fill:
+                return generated or current
+            return current or generated
+
+        name = _merge_field(name, autofilled_metadata.name)
+        category = _merge_field(category, autofilled_metadata.category)
+        season = _merge_field(season, autofilled_metadata.season)
+        color = _merge_field(color, autofilled_metadata.color)
+        material = _merge_field(material, autofilled_metadata.material)
+        prompt_description = _merge_field(prompt_description, autofilled_metadata.prompt_description)
+
+        def _merge_temperature(current: Optional[int], generated: Optional[int]) -> Optional[int]:
+            if generated is None:
+                return current
+            if auto_fill or current is None:
+                return generated
+            return current
+
+        temperature_min = _merge_temperature(temperature_min, autofilled_metadata.temperature_min)
+        temperature_max = _merge_temperature(temperature_max, autofilled_metadata.temperature_max)
+
         if autofilled_metadata.ai_metadata:
             ai_metadata = autofilled_metadata.ai_metadata.model_dump_json()
 
