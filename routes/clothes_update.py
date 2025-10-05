@@ -9,16 +9,13 @@ import base64
 import requests
 import settings
 import schemas
-from openai import OpenAI
+from openai_client import get_openai_client
 from pyuploadcare import Uploadcare
 import io
-
-
-
-client = OpenAI(api_key=settings.OPENAI_API_KEYY)
+client = get_openai_client()
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
 
-UPLOAD_DIR = "/www/wwwroot/api/chkaf/clothes_images"
+UPLOAD_DIR = settings.CLOTHES_IMAGE_DIR
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 uploadcare = Uploadcare(public_key=settings.UPLOADCARE_PUBLIC_KEY, secret_key=settings.UPLOADCARE_SECRET_KEY)
