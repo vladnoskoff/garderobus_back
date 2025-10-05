@@ -1,6 +1,5 @@
 import base64
 from datetime import datetime
-from pathlib import Path
 from typing import Iterable, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -8,17 +7,17 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
-import settings
 from database import get_db
 from openai import OpenAI
+import settings
 
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
-client = OpenAI(api_key=settings.OPENAI_API_KEYY)
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-MANNEQUIN_DIR = BASE_DIR / "mannequins"
+MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
+MANNEQUIN_URL_PREFIX = settings.MANNEQUIN_IMAGE_URL_PREFIX.rstrip("/")
 
 
 def get_season_from_temperature(temp_celsius: float) -> str:
@@ -85,7 +84,9 @@ def _save_mannequin_image(image_b64: str, user_id: int) -> str:
     image_bytes = base64.b64decode(image_b64)
     with open(file_path, "wb") as output:
         output.write(image_bytes)
-    return f"/mannequins/{filename}"
+    if MANNEQUIN_URL_PREFIX:
+        return f"{MANNEQUIN_URL_PREFIX}/{filename}"
+    return f"/{filename}"
 
 
 @router.get("/recommendation/{user_id}")

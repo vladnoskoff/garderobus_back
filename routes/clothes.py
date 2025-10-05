@@ -11,16 +11,16 @@ from pydantic import ValidationError
 
 import models
 from database import get_db
-import settings
 import schemas
 from openai import OpenAI
+import settings
 
-client = OpenAI(api_key=settings.OPENAI_API_KEYY)
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-UPLOAD_DIR = BASE_DIR / "clothes_images"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CLOTHES_UPLOAD_DIR = settings.CLOTHES_IMAGE_DIR
+CLOTHES_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CLOTHES_IMAGE_URL_PREFIX = settings.CLOTHES_IMAGE_URL_PREFIX.rstrip("/")
 
 AI_JSON_SCHEMA = {
     "type": "object",
@@ -201,7 +201,7 @@ async def add_clothes(
 
     file_extension = Path(file.filename or "item.jpg").suffix
     unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{file_extension}"
-    save_path = UPLOAD_DIR / unique_name
+    save_path = CLOTHES_UPLOAD_DIR / unique_name
 
     try:
         with open(save_path, "wb") as buffer:
@@ -209,7 +209,10 @@ async def add_clothes(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Не удалось сохранить изображение: {exc}") from exc
 
-    image_url = f"/clothes_images/{unique_name}"
+    if CLOTHES_IMAGE_URL_PREFIX:
+        image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{unique_name}"
+    else:
+        image_url = f"/{unique_name}"
 
     new_clothes = models.Clothes(
         user_id=user_id,
