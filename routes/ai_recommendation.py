@@ -1,239 +1,186 @@
-import openai
+import base64
+from datetime import datetime
+from pathlib import Path
+from typing import Iterable, List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+
 import models
-from database import get_db
+import schemas
 import settings
-from datetime import datetime
+from database import get_db
 from openai import OpenAI
-import requests
 
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
-openai.api_key = settings.OPENAI_API_KEY
-client = OpenAI(api_key=("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"))
+client = OpenAI(api_key=settings.OPENAI_API_KEYY)
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+MANNEQUIN_DIR = BASE_DIR / "mannequins"
+MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def get_season_from_temperature(temp_celsius: float) -> str:
     if temp_celsius >= 20:
         return "Лето"
-    elif 10 <= temp_celsius < 20:
+    if 10 <= temp_celsius < 20:
         return "Весна"
-    elif 0 <= temp_celsius < 10:
+    if 0 <= temp_celsius < 10:
         return "Осень"
-    else:
-        return "Зима"
+    return "Зима"
+
+
+def _filter_by_season(clothes: Iterable[models.Clothes], season: str) -> List[models.Clothes]:
+    normalized = season.lower()
+    return [item for item in clothes if item.season and normalized in item.season.lower()]
+
+
+def _select_outfit(clothes: List[models.Clothes], temperature: float) -> List[models.Clothes]:
+    season = get_season_from_temperature(temperature)
+    seasonal_items = _filter_by_season(clothes, season) or clothes
+
+    selected: List[models.Clothes] = []
+    used_categories: set[str] = set()
+
+    for item in seasonal_items:
+        category_key = (item.category or "").lower()
+        if category_key in used_categories:
+            continue
+        selected.append(item)
+        used_categories.add(category_key)
+        if len(selected) >= 4:
+            break
+
+    if len(selected) < 3:
+        for item in seasonal_items:
+            if item not in selected:
+                selected.append(item)
+            if len(selected) >= 3:
+                break
+
+    return selected
+
+
+def _build_mannequin_prompt(items: List[models.Clothes], weather: models.Weather) -> str:
+    lines = [
+        "Create a hyperrealistic studio photograph of a faceless mannequin wearing a cohesive outfit.",
+        "Use soft neutral lighting, clean white background, no logos or text.",
+        f"Weather context: {weather.condition}, {weather.temperature}°C, humidity {weather.humidity}%, wind {weather.wind_speed or 0} m/s.",
+        "The outfit must be comfortable for the described weather conditions and feel stylish and contemporary.",
+        "Clothing items to include:",
+    ]
+
+    for item in items:
+        base_description = item.prompt_description or f"{item.color} {item.category}"
+        lines.append(f"- {base_description.strip()} (season: {item.season})")
+
+    lines.append("Ensure the overall look is balanced and colour-coordinated.")
+    return "\n".join(lines)
+
+
+def _save_mannequin_image(image_b64: str, user_id: int) -> str:
+    filename = f"mannequin_{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
+    file_path = MANNEQUIN_DIR / filename
+    image_bytes = base64.b64decode(image_b64)
+    with open(file_path, "wb") as output:
+        output.write(image_bytes)
+    return f"/mannequins/{filename}"
+
 
 @router.get("/recommendation/{user_id}")
 def ai_recommendation(user_id: int, db: Session = Depends(get_db)):
-    """Анализ истории нарядов и советы по улучшению"""
-    outfits = db.query(models.Outfit).filter(models.Outfit.user_id == user_id).order_by(models.Outfit.created_at.desc()).limit(10).all()
-    if not outfits:
-        raise HTTPException(status_code=404, detail="История нарядов пуста")
-
-    prompt = "Проанализируй мои наряды и предложи советы по улучшению (цвет, сезон, материалы):\n"
-    for outfit in outfits:
-        clothing_items = db.query(models.Clothes).filter(models.Clothes.id.in_(outfit.clothing_ids)).all()
-        items_desc = [f"{item.name} ({item.category}, {item.color}, {item.material}, {item.season})" for item in clothing_items]
-        prompt += f"- Наряд {outfit.id}: {', '.join(items_desc)}\n"
-
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Ты эксперт по моде. Анализируй сочетание одежды по цвету, сезону и материалам."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    return {"recommendation": response["choices"][0]["message"]["content"]}
-
-
-@router.get("/visual-recommendation/{user_id}")
-def generate_visual_outfits(user_id: int, db: Session = Depends(get_db)):
     outfits = (
         db.query(models.Outfit)
         .filter(models.Outfit.user_id == user_id)
         .order_by(models.Outfit.created_at.desc())
-        .limit(3)
+        .limit(10)
         .all()
     )
 
     if not outfits:
-        raise HTTPException(status_code=404, detail="Нет нарядов для визуализации")
+        raise HTTPException(status_code=404, detail="История нарядов пуста")
 
-    image_urls = []
-
+    prompt_parts = []
     for outfit in outfits:
-        if outfit.image_url:
-            image_urls.append(outfit.image_url)
-            continue
-
         clothing_items = db.query(models.Clothes).filter(models.Clothes.id.in_(outfit.clothing_ids)).all()
         if not clothing_items:
             continue
-
-        prompt = (
-            "Create a high-quality image of a mannequin in a neutral pose, wearing a weather-appropriate full outfit. "
-            "This should reflect the following clothing items:\n"
+        formatted_items = ", ".join(
+            f"{item.name} ({item.category}, {item.color}, {item.material or 'материал не указан'}, сезон: {item.season})"
+            for item in clothing_items
         )
-        for item in clothing_items:
-            prompt += f"- A {item.color} {item.material or ''} {item.category.lower()} ({item.name})\n"
+        prompt_parts.append(f"Наряд #{outfit.id}: {formatted_items}")
 
-        try:
-            response = openai.Image.create(
-                prompt=prompt,
-                n=1,
-                size="512x512"
-            )
-            image_url = response["data"][0]["url"]
-            outfit.image_url = image_url
-            db.commit()
-            image_urls.append(image_url)
-        except Exception as e:
-            print(f"Ошибка генерации изображения: {e}")
-            continue
+    if not prompt_parts:
+        raise HTTPException(status_code=404, detail="Недостаточно данных для рекомендаций")
 
-    if not image_urls:
-        raise HTTPException(status_code=500, detail="Не удалось сгенерировать изображения")
+    prompt = (
+        "Проанализируй мои недавние наряды и предложи, как улучшить стиль, сочетания цветов и материалов. "
+        "Дай практичные советы, учитывая погоду и повседневные ситуации.\n" + "\n".join(prompt_parts)
+    )
 
-    return {"images": image_urls}
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "system",
+                    "content": "Ты модный стилист. Дай структурированные советы с акцентом на комфорт и актуальные тренды.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.7,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить рекомендации: {exc}") from exc
+
+    message = response.choices[0].message.content if response.choices else None
+    if not message:
+        raise HTTPException(status_code=502, detail="AI вернул пустой ответ")
+
+    return {"recommendation": message.strip()}
 
 
-@router.get("/generate-multiple/{user_id}/{city}")
-def generate_multiple_outfits(user_id: int, city: str, db: Session = Depends(get_db)):
-    """
-    Генерирует 3 варианта нарядов по погоде и отображает визуализации.
-    """
+@router.get("/mannequin/{user_id}", response_model=schemas.MannequinResponse)
+def generate_mannequin(user_id: int, db: Session = Depends(get_db)):
     weather = db.query(models.Weather).order_by(models.Weather.created_at.desc()).first()
     if not weather:
         raise HTTPException(status_code=404, detail="Нет погодных данных")
 
-    current_season = get_season_from_temperature(weather.temperature)
-
-    all_clothes = db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
-    if not all_clothes:
+    clothes = db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+    if not clothes:
         raise HTTPException(status_code=404, detail="Одежда не найдена")
 
-    outfits_data = []
+    selected_items = _select_outfit(clothes, weather.temperature)
+    if not selected_items:
+        raise HTTPException(status_code=404, detail="Не удалось подобрать одежду для манекена")
 
-    for i in range(3):
-        selected = [c for c in all_clothes if c.season.lower() == current_season][:3]
-        if not selected:
-            continue
+    prompt = _build_mannequin_prompt(selected_items, weather)
 
-        outfit = models.Outfit(
-            user_id=user_id,
-            weather_id=weather.id,
-            clothing_ids=[c.id for c in selected]
-        )
-        db.add(outfit)
-        db.commit()
-        db.refresh(outfit)
-
-        prompt = (
-            "Create a high-quality image of a mannequin in a neutral pose, wearing a weather-appropriate full outfit. "
-            "This should reflect the following clothing items:\n"
-        )
-        for item in selected:
-            prompt += f"- A {item.color} {item.material or ''} {item.category.lower()} ({item.name})\n"
-
-        try:
-            response = openai.Image.create(
-                prompt=prompt,
-                n=1,
-                size="512x512"
-            )
-            image_url = response["data"][0]["url"]
-            outfit.image_url = image_url
-            db.commit()
-
-            outfits_data.append({
-                "outfit_id": outfit.id,
-                "image_url": image_url
-            })
-
-        except Exception as e:
-            print(f"Ошибка генерации изображения: {e}")
-            continue
-
-    if not outfits_data:
-        raise HTTPException(status_code=500, detail="Не удалось сгенерировать наряды")
-
-    return outfits_data
-
-@router.get("/test-summer-look/{user_id}")
-async def test_summer_outfit(user_id: int, db: Session = Depends(get_db)):
-    """
-    Генерация летнего наряда (температура +25°C) через ChatGPT (DALL-E).
-    """
-    # Создаем фиктивную погоду
-    weather = models.Weather(
-        temperature=25,
-        humidity=40,
-        condition="sunny",
-        wind_speed=3,
-        created_at=datetime.utcnow()
-    )
-    db.add(weather)
-    db.commit()
-    db.refresh(weather)
-
-    # Получаем летнюю одежду пользователя
-    summer_clothes = db.query(models.Clothes).filter(
-        models.Clothes.user_id == user_id,
-        models.Clothes.season.ilike("Лето")
-    ).all()
-
-    if not summer_clothes:
-        raise HTTPException(status_code=404, detail="Нет летней одежды для пользователя")
-
-    # Собираем описания одежды
-    prompt_parts = [item.prompt_description for item in summer_clothes if item.prompt_description]
-    if not prompt_parts:
-        raise HTTPException(status_code=400, detail="Нет описаний для одежды")
-
-    # Собираем итоговый промпт
-    prompt = (
-        "Create a high-quality image of a mannequin in a neutral standing pose, "
-        "wearing the following summer outfit:\n" +
-        "\n".join(f"- {desc}" for desc in prompt_parts)
-    )
-
-    # Создаем наряд в базе
-    outfit = models.Outfit(
-        user_id=user_id,
-        weather_id=weather.id,
-        clothing_ids=[c.id for c in summer_clothes]
-    )
-    db.add(outfit)
-    db.commit()
-    db.refresh(outfit)
-
-    # Генерируем изображение через OpenAI DALL-E
     try:
-        response = openai.Image.create(
-            model="dall-e-3",  # Можно использовать dall-e-2 если хочешь быстрее
+        image_response = client.images.generate(
+            model="gpt-image-1",
             prompt=prompt,
+            size="1024x1024",
+            quality="high",
             n=1,
-            size="1024x1024"
         )
-        image_url = response["data"][0]["url"]
-        outfit.image_url = image_url
-        db.commit()
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось сгенерировать изображение манекена: {exc}") from exc
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка генерации изображения через DALL-E: {e}")
+    if not image_response.data:
+        raise HTTPException(status_code=502, detail="AI не вернул изображение")
 
-    return {
-        "outfit_id": outfit.id,
-        "image_url": image_url,
-        "weather": {
-            "temperature": weather.temperature,
-            "condition": weather.condition
-        },
-        "clothes": [item.name for item in summer_clothes]
-    }
-    
-    
-    
-    
-    
+    image_url = _save_mannequin_image(image_response.data[0].b64_json, user_id)
+
+    return schemas.MannequinResponse(
+        image_url=image_url,
+        weather=schemas.WeatherSnapshot(
+            temperature=weather.temperature,
+            humidity=weather.humidity,
+            condition=weather.condition,
+            wind_speed=weather.wind_speed,
+        ),
+        items=[schemas.MannequinItem.model_validate(item) for item in selected_items],
+    )

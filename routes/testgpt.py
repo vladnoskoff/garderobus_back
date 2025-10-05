@@ -7,8 +7,9 @@ from typing import List, Optional
 
 from fastapi import APIRouter, File, Form, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 from openai import OpenAI
+import schemas
 
 # Если используешь SOCKS-прокси (как в твоём примере):
 # pip install httpx httpx-socks
@@ -44,25 +45,6 @@ if ENABLE_SOCKS:
     client = OpenAI(api_key=OPENAI_API_KEY, http_client=httpx_client)
 else:
     client = OpenAI(api_key=OPENAI_API_KEY)
-
-# ----- Pydantic модель ответа -----
-class ClothesInsights(BaseModel):
-    title: str
-    category: str
-    gender: Optional[str] = None
-    colors: List[str]
-    pattern: Optional[str] = None
-    material: Optional[str] = None
-    fit: Optional[str] = None
-    season: List[str]
-    temp_c_range: List[int]
-    style: List[str]
-    occasions: List[str]
-    care: Optional[str] = None
-    tags: List[str]
-    catalog_description: str
-    gen_prompt: str
-    pairing_hints: List[str]
 
 SYSTEM_INSTRUCTIONS = (
     "You are a fashion product analyst. Identify garment details strictly from the image. "
@@ -158,7 +140,7 @@ def ping():
     }
 
 # ==== 1) Строгий эндпоинт: типизированный ответ ====
-@router.post("/analyze", response_model=ClothesInsights)
+@router.post("/analyze", response_model=schemas.ClothesInsights)
 async def analyze_image(
     image_url: Optional[str] = Form(
         None,
@@ -189,7 +171,7 @@ async def analyze_image(
 
     # Валидация по схеме
     try:
-        return ClothesInsights.model_validate_json(raw)
+        return schemas.ClothesInsights.model_validate_json(raw)
     except ValidationError as ve:
         raise HTTPException(
             status_code=422,
