@@ -55,6 +55,61 @@ class ClothesResponse(ClothesCreate):
     class Config:
         from_attributes = True
 
+
+class ClothesInsights(BaseModel):
+    title: str
+    category: str
+    gender: Optional[str] = None
+    colors: List[str]
+    pattern: Optional[str] = None
+    material: Optional[str] = None
+    fit: Optional[str] = None
+    season: List[str]
+    temp_c_range: List[int]
+    style: List[str]
+    occasions: List[str]
+    care: Optional[str] = None
+    tags: List[str]
+    catalog_description: str
+    gen_prompt: str
+    pairing_hints: List[str]
+
+
+class ClothesAutoFill(BaseModel):
+    name: str
+    category: str
+    season: str
+    color: str
+    material: Optional[str] = None
+    prompt_description: str
+    ai_metadata: ClothesInsights
+
+
+class WeatherSnapshot(BaseModel):
+    temperature: int
+    humidity: int
+    condition: str
+    wind_speed: Optional[int] = None
+
+
+class MannequinItem(BaseModel):
+    id: int
+    name: str
+    category: str
+    color: str
+    material: Optional[str] = None
+    season: str
+    prompt_description: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MannequinResponse(BaseModel):
+    image_url: str
+    weather: WeatherSnapshot
+    items: List[MannequinItem]
+
 class WeatherCreate(BaseModel):
     temperature: int
     humidity: int
