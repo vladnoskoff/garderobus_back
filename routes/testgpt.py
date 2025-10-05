@@ -2,71 +2,27 @@
 import base64
 import json
 import logging
-import os
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ValidationError
-from openai import OpenAI
+from pydantic import ValidationError
+import schemas
+import settings
+from openai_client import get_openai_client, is_proxy_active
 
 # Если используешь SOCKS-прокси (как в твоём примере):
 # pip install httpx httpx-socks
-try:
-    import httpx
-    from httpx_socks import SyncProxyTransport
-    USE_SOCKS = True
-except Exception:
-    httpx = None
-    SyncProxyTransport = None
-    USE_SOCKS = False
-
 router = APIRouter(prefix="/ai", tags=["AI Test"])
 log = logging.getLogger("ai_test")
 logging.basicConfig(level=logging.INFO)
 
-# ========= НАСТРОЙКИ =========
-# 1) Впиши сюда ключ (или оставь пустым и используй переменную окружения OPENAI_API_KEY)
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "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")
-
-# 2) Включить SOCKS-прокси? (если у тебя xray/локальный socks5)
-SOCKS_PROXY_URL = os.getenv("SOCKS_PROXY", "socks5://127.0.0.1:10808")
-ENABLE_SOCKS = USE_SOCKS and bool(SOCKS_PROXY_URL)
-# ============================
-
-if not OPENAI_API_KEY or not OPENAI_API_KEY.startswith("sk-"):
-    raise RuntimeError("Укажи корректный OPENAI_API_KEY (строка, начинающаяся с 'sk-').")
-
-# Настраиваем httpx-клиент с SOCKS-прокси при необходимости
-if ENABLE_SOCKS:
-    transport = SyncProxyTransport.from_url(SOCKS_PROXY_URL, rdns=True)
-    httpx_client = httpx.Client(transport=transport, timeout=60.0)
-    client = OpenAI(api_key=OPENAI_API_KEY, http_client=httpx_client)
-else:
-    client = OpenAI(api_key=OPENAI_API_KEY)
-
-# ----- Pydantic модель ответа -----
-class ClothesInsights(BaseModel):
-    title: str
-    category: str
-    gender: Optional[str] = None
-    colors: List[str]
-    pattern: Optional[str] = None
-    material: Optional[str] = None
-    fit: Optional[str] = None
-    season: List[str]
-    temp_c_range: List[int]
-    style: List[str]
-    occasions: List[str]
-    care: Optional[str] = None
-    tags: List[str]
-    catalog_description: str
-    gen_prompt: str
-    pairing_hints: List[str]
+client = get_openai_client()
 
 SYSTEM_INSTRUCTIONS = (
     "You are a fashion product analyst. Identify garment details strictly from the image. "
-    "Return ONLY valid JSON that matches the provided JSON Schema."
+    "Return ONLY valid JSON that matches the provided JSON Schema. "
+    "All textual values (titles, descriptions, prompts, hints, tags, etc.) must be written in Russian."
 )
 
 JSON_SCHEMA = {
@@ -128,6 +84,8 @@ def _build_messages(image_url_or_b64: str, is_b64: bool):
             "content": [
                 {"type": "text", "text": (
                     "Проанализируй одежду и верни JSON по схеме. "
+                    "Все текстовые поля (включая title, catalog_description, gen_prompt, pairing_hints, tags) "
+                    "должны быть на русском языке. "
                     "Сформируй лаконичный 'catalog_description' и нейтральный 'gen_prompt' для манекена "
                     "(студийный свет, белый фон, без логотипов/текста). Добавь 3–5 'pairing_hints'."
                 )},
@@ -153,12 +111,12 @@ def _call_vision(messages) -> str:
 def ping():
     return {
         "status": "ok",
-        "proxy": SOCKS_PROXY_URL if ENABLE_SOCKS else None,
+        "proxy": settings.SOCKS_PROXY_URL if is_proxy_active() else None,
         "message": "AI test route is working"
     }
 
 # ==== 1) Строгий эндпоинт: типизированный ответ ====
-@router.post("/analyze", response_model=ClothesInsights)
+@router.post("/analyze", response_model=schemas.ClothesInsights)
 async def analyze_image(
     image_url: Optional[str] = Form(
         None,
@@ -189,7 +147,7 @@ async def analyze_image(
 
     # Валидация по схеме
     try:
-        return ClothesInsights.model_validate_json(raw)
+        return schemas.ClothesInsights.model_validate_json(raw)
     except ValidationError as ve:
         raise HTTPException(
             status_code=422,
