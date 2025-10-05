@@ -1,97 +1,282 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
+from typing import Optional
+
+import base64
+
+from pydantic import ValidationError
+
 import models
 from database import get_db
-import shutil
-import os
-import base64
-import requests
-import settings
 import schemas
 from openai import OpenAI
+import settings
 
-client = OpenAI(api_key=settings.OPENAI_API_KEYY)
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
 
-UPLOAD_DIR = "/www/wwwroot/api/chkaf/clothes_images"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+CLOTHES_UPLOAD_DIR = settings.CLOTHES_IMAGE_DIR
+CLOTHES_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+CLOTHES_IMAGE_URL_PREFIX = settings.CLOTHES_IMAGE_URL_PREFIX.rstrip("/")
+
+AI_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "category": {"type": "string"},
+        "gender": {"type": ["string", "null"]},
+        "colors": {"type": "array", "items": {"type": "string"}},
+        "pattern": {"type": ["string", "null"]},
+        "material": {"type": ["string", "null"]},
+        "fit": {"type": ["string", "null"]},
+        "season": {"type": "array", "items": {"type": "string"}},
+        "temp_c_range": {
+            "type": "array",
+            "items": {"type": "integer"},
+            "minItems": 2,
+            "maxItems": 2
+        },
+        "style": {"type": "array", "items": {"type": "string"}},
+        "occasions": {"type": "array", "items": {"type": "string"}},
+        "care": {"type": ["string", "null"]},
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "catalog_description": {"type": "string"},
+        "gen_prompt": {"type": "string"},
+        "pairing_hints": {"type": "array", "items": {"type": "string"}}
+    },
+    "required": [
+        "title",
+        "category",
+        "gender",
+        "colors",
+        "pattern",
+        "material",
+        "fit",
+        "season",
+        "temp_c_range",
+        "style",
+        "occasions",
+        "care",
+        "tags",
+        "catalog_description",
+        "gen_prompt",
+        "pairing_hints"
+    ],
+    "additionalProperties": False
+}
 
 @router.get("/user/{user_id}", response_model=list[schemas.ClothesResponse])
 def get_user_clothes(user_id: int, db: Session = Depends(get_db)):
     return db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
     
-async def describe_image_from_url(image_url: str) -> str:
-    prompt_text = "Опиши в одном абзаце этот предмет одежды: укажи тип, материал, цвет, особенности дизайна и, если есть, логотип или надпись."
-    
+def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
+    if is_base64:
+        image_content = {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{image_payload}"}
+        }
+    else:
+        image_content = {
+            "type": "image_url",
+            "image_url": {"url": image_payload}
+        }
+
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are a fashion product analyst. Identify garment details strictly from the image. "
+                "Return ONLY valid JSON that matches the provided JSON Schema."
+            ),
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": (
+                        "Проанализируй одежду и верни JSON по схеме. Сформируй лаконичное описание и нейтральный промпт для манекена."
+                    ),
+                },
+                image_content,
+            ],
+        },
+    ]
+
+
+def _call_ai_for_insights(messages: list[dict]) -> str:
     response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {
-                "role": "system",
-                "content": "Ты модный стилист, который профессионально описывает одежду по фото."
-            },
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": prompt_text},
-                    {"type": "image_url", "image_url": {"url": image_url}}
-                ]
-            }
-        ],
-        max_tokens=500
+        model="gpt-4o-mini",
+        messages=messages,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {"name": "ClothesInsights", "schema": AI_JSON_SCHEMA, "strict": True},
+        },
+        temperature=0.2,
     )
 
-    return response.choices[0].message.content.strip()
+    choice = response.choices[0].message if response.choices else None
+    if not choice or not choice.content:
+        raise HTTPException(status_code=502, detail="AI returned an empty response")
+
+    return choice.content
+
+
+async def _analyze_image_bytes(image_bytes: bytes) -> schemas.ClothesInsights:
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Пустой файл изображения")
+
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+    try:
+        raw_response = _call_ai_for_insights(_build_ai_messages(image_b64, True))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Не удалось получить анализ изображения: {exc}") from exc
+
+    try:
+        return schemas.ClothesInsights.model_validate_json(raw_response)
+    except ValidationError as exc:
+        raise HTTPException(status_code=502, detail={"error": "Некорректный формат ответа ИИ", "details": exc.errors()}) from exc
+
+
+def _insights_to_autofill(insights: schemas.ClothesInsights) -> schemas.ClothesAutoFill:
+    primary_season = insights.season[0] if insights.season else "Универсальная"
+    primary_color = ", ".join(insights.colors) if insights.colors else "Неопределённый"
+    description = insights.catalog_description.strip()
+    temp_min, temp_max = None, None
+    if insights.temp_c_range:
+        if len(insights.temp_c_range) == 2:
+            temp_min, temp_max = insights.temp_c_range
+        elif len(insights.temp_c_range) == 1:
+            temp_min = insights.temp_c_range[0]
+
+    return schemas.ClothesAutoFill(
+        name=insights.title.strip(),
+        category=insights.category.strip(),
+        season=primary_season.strip(),
+        color=primary_color.strip(),
+        material=insights.material.strip() if insights.material else None,
+        prompt_description=description,
+        ai_metadata=insights,
+        temperature_min=temp_min,
+        temperature_max=temp_max,
+    )
+
+@router.post("/autofill", response_model=schemas.ClothesAutoFill)
+async def autofill_clothes_fields(file: UploadFile = File(...)):
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Файл изображения пустой")
+    insights = await _analyze_image_bytes(image_bytes)
+    return _insights_to_autofill(insights)
+
 
 @router.post("/", response_model=schemas.ClothesResponse)
 async def add_clothes(
     user_id: int = Form(...),
-    name: str = Form(...),
-    category: str = Form(...),
-    season: str = Form(...),
-    color: str = Form(...),
-    material: str = Form(None),
+    name: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    season: Optional[str] = Form(None),
+    color: Optional[str] = Form(None),
+    material: Optional[str] = Form(None),
+    prompt_description: Optional[str] = Form(None),
+    temperature_min: Optional[int] = Form(None),
+    temperature_max: Optional[int] = Form(None),
+    ai_metadata: Optional[str] = Form(None),
+    auto_fill: bool = Form(False),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """
-    Упрощённое добавление одежды без GPT: описание формируется по названию и категории.
-    """
+    """Добавление одежды с возможностью автозаполнения полей через AI."""
+
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=400, detail="Файл изображения пустой")
+    autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
+    if auto_fill or not all([name, category, season, color]):
+        insights = await _analyze_image_bytes(image_bytes)
+        autofilled_metadata = _insights_to_autofill(insights)
+        name = name or autofilled_metadata.name
+        category = category or autofilled_metadata.category
+        season = season or autofilled_metadata.season
+        color = color or autofilled_metadata.color
+        material = material or autofilled_metadata.material
+        prompt_description = prompt_description or autofilled_metadata.prompt_description
+        if autofilled_metadata.temperature_min is not None:
+            temperature_min = autofilled_metadata.temperature_min
+        if autofilled_metadata.temperature_max is not None:
+            temperature_max = autofilled_metadata.temperature_max
+        if autofilled_metadata.ai_metadata:
+            ai_metadata = autofilled_metadata.ai_metadata.model_dump_json()
+
+    if not all([name, category, season, color]):
+        raise HTTPException(status_code=422, detail="Не удалось определить обязательные поля одежды")
+
+    file_extension = Path(file.filename or "item.jpg").suffix
+    unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{file_extension}"
+    save_path = CLOTHES_UPLOAD_DIR / unique_name
+
     try:
-        # Сохраняем файл
-        timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
-        file_path = os.path.join(UPLOAD_DIR, filename)
+        with open(save_path, "wb") as buffer:
+            buffer.write(image_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось сохранить изображение: {exc}") from exc
 
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+    if CLOTHES_IMAGE_URL_PREFIX:
+        image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{unique_name}"
+    else:
+        image_url = f"/{unique_name}"
 
-        image_url = f"http://aapanel-api.noksovsteam.ru/chkaf/clothes_images/{filename}"
+    metadata_payload = None
+    if ai_metadata:
+        try:
+            if autofilled_metadata and isinstance(ai_metadata, str):
+                metadata_payload = autofilled_metadata.ai_metadata.model_dump()
+            else:
+                metadata_payload = schemas.ClothesInsights.model_validate_json(ai_metadata).model_dump()
+        except Exception:
+            metadata_payload = None
 
-        # Упрощённое описание
-        prompt_description = f"Название: {name}, Категория: {category}"
-        # Генерируем описание на основе изображения
-        #prompt_description = await describe_image_from_url(image_url)
+    if metadata_payload:
+        temp_range = metadata_payload.get("temp_c_range")  # type: ignore[assignment]
+        if isinstance(temp_range, (list, tuple)) and temp_range:
+            try:
+                if len(temp_range) >= 2:
+                    if temperature_min is None:
+                        temperature_min = int(temp_range[0])
+                    if temperature_max is None:
+                        temperature_max = int(temp_range[1])
+                elif len(temp_range) == 1:
+                    if temperature_min is None:
+                        temperature_min = int(temp_range[0])
+                    if temperature_max is None:
+                        temperature_max = int(temp_range[0])
+            except (TypeError, ValueError):
+                temperature_min = temperature_min
 
-        # Сохраняем в БД
-        new_clothes = models.Clothes(
-            user_id=user_id,
-            name=name,
-            category=category,
-            season=season,
-            color=color,
-            material=material,
-            image_url=image_url,
-            prompt_description=prompt_description
-        )
-        db.add(new_clothes)
-        db.commit()
-        db.refresh(new_clothes)
-        return new_clothes
+    new_clothes = models.Clothes(
+        user_id=user_id,
+        name=name,
+        category=category,
+        season=season,
+        color=color,
+        material=material,
+        image_url=image_url,
+        prompt_description=prompt_description or "",
+        temperature_min=temperature_min,
+        temperature_max=temperature_max,
+        ai_metadata=metadata_payload,
+    )
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ошибка при добавлении одежды: {str(e)}")
+    db.add(new_clothes)
+    db.commit()
+    db.refresh(new_clothes)
+    return new_clothes
 
 @router.get("/", response_model=list[schemas.ClothesResponse])
 def get_all_clothes(db: Session = Depends(get_db)):
