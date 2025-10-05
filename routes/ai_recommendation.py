@@ -9,12 +9,12 @@ from sqlalchemy.orm import Session
 import models
 import schemas
 from database import get_db
-from openai import OpenAI
 import settings
+from openai_client import get_openai_client
 
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
-client = OpenAI(api_key=settings.OPENAI_API_KEY)
+client = get_openai_client()
 
 MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)

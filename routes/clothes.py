@@ -12,10 +12,10 @@ from pydantic import ValidationError
 import models
 from database import get_db
 import schemas
-from openai import OpenAI
 import settings
+from openai_client import get_openai_client
 
-client = OpenAI(api_key=settings.OPENAI_API_KEY)
+client = get_openai_client()
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
 
 CLOTHES_UPLOAD_DIR = settings.CLOTHES_IMAGE_DIR
