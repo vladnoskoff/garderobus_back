@@ -30,6 +30,42 @@ class Clothes(Base):
     image_url = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
+    ai_metadata = Column(JSON, nullable=True)
+
+    def _metadata_dict(self) -> dict:
+        if not self.ai_metadata:
+            return {}
+        if isinstance(self.ai_metadata, dict):
+            return self.ai_metadata
+        try:
+            return json.loads(self.ai_metadata)
+        except (TypeError, json.JSONDecodeError):
+            return {}
+
+    @property
+    def temperature_min(self) -> Optional[int]:
+        data = self._metadata_dict()
+        temp_range = data.get("temp_c_range")
+        if isinstance(temp_range, (list, tuple)) and temp_range:
+            try:
+                return int(temp_range[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    @property
+    def temperature_max(self) -> Optional[int]:
+        data = self._metadata_dict()
+        temp_range = data.get("temp_c_range")
+        if isinstance(temp_range, (list, tuple)):
+            try:
+                if len(temp_range) >= 2:
+                    return int(temp_range[1])
+                if len(temp_range) == 1:
+                    return int(temp_range[0])
+            except (TypeError, ValueError):
+                return None
+        return None
 
     metadata_entry = relationship(
         "ClothesMetadata",
