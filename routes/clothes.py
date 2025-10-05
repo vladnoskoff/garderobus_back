@@ -242,22 +242,44 @@ async def add_clothes(
         except Exception:
             metadata_payload = None
 
-    if metadata_payload:
-        temp_range = metadata_payload.get("temp_c_range")  # type: ignore[assignment]
-        if isinstance(temp_range, (list, tuple)) and temp_range:
-            try:
-                if len(temp_range) >= 2:
-                    if temperature_min is None:
-                        temperature_min = int(temp_range[0])
-                    if temperature_max is None:
-                        temperature_max = int(temp_range[1])
-                elif len(temp_range) == 1:
-                    if temperature_min is None:
-                        temperature_min = int(temp_range[0])
-                    if temperature_max is None:
-                        temperature_max = int(temp_range[0])
-            except (TypeError, ValueError):
-                temperature_min = temperature_min
+    if metadata_payload is None:
+        metadata_payload = {}
+
+    temp_range = metadata_payload.get("temp_c_range") if isinstance(metadata_payload, dict) else None
+    if isinstance(temp_range, (list, tuple)) and temp_range:
+        try:
+            if len(temp_range) >= 2:
+                if temperature_min is None:
+                    temperature_min = int(temp_range[0])
+                if temperature_max is None:
+                    temperature_max = int(temp_range[1])
+            elif len(temp_range) == 1:
+                single_temp = int(temp_range[0])
+                if temperature_min is None:
+                    temperature_min = single_temp
+                if temperature_max is None:
+                    temperature_max = single_temp
+        except (TypeError, ValueError):
+            temperature_min = temperature_min
+
+    manual_range: list[int] = []
+    for value in (temperature_min, temperature_max):
+        if value is None:
+            continue
+        try:
+            manual_range.append(int(value))
+        except (TypeError, ValueError):
+            continue
+
+    if manual_range:
+        manual_range.sort()
+        if len(manual_range) == 1:
+            metadata_payload["temp_c_range"] = [manual_range[0]]
+        else:
+            metadata_payload["temp_c_range"] = [manual_range[0], manual_range[-1]]
+
+    if not metadata_payload:
+        metadata_payload = None
 
     new_clothes = models.Clothes(
         user_id=user_id,
@@ -268,8 +290,6 @@ async def add_clothes(
         material=material,
         image_url=image_url,
         prompt_description=prompt_description or "",
-        temperature_min=temperature_min,
-        temperature_max=temperature_max,
         ai_metadata=metadata_payload,
     )
 

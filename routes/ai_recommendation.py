@@ -34,20 +34,22 @@ def _safe_metadata(item: models.Clothes) -> dict:
 
 def _extract_temp_range(item: models.Clothes) -> Tuple[Optional[int], Optional[int]]:
     meta = _safe_metadata(item)
-    min_temp = item.temperature_min
-    max_temp = item.temperature_max
+    min_temp: Optional[int] = None
+    max_temp: Optional[int] = None
 
     range_from_meta = meta.get("temp_c_range") if isinstance(meta, dict) else None
     if range_from_meta and isinstance(range_from_meta, (list, tuple)):
-        try:
-            if min_temp is None and len(range_from_meta) >= 1:
-                min_temp = int(range_from_meta[0])
-            if max_temp is None and len(range_from_meta) >= 2:
-                max_temp = int(range_from_meta[1])
-            if len(range_from_meta) == 1 and max_temp is None:
-                max_temp = int(range_from_meta[0])
-        except (TypeError, ValueError):
-            pass
+        cleaned: list[int] = []
+        for value in range_from_meta:
+            try:
+                cleaned.append(int(value))
+            except (TypeError, ValueError):
+                continue
+
+        if cleaned:
+            cleaned.sort()
+            min_temp = cleaned[0]
+            max_temp = cleaned[-1]
 
     return min_temp, max_temp
 
