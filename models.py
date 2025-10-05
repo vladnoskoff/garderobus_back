@@ -1,3 +1,6 @@
+import json
+from typing import Optional
+
 from sqlalchemy import Column, Integer, String, ForeignKey, JSON, TIMESTAMP, Text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -28,6 +31,83 @@ class Clothes(Base):
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
 
+    metadata_entry = relationship(
+        "ClothesMetadata",
+        uselist=False,
+        back_populates="clothes",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        single_parent=True,
+    )
+
+    @property
+    def ai_metadata(self) -> Optional[dict]:
+        if not self.metadata_entry:
+            return None
+        payload = self.metadata_entry.data
+        if not payload:
+            return None
+        if isinstance(payload, dict):
+            return payload
+        try:
+            return json.loads(payload)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
+    @ai_metadata.setter
+    def ai_metadata(self, value):  # type: ignore[override]
+        if value is None:
+            if self.metadata_entry:
+                self.metadata_entry.data = None
+            return
+
+        if isinstance(value, str):
+            try:
+                value = json.loads(value)
+            except (TypeError, json.JSONDecodeError):
+                value = {"raw": value}
+
+        if hasattr(value, "model_dump"):
+            value = value.model_dump()  # type: ignore[assignment]
+        elif hasattr(value, "dict"):
+            value = value.dict()  # type: ignore[assignment]
+
+        if self.metadata_entry is None:
+            self.metadata_entry = ClothesMetadata(data=value)
+        else:
+            self.metadata_entry.data = value
+
+    def _metadata_dict(self) -> dict:
+        payload = self.ai_metadata
+        if isinstance(payload, dict):
+            return payload
+        return {}
+
+    @property
+    def temperature_min(self) -> Optional[int]:
+        data = self._metadata_dict()
+        temp_range = data.get("temp_c_range")
+        if isinstance(temp_range, (list, tuple)) and temp_range:
+            try:
+                return int(temp_range[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
+    @property
+    def temperature_max(self) -> Optional[int]:
+        data = self._metadata_dict()
+        temp_range = data.get("temp_c_range")
+        if isinstance(temp_range, (list, tuple)):
+            try:
+                if len(temp_range) >= 2:
+                    return int(temp_range[1])
+                if len(temp_range) == 1:
+                    return int(temp_range[0])
+            except (TypeError, ValueError):
+                return None
+        return None
+
 class Weather(Base):
     __tablename__ = "weather"
 
@@ -56,3 +136,12 @@ class WearHistory(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
     clothing_id = Column(Integer, ForeignKey("clothes.id", ondelete="CASCADE"))
     worn_at = Column(TIMESTAMP, default=func.now())
+
+
+class ClothesMetadata(Base):
+    __tablename__ = "clothes_metadata"
+
+    clothes_id = Column(Integer, ForeignKey("clothes.id", ondelete="CASCADE"), primary_key=True)
+    data = Column(JSON, nullable=True)
+
+    clothes = relationship("Clothes", back_populates="metadata_entry")
