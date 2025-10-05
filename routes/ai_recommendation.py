@@ -22,12 +22,13 @@ MANNEQUIN_URL_PREFIX = settings.MANNEQUIN_IMAGE_URL_PREFIX.rstrip("/")
 
 
 def _safe_metadata(item: models.Clothes) -> dict:
-    if not item.ai_metadata:
+    payload = item.ai_metadata
+    if not payload:
         return {}
-    if isinstance(item.ai_metadata, dict):
-        return item.ai_metadata
+    if isinstance(payload, dict):
+        return payload
     try:
-        return json.loads(item.ai_metadata)
+        return json.loads(payload)
     except (TypeError, json.JSONDecodeError):
         return {}
 

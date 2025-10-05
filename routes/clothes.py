@@ -290,8 +290,10 @@ async def add_clothes(
         material=material,
         image_url=image_url,
         prompt_description=prompt_description or "",
-        ai_metadata=metadata_payload,
     )
+
+    if metadata_payload:
+        new_clothes.ai_metadata = metadata_payload
 
     db.add(new_clothes)
     db.commit()
