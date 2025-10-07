@@ -1,26 +1,29 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from database import get_db
 import models
 import random
 from routes.weather import get_weather_by_coordinates  # Импорт функции погоды
 import schemas
+from typing import Optional
+from .location_utils import resolve_location_and_coordinates
 
 router = APIRouter(prefix="/outfits", tags=["Outfits"])
 
 @router.get("/{user_id}")
-def get_outfit(user_id: int, db: Session = Depends(get_db)):
+def get_outfit(
+    user_id: int,
+    location_id: Optional[int] = Query(default=None, description="Выбор гардероба по локации"),
+    db: Session = Depends(get_db),
+):
     """
     Выдаёт комплект одежды по погоде (использует координаты и API-ключ пользователя).
     """
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user or not user.location or not user.weather_api_key:
+    if not user or not user.weather_api_key:
         raise HTTPException(status_code=400, detail="Нет координат или API-ключа пользователя")
 
-    try:
-        lat, lon = map(float, user.location.split(","))
-    except Exception:
-        raise HTTPException(status_code=400, detail="Неверный формат координат")
+    location, lat, lon = resolve_location_and_coordinates(db, user, location_id)
 
     # Получаем погоду по координатам и пользовательскому API-ключу
     weather_data = get_weather_by_coordinates(lat=lat, lon=lon, db=db, api_key=user.weather_api_key)
@@ -51,7 +54,11 @@ def get_outfit(user_id: int, db: Session = Depends(get_db)):
     current_season = get_season(temperature)
 
     # Получаем подходящую одежду пользователя
-    clothes = db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+    clothes_query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+    if location is not None:
+        clothes_query = clothes_query.filter(models.Clothes.location_id == location.id)
+
+    clothes = clothes_query.all()
     seasonal = [c for c in clothes if c.season.strip().lower() == current_season.lower()]
     # clothes = db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
     # seasonal = [c for c in clothes if c.season.strip().lower() in [s.lower() for s in current_seasons]]

@@ -1,9 +1,12 @@
 import requests
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from fastapi.responses import JSONResponse
+from .location_utils import resolve_location_and_coordinates
 
 router = APIRouter(prefix="/weather", tags=["Weather"])
 
@@ -83,15 +86,16 @@ def get_weather_by_coordinates(
     }
 
 @router.get("/user/{user_id}")
-def get_weather_for_user(user_id: int, db: Session = Depends(get_db)):
+def get_weather_for_user(
+    user_id: int,
+    location_id: Optional[int] = Query(default=None, description="Локация гардероба"),
+    db: Session = Depends(get_db),
+):
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user or not user.location or not user.weather_api_key:
+    if not user or not user.weather_api_key:
         raise HTTPException(status_code=404, detail="У пользователя нет координат или API-ключа")
 
-    try:
-        lat, lon = map(float, user.location.split(","))
-    except:
-        raise HTTPException(status_code=400, detail="Некорректный формат координат")
+    _, lat, lon = resolve_location_and_coordinates(db, user, location_id)
 
     return get_weather_by_coordinates(lat=lat, lon=lon, db=db, api_key=user.weather_api_key)
 

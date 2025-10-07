@@ -10,6 +10,7 @@ class UserCreate(BaseModel):
     style_preference: Optional[str] = None
     openai_api_key: Optional[str] = None
     weather_api_key: Optional[str] = None
+    gender: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -23,6 +24,7 @@ class UserResponse(BaseModel):
     openai_api_key: Optional[str] = None
     weather_api_key: Optional[str] = None
     location: Optional[str] = None
+    gender: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -33,6 +35,7 @@ class UserUpdate(BaseModel):
     #phone: Optional[str] = None
     password: Optional[str] = None
     location: Optional[str] = None
+    gender: Optional[str] = None
     
 class ApiKeysUpdate(BaseModel):
     openai_api_key: Optional[str]
@@ -46,9 +49,11 @@ class ClothesCreate(BaseModel):
     color: str
     material: Optional[str] = None
     image_url: Optional[str] = None
+    care_instructions: Optional[str] = None
     temperature_min: Optional[int] = None
     temperature_max: Optional[int] = None
     ai_metadata: Optional[dict] = None
+    location_id: Optional[int] = None
 
 class ClothesResponse(ClothesCreate):
     id: int
@@ -85,6 +90,7 @@ class ClothesAutoFill(BaseModel):
     color: str
     material: Optional[str] = None
     prompt_description: str
+    care_instructions: Optional[str] = None
     ai_metadata: ClothesInsights
     temperature_min: Optional[int] = None
     temperature_max: Optional[int] = None
@@ -114,6 +120,31 @@ class MannequinResponse(BaseModel):
     image_url: str
     weather: WeatherSnapshot
     items: List[MannequinItem]
+
+
+class WardrobeLocationBase(BaseModel):
+    name: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class WardrobeLocationCreate(WardrobeLocationBase):
+    pass
+
+
+class WardrobeLocationUpdate(BaseModel):
+    name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
+class WardrobeLocationResponse(WardrobeLocationBase):
+    id: int
+    user_id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 class WeatherCreate(BaseModel):
     temperature: int
