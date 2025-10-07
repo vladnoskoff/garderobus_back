@@ -124,6 +124,8 @@ class MannequinResponse(BaseModel):
 
 class WardrobeLocationBase(BaseModel):
     name: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class WardrobeLocationCreate(WardrobeLocationBase):
@@ -132,6 +134,8 @@ class WardrobeLocationCreate(WardrobeLocationBase):
 
 class WardrobeLocationUpdate(BaseModel):
     name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class WardrobeLocationResponse(WardrobeLocationBase):

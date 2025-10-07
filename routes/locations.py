@@ -40,7 +40,12 @@ def create_location(
     if not name:
         raise HTTPException(status_code=400, detail="Название локации не может быть пустым")
 
-    location = models.WardrobeLocation(user_id=user_id, name=name)
+    location = models.WardrobeLocation(
+        user_id=user_id,
+        name=name,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+    )
     db.add(location)
     db.commit()
     db.refresh(location)
@@ -55,12 +60,25 @@ def update_location(
     db: Session = Depends(get_db),
 ):
     location = ensure_location_for_user(db, user_id, location_id)
+    fields_set = set(getattr(payload, "__fields_set__", set())) or set(
+        getattr(payload, "model_fields_set", set())
+    )
 
     if payload.name is not None:
         new_name = payload.name.strip()
         if not new_name:
             raise HTTPException(status_code=400, detail="Название локации не может быть пустым")
         location.name = new_name
+
+    if payload.latitude is not None:
+        location.latitude = payload.latitude
+    elif "latitude" in fields_set:
+        location.latitude = None
+
+    if payload.longitude is not None:
+        location.longitude = payload.longitude
+    elif "longitude" in fields_set:
+        location.longitude = None
 
     db.commit()
     db.refresh(location)

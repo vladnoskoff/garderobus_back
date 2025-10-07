@@ -277,6 +277,8 @@ class WardrobeLocation(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
     name = Column(String, nullable=False)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     user = relationship("User", back_populates="locations")
