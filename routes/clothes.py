@@ -231,7 +231,13 @@ async def add_clothes(
 
     file_extension = Path(file.filename or "item.jpg").suffix
     unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{file_extension}"
-    save_path = CLOTHES_UPLOAD_DIR / unique_name
+    user_dir = CLOTHES_UPLOAD_DIR / str(user_id)
+    try:
+        user_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось подготовить директорию для пользователя: {exc}") from exc
+
+    save_path = user_dir / unique_name
 
     try:
         with open(save_path, "wb") as buffer:
@@ -239,10 +245,11 @@ async def add_clothes(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Не удалось сохранить изображение: {exc}") from exc
 
+    relative_path = f"{user_id}/{unique_name}"
     if CLOTHES_IMAGE_URL_PREFIX:
-        image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{unique_name}"
+        image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{relative_path}"
     else:
-        image_url = f"/{unique_name}"
+        image_url = f"/{relative_path}"
 
     metadata_payload = None
     if ai_metadata:
