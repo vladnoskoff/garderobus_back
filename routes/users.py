@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 import jwt
@@ -14,6 +15,24 @@ ALGORITHM = "HS256"
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
+def _normalize_gender(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if not normalized:
+        return None
+
+    male_markers = {"male", "m", "man", "м", "муж", "мужчина"}
+    female_markers = {"female", "f", "woman", "ж", "жен", "женщина"}
+
+    if normalized in male_markers:
+        return "male"
+    if normalized in female_markers:
+        return "female"
+    return normalized
+
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + datetime.timedelta(days=1)
@@ -28,7 +47,12 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
 
     hashed_password = pwd_context.hash(user.password)
-    new_user = models.User(name=user.name, email=user.email, password_hash=hashed_password)
+    new_user = models.User(
+        name=user.name,
+        email=user.email,
+        password_hash=hashed_password,
+        gender=_normalize_gender(user.gender),
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
@@ -74,6 +98,8 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
         user.password_hash = pwd_context.hash(updates.password)
     if updates.location is not None:
         user.location = updates.location
+    if updates.gender is not None:
+        user.gender = _normalize_gender(updates.gender)
 
     db.commit()
     db.refresh(user)

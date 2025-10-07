@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +14,7 @@ from database import get_db
 import schemas
 import settings
 from openai_client import get_openai_client
+from .location_utils import ensure_location_for_user
 
 client = get_openai_client()
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
@@ -69,8 +70,16 @@ AI_JSON_SCHEMA = {
 }
 
 @router.get("/user/{user_id}", response_model=list[schemas.ClothesResponse])
-def get_user_clothes(user_id: int, db: Session = Depends(get_db)):
-    return db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+def get_user_clothes(
+    user_id: int,
+    location_id: Optional[int] = Query(default=None, description="Фильтр по локации гардероба"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
+        query = query.filter(models.Clothes.location_id == location_id)
+    return query.all()
     
 def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
     if is_base64:
@@ -162,6 +171,7 @@ def _insights_to_autofill(insights: schemas.ClothesInsights) -> schemas.ClothesA
         color=primary_color.strip(),
         material=insights.material.strip() if insights.material else None,
         prompt_description=description,
+        care_instructions=insights.care.strip() if insights.care else None,
         ai_metadata=insights,
         temperature_min=temp_min,
         temperature_max=temp_max,
@@ -185,10 +195,12 @@ async def add_clothes(
     color: Optional[str] = Form(None),
     material: Optional[str] = Form(None),
     prompt_description: Optional[str] = Form(None),
+    care_instructions: Optional[str] = Form(None),
     temperature_min: Optional[int] = Form(None),
     temperature_max: Optional[int] = Form(None),
     ai_metadata: Optional[str] = Form(None),
     auto_fill: bool = Form(False),
+    location_id: Optional[int] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -197,6 +209,9 @@ async def add_clothes(
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Файл изображения пустой")
+
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
     autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
     if auto_fill or not all([name, category, season, color]):
         insights = await _analyze_image_bytes(image_bytes)
@@ -212,6 +227,7 @@ async def add_clothes(
         color = _merge_field(color, autofilled_metadata.color)
         material = _merge_field(material, autofilled_metadata.material)
         prompt_description = _merge_field(prompt_description, autofilled_metadata.prompt_description)
+        care_instructions = _merge_field(care_instructions, autofilled_metadata.care_instructions)
 
         def _merge_temperature(current: Optional[int], generated: Optional[int]) -> Optional[int]:
             if generated is None:
@@ -231,7 +247,13 @@ async def add_clothes(
 
     file_extension = Path(file.filename or "item.jpg").suffix
     unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{file_extension}"
-    save_path = CLOTHES_UPLOAD_DIR / unique_name
+    user_dir = CLOTHES_UPLOAD_DIR / str(user_id)
+    try:
+        user_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось подготовить директорию для пользователя: {exc}") from exc
+
+    save_path = user_dir / unique_name
 
     try:
         with open(save_path, "wb") as buffer:
@@ -239,10 +261,11 @@ async def add_clothes(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Не удалось сохранить изображение: {exc}") from exc
 
+    relative_path = f"{user_id}/{unique_name}"
     if CLOTHES_IMAGE_URL_PREFIX:
-        image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{unique_name}"
+        image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{relative_path}"
     else:
-        image_url = f"/{unique_name}"
+        image_url = f"/{relative_path}"
 
     metadata_payload = None
     if ai_metadata:
@@ -302,6 +325,8 @@ async def add_clothes(
         material=material,
         image_url=image_url,
         prompt_description=prompt_description or "",
+        care_instructions=care_instructions,
+        location_id=location_id,
     )
 
     if metadata_payload:
