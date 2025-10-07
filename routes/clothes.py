@@ -162,6 +162,7 @@ def _insights_to_autofill(insights: schemas.ClothesInsights) -> schemas.ClothesA
         color=primary_color.strip(),
         material=insights.material.strip() if insights.material else None,
         prompt_description=description,
+        care_instructions=insights.care.strip() if insights.care else None,
         ai_metadata=insights,
         temperature_min=temp_min,
         temperature_max=temp_max,
@@ -185,6 +186,7 @@ async def add_clothes(
     color: Optional[str] = Form(None),
     material: Optional[str] = Form(None),
     prompt_description: Optional[str] = Form(None),
+    care_instructions: Optional[str] = Form(None),
     temperature_min: Optional[int] = Form(None),
     temperature_max: Optional[int] = Form(None),
     ai_metadata: Optional[str] = Form(None),
@@ -212,6 +214,7 @@ async def add_clothes(
         color = _merge_field(color, autofilled_metadata.color)
         material = _merge_field(material, autofilled_metadata.material)
         prompt_description = _merge_field(prompt_description, autofilled_metadata.prompt_description)
+        care_instructions = _merge_field(care_instructions, autofilled_metadata.care_instructions)
 
         def _merge_temperature(current: Optional[int], generated: Optional[int]) -> Optional[int]:
             if generated is None:
@@ -309,6 +312,7 @@ async def add_clothes(
         material=material,
         image_url=image_url,
         prompt_description=prompt_description or "",
+        care_instructions=care_instructions,
     )
 
     if metadata_payload:

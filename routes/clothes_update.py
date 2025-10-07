@@ -56,6 +56,7 @@ async def add_clothes(
     season: str = Form(...),
     color: str = Form(...),
     material: str = Form(None),
+    care_instructions: str = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -79,7 +80,8 @@ async def add_clothes(
             color=color,
             material=material,
             image_url=image_url,
-            prompt_description=prompt_description
+            prompt_description=prompt_description,
+            care_instructions=care_instructions,
         )
         db.add(new_clothes)
         db.commit()

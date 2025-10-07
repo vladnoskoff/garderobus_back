@@ -30,6 +30,7 @@ class Clothes(Base):
     image_url = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
+    care_instructions = Column(Text, nullable=True)
     ai_metadata = Column(JSON, nullable=True)
 
     def _metadata_dict(self) -> dict:
