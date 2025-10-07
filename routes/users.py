@@ -47,6 +47,24 @@ def _verify_password(password: str, password_hash: str) -> bool:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=_PASSWORD_TOO_LONG_DETAIL) from exc
 
+_MAX_BCRYPT_BYTES = 72
+_MIN_PASSWORD_LENGTH = 6
+_MAX_PASSWORD_LENGTH = 20
+
+
+def _ensure_password_fits_backend(password: str) -> None:
+    """Ensure the password length is compatible with business rules and bcrypt backend."""
+    if not (_MIN_PASSWORD_LENGTH <= len(password) <= _MAX_PASSWORD_LENGTH):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Пароль должен содержать от {_MIN_PASSWORD_LENGTH} до {_MAX_PASSWORD_LENGTH} символов.",
+        )
+    if len(password.encode("utf-8")) > _MAX_BCRYPT_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль слишком длинный. Максимальная длина — 72 байта.",
+        )
+
 
 def _normalize_gender(value: Optional[str]) -> Optional[str]:
     if value is None:
