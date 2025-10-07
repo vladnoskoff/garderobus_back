@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, ForeignKey, JSON, TIMESTAMP, Text
+from sqlalchemy import Column, Integer, String, ForeignKey, JSON, TIMESTAMP, Text, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
