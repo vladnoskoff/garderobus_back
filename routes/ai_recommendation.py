@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 from typing import Iterable, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 import models
@@ -12,6 +12,7 @@ import schemas
 from database import get_db
 import settings
 from openai_client import get_openai_client
+from .location_utils import ensure_location_for_user
 
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
@@ -129,12 +130,31 @@ def _select_outfit(clothes: List[models.Clothes], weather: models.Weather) -> Li
     return selected[:4]
 
 
-def _build_mannequin_prompt(items: List[models.Clothes], weather: models.Weather) -> str:
+def _mannequin_gender_instruction(gender: Optional[str]) -> str:
+    if not gender:
+        return "Render a gender-neutral mannequin with average adult proportions."
+
+    normalized = gender.strip().lower()
+    if any(token in normalized for token in ("female", "woman", "жен")):
+        return "Render a full-body female mannequin with realistic proportions for the listed garments."
+    if any(token in normalized for token in ("male", "man", "муж")):
+        return "Render a full-body male mannequin with realistic proportions for the listed garments."
+    return f"Render a full-body mannequin that reflects the user's gender: {gender}."
+
+
+def _build_mannequin_prompt(
+    items: List[models.Clothes],
+    weather: models.Weather,
+    gender: Optional[str],
+) -> str:
     lines = [
         "Create a hyperrealistic studio photograph of a faceless mannequin wearing a cohesive outfit.",
+        "Show the entire mannequin from head to toe in a neutral pose.",
         "Use soft neutral lighting, clean white background, no logos or text.",
         f"Weather context: {weather.condition}, {weather.temperature}°C, humidity {weather.humidity}%, wind {weather.wind_speed or 0} m/s.",
         "Ensure the outfit feels comfortable for the current weather and coordinates colours harmoniously.",
+        _mannequin_gender_instruction(gender),
+        "Only use the clothing items listed below. Do not add extra garments, accessories or props.",
         "Clothing items to include:",
     ]
 
@@ -256,12 +276,25 @@ def ai_recommendation(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/mannequin/{user_id}", response_model=schemas.MannequinResponse)
-def generate_mannequin(user_id: int, db: Session = Depends(get_db)):
+def generate_mannequin(
+    user_id: int,
+    location_id: Optional[int] = Query(default=None, description="Выбор гардероба по локации"),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
     weather = db.query(models.Weather).order_by(models.Weather.created_at.desc()).first()
     if not weather:
         raise HTTPException(status_code=404, detail="Нет погодных данных")
 
-    clothes = db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+    clothes_query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
+        clothes_query = clothes_query.filter(models.Clothes.location_id == location_id)
+
+    clothes = clothes_query.all()
     if not clothes:
         raise HTTPException(status_code=404, detail="Одежда не найдена")
 
@@ -269,7 +302,7 @@ def generate_mannequin(user_id: int, db: Session = Depends(get_db)):
     if not selected_items:
         raise HTTPException(status_code=404, detail="Не удалось подобрать одежду для манекена")
 
-    prompt = _build_mannequin_prompt(selected_items, weather)
+    prompt = _build_mannequin_prompt(selected_items, weather, user.gender)
 
     try:
         image_response = client.images.generate(

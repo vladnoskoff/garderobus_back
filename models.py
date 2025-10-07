@@ -15,7 +15,15 @@ class User(Base):
     password_hash = Column(String)
     openai_api_key = Column(String, nullable=True)
     weather_api_key = Column(String, nullable=True)
-    location = Column(String, nullable=True) 
+    location = Column(String, nullable=True)
+    gender = Column(String, nullable=True)
+
+    locations = relationship(
+        "WardrobeLocation",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 class Clothes(Base):
     __tablename__ = "clothes"
@@ -31,6 +39,7 @@ class Clothes(Base):
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
     care_instructions = Column(Text, nullable=True)
+    location_id = Column(Integer, ForeignKey("wardrobe_locations.id", ondelete="SET NULL"), nullable=True)
     ai_metadata = Column(JSON, nullable=True)
 
     def _metadata_dict(self) -> dict:
@@ -76,6 +85,7 @@ class Clothes(Base):
         passive_deletes=True,
         single_parent=True,
     )
+    location = relationship("WardrobeLocation", back_populates="clothes")
 
     @property
     def ai_metadata(self) -> Optional[dict]:
@@ -259,3 +269,15 @@ class ClothesMetadata(Base):
     data = Column(JSON, nullable=True)
 
     clothes = relationship("Clothes", back_populates="metadata_entry")
+
+
+class WardrobeLocation(Base):
+    __tablename__ = "wardrobe_locations"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    name = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    user = relationship("User", back_populates="locations")
+    clothes = relationship("Clothes", back_populates="location")

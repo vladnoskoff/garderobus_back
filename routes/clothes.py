@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +14,7 @@ from database import get_db
 import schemas
 import settings
 from openai_client import get_openai_client
+from .location_utils import ensure_location_for_user
 
 client = get_openai_client()
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
@@ -69,8 +70,16 @@ AI_JSON_SCHEMA = {
 }
 
 @router.get("/user/{user_id}", response_model=list[schemas.ClothesResponse])
-def get_user_clothes(user_id: int, db: Session = Depends(get_db)):
-    return db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+def get_user_clothes(
+    user_id: int,
+    location_id: Optional[int] = Query(default=None, description="Фильтр по локации гардероба"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
+        query = query.filter(models.Clothes.location_id == location_id)
+    return query.all()
     
 def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
     if is_base64:
@@ -191,6 +200,7 @@ async def add_clothes(
     temperature_max: Optional[int] = Form(None),
     ai_metadata: Optional[str] = Form(None),
     auto_fill: bool = Form(False),
+    location_id: Optional[int] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -199,6 +209,9 @@ async def add_clothes(
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Файл изображения пустой")
+
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
     autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
     if auto_fill or not all([name, category, season, color]):
         insights = await _analyze_image_bytes(image_bytes)
@@ -313,6 +326,7 @@ async def add_clothes(
         image_url=image_url,
         prompt_description=prompt_description or "",
         care_instructions=care_instructions,
+        location_id=location_id,
     )
 
     if metadata_payload:

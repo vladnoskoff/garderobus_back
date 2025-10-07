@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
 import models
@@ -12,6 +12,9 @@ import schemas
 from openai_client import get_openai_client
 from pyuploadcare import Uploadcare
 import io
+from typing import Optional
+
+from .location_utils import ensure_location_for_user
 client = get_openai_client()
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
 
@@ -22,8 +25,16 @@ uploadcare = Uploadcare(public_key=settings.UPLOADCARE_PUBLIC_KEY, secret_key=se
 
 
 @router.get("/user/{user_id}", response_model=list[schemas.ClothesResponse])
-def get_user_clothes(user_id: int, db: Session = Depends(get_db)):
-    return db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+def get_user_clothes(
+    user_id: int,
+    location_id: Optional[int] = Query(default=None, description="Фильтр по локации гардероба"),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
+        query = query.filter(models.Clothes.location_id == location_id)
+    return query.all()
     
 async def describe_image_from_url(image_url: str) -> str:
     prompt_text = "Опиши в одном абзаце этот предмет одежды: укажи тип, материал, цвет, особенности дизайна и, если есть, логотип или надпись."
@@ -57,12 +68,16 @@ async def add_clothes(
     color: str = Form(...),
     material: str = Form(None),
     care_instructions: str = Form(None),
+    location_id: Optional[int] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     try:
         # Читаем байты
         file_data = await file.read()
+
+        if location_id is not None:
+            ensure_location_for_user(db, user_id, location_id)
 
         # Загрузка через Uploadcare 6.1.0
         upload_result = uploadcare.upload_api.upload_bytes(file_data, file_name=file.filename)
@@ -82,6 +97,7 @@ async def add_clothes(
             image_url=image_url,
             prompt_description=prompt_description,
             care_instructions=care_instructions,
+            location_id=location_id,
         )
         db.add(new_clothes)
         db.commit()
