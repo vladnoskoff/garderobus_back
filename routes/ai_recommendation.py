@@ -1,6 +1,7 @@
 import base64
 import json
 from datetime import datetime
+from uuid import uuid4
 from typing import Iterable, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -154,14 +155,26 @@ def _build_mannequin_prompt(items: List[models.Clothes], weather: models.Weather
 
 
 def _save_mannequin_image(image_b64: str, user_id: int) -> str:
-    filename = f"mannequin_{user_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
-    file_path = MANNEQUIN_DIR / filename
+    filename = f"mannequin_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}.png"
+    user_dir = MANNEQUIN_DIR / str(user_id)
+
+    try:
+        user_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось подготовить директорию манекенов: {exc}") from exc
+
+    file_path = user_dir / filename
     image_bytes = base64.b64decode(image_b64)
-    with open(file_path, "wb") as output:
-        output.write(image_bytes)
+    try:
+        with open(file_path, "wb") as output:
+            output.write(image_bytes)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Не удалось сохранить изображение манекена: {exc}") from exc
+
+    relative_path = f"{user_id}/{filename}"
     if MANNEQUIN_URL_PREFIX:
-        return f"{MANNEQUIN_URL_PREFIX}/{filename}"
-    return f"/{filename}"
+        return f"{MANNEQUIN_URL_PREFIX}/{relative_path}"
+    return f"/{relative_path}"
 
 
 @router.get("/recommendation/{user_id}")
