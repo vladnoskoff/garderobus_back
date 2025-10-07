@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
+import bcrypt
 import jwt
 import datetime
 import models, schemas
@@ -13,7 +13,39 @@ router = APIRouter(prefix="/users", tags=["Users"])
 SECRET_KEY = "supersecretkey"
 ALGORITHM = "HS256"
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_MAX_BCRYPT_BYTES = 72
+_MIN_PASSWORD_LENGTH = 6
+_MAX_PASSWORD_LENGTH = 20
+_PASSWORD_TOO_LONG_DETAIL = "Пароль слишком длинный. Максимальная длина — 72 байта."
+
+
+def _ensure_password_fits_backend(password: str) -> None:
+    """Ensure the password length is compatible with business rules and bcrypt backend."""
+    if not (_MIN_PASSWORD_LENGTH <= len(password) <= _MAX_PASSWORD_LENGTH):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Пароль должен содержать от {_MIN_PASSWORD_LENGTH} до {_MAX_PASSWORD_LENGTH} символов.",
+        )
+    if len(password.encode("utf-8")) > _MAX_BCRYPT_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=_PASSWORD_TOO_LONG_DETAIL,
+        )
+
+
+def _hash_password(password: str) -> str:
+    try:
+        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_PASSWORD_TOO_LONG_DETAIL) from exc
+    return hashed.decode("utf-8")
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=_PASSWORD_TOO_LONG_DETAIL) from exc
 
 _MAX_BCRYPT_BYTES = 72
 _MIN_PASSWORD_LENGTH = 6
@@ -65,7 +97,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email уже зарегистрирован")
 
     _ensure_password_fits_backend(user.password)
-    hashed_password = pwd_context.hash(user.password)
+    hashed_password = _hash_password(user.password)
     new_user = models.User(
         name=user.name,
         email=user.email,
@@ -87,13 +119,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
     if not db_user:
         raise auth_error
 
-    try:
-        password_matches = pwd_context.verify(user.password, db_user.password_hash)
-    except ValueError:
-        raise HTTPException(
-            status_code=400,
-            detail="Пароль слишком длинный. Максимальная длина — 72 байта.",
-        ) from None
+    password_matches = _verify_password(user.password, db_user.password_hash)
 
     if not password_matches:
         raise auth_error
@@ -130,7 +156,7 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
         user.email = updates.email
     if updates.password is not None:
         _ensure_password_fits_backend(updates.password)
-        user.password_hash = pwd_context.hash(updates.password)
+        user.password_hash = _hash_password(updates.password)
     if updates.location is not None:
         user.location = updates.location
     if updates.gender is not None:
