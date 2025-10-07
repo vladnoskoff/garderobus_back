@@ -79,12 +79,24 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login")
 def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(models.User).filter(models.User.email == user.email).first()
-    if db_user:
-        _ensure_password_fits_backend(user.password)
+    _ensure_password_fits_backend(user.password)
 
-    if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
+    db_user = db.query(models.User).filter(models.User.email == user.email).first()
+    auth_error = HTTPException(status_code=401, detail="Неверный email или пароль")
+
+    if not db_user:
+        raise auth_error
+
+    try:
+        password_matches = pwd_context.verify(user.password, db_user.password_hash)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Пароль слишком длинный. Максимальная длина — 72 байта.",
+        ) from None
+
+    if not password_matches:
+        raise auth_error
 
     token = create_access_token({"sub": db_user.email})
     return {"access_token": token, "token_type": "bearer", "user_id": db_user.id}
