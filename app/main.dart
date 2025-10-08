@@ -5,28 +5,61 @@ import 'screens/settings/settings_screen.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
+import 'services/theme_controller.dart';
 
-void main() {
-  runApp(const WardrobeApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final themeNotifier = ThemeNotifier();
+  await themeNotifier.initialize();
+  runApp(WardrobeApp(themeNotifier: themeNotifier));
 }
 
 class WardrobeApp extends StatelessWidget {
-  const WardrobeApp({super.key});
+  final ThemeNotifier themeNotifier;
+
+  const WardrobeApp({super.key, required this.themeNotifier});
+
+  ThemeData _buildLightTheme() {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.blue, brightness: Brightness.light);
+    return ThemeData(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.background,
+      useMaterial3: true,
+      appBarTheme: AppBarTheme(backgroundColor: scheme.primary, foregroundColor: scheme.onPrimary),
+    );
+  }
+
+  ThemeData _buildDarkTheme() {
+    final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey, brightness: Brightness.dark);
+    return ThemeData(
+      colorScheme: scheme,
+      scaffoldBackgroundColor: scheme.background,
+      useMaterial3: true,
+      appBarTheme: AppBarTheme(backgroundColor: scheme.surface, foregroundColor: scheme.onSurface),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Гардеробус',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        scaffoldBackgroundColor: Colors.white,
-      ),
-      home: const AuthWrapper(),
-      routes: {
-        '/login': (context) => const LoginScreen(),
-        '/register': (context) => const RegisterScreen(),
-        '/home': (context) => const MainNavigation(),
+    return AnimatedBuilder(
+      animation: themeNotifier,
+      builder: (context, _) {
+        return ThemeScope(
+          notifier: themeNotifier,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            title: 'Гардеробус',
+            themeMode: themeNotifier.themeMode,
+            theme: _buildLightTheme(),
+            darkTheme: _buildDarkTheme(),
+            home: const AuthWrapper(),
+            routes: {
+              '/login': (context) => const LoginScreen(),
+              '/register': (context) => const RegisterScreen(),
+              '/home': (context) => const MainNavigation(),
+            },
+          ),
+        );
       },
     );
   }
@@ -81,9 +114,9 @@ class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0; // Сразу открываем настройки
 
   final List<Widget> _pages = [
-    HomeScreen(),
-    WardrobeScreen(),
-    SettingsScreen(),
+    const HomeScreen(),
+    const WardrobeScreen(),
+    const SettingsScreen(),
   ];
 
   @override

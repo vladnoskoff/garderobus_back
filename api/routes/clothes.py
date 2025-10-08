@@ -247,13 +247,17 @@ async def add_clothes(
 
     file_extension = Path(file.filename or "item.jpg").suffix
     unique_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{file_extension}"
-    user_dir = CLOTHES_UPLOAD_DIR / str(user_id)
+    location_segment = str(location_id) if location_id is not None else "shared"
+    destination_dir = CLOTHES_UPLOAD_DIR / str(user_id) / location_segment
     try:
-        user_dir.mkdir(parents=True, exist_ok=True)
+        destination_dir.mkdir(parents=True, exist_ok=True)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Не удалось подготовить директорию для пользователя: {exc}") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"Не удалось подготовить директорию для пользователя: {exc}",
+        ) from exc
 
-    save_path = user_dir / unique_name
+    save_path = destination_dir / unique_name
 
     try:
         with open(save_path, "wb") as buffer:
@@ -261,7 +265,7 @@ async def add_clothes(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Не удалось сохранить изображение: {exc}") from exc
 
-    relative_path = f"{user_id}/{unique_name}"
+    relative_path = f"{user_id}/{location_segment}/{unique_name}"
     if CLOTHES_IMAGE_URL_PREFIX:
         image_url = f"{CLOTHES_IMAGE_URL_PREFIX}/{relative_path}"
     else:

@@ -17,6 +17,7 @@ class User(Base):
     weather_api_key = Column(String, nullable=True)
     location = Column(String, nullable=True)
     gender = Column(String, nullable=True)
+    theme_preference = Column(String, nullable=False, default="light", server_default="light")
 
     locations = relationship(
         "WardrobeLocation",

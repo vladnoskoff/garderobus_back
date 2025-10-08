@@ -7,16 +7,77 @@ class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
   static final storage = FlutterSecureStorage();
 
+  static Future<int?> getStoredUserId() async {
+    final id = await storage.read(key: "user_id");
+    if (id == null) return null;
+    return int.tryParse(id);
+  }
+
+  static Future<String?> getCachedThemePreference() async {
+    final theme = await storage.read(key: "theme_preference");
+    if (theme == null || theme.trim().isEmpty) {
+      return null;
+    }
+    return theme;
+  }
+
+  static Future<void> cacheThemePreference(String theme) async {
+    await storage.write(key: "theme_preference", value: theme);
+  }
+
+  static Future<String?> fetchThemePreference(int userId) async {
+    try {
+      final user = await getUser(userId);
+      final preference = user['theme_preference'];
+      if (preference is String && preference.trim().isNotEmpty) {
+        return preference;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> updateThemePreference(int userId, String theme) async {
+    await updateUser(userId, 'theme_preference', theme);
+    await cacheThemePreference(theme);
+  }
+
+  static Future<void> rememberUserTheme(int userId) async {
+    final remoteTheme = await fetchThemePreference(userId);
+    if (remoteTheme != null) {
+      await cacheThemePreference(remoteTheme);
+    }
+  }
+
   // Регистрация пользователя
-  static Future<void> register(String name, String email, String password) async {
+  static Future<Map<String, dynamic>> register(
+    String name,
+    String email,
+    String password,
+    String gender,
+  ) async {
     final response = await http.post(
       Uri.parse("$baseUrl/users/register"),
       headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"name": name, "email": email, "password": password}),
+      body: jsonEncode({
+        "name": name,
+        "email": email,
+        "password": password,
+        "gender": gender,
+      }),
     );
-    if (response.statusCode != 200) {
-      throw Exception("Ошибка регистрации");
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.body.isEmpty) {
+        return {};
+      }
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return {};
     }
+    throw Exception("Ошибка регистрации");
   }
 
   // Логин пользователя
@@ -29,7 +90,14 @@ class ApiService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       await storage.write(key: "token", value: data["access_token"]);
-      await storage.write(key: "user_id", value: data["user_id"].toString());// <-- вот здесь
+      await storage.write(
+        key: "user_id",
+        value: data["user_id"].toString(),
+      );
+      final userId = int.tryParse(data["user_id"].toString());
+      if (userId != null) {
+        await rememberUserTheme(userId);
+      }
       return data;
     } else {
       throw Exception("Ошибка входа");
@@ -152,8 +220,11 @@ class ApiService {
   }
 
   // Получение одежды пользователя
-  static Future<List<dynamic>> getUserClothes(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/clothes/user/$userId'));
+  static Future<List<dynamic>> getUserClothes(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse('$baseUrl/clothes/user/$userId?location_id=$locationId')
+        : Uri.parse('$baseUrl/clothes/user/$userId');
+    final response = await http.get(uri);
 
     if (response.statusCode == 200) {
       final utf8Response = utf8.decode(response.bodyBytes); // Для корректной обработки русских символов
@@ -171,6 +242,8 @@ class ApiService {
     required String color,
     String? material,
     required File image,
+    bool autoFill = false,
+    int? locationId,
   }) async {
     final storage = const FlutterSecureStorage();
     final userId = await storage.read(key: "user_id");
@@ -187,10 +260,15 @@ class ApiService {
       ..fields['name'] = name
       ..fields['category'] = category
       ..fields['season'] = season
-      ..fields['color'] = color;
+      ..fields['color'] = color
+      ..fields['auto_fill'] = autoFill.toString();
 
     if (material != null && material.isNotEmpty) {
       request.fields['material'] = material;
+    }
+
+    if (locationId != null) {
+      request.fields['location_id'] = locationId.toString();
     }
 
     request.files.add(await http.MultipartFile.fromPath('file', image.path));
@@ -246,8 +324,11 @@ class ApiService {
   }
   
   // Получить погоды по координатам
-  static Future<Map<String, dynamic>> getWeatherByUserId(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/weather/user/$userId'));
+  static Future<Map<String, dynamic>> getWeatherByUserId(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse('$baseUrl/weather/user/$userId?location_id=$locationId')
+        : Uri.parse('$baseUrl/weather/user/$userId');
+    final response = await http.get(uri);
     if (response.statusCode == 200) {
       return json.decode(utf8.decode(response.bodyBytes));
     } else {
@@ -268,8 +349,11 @@ class ApiService {
   } */
 
   // Получение наряда по погоде координатам пользователя
-  static Future<Map<String, dynamic>> getOutfit(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/outfits/$userId'));
+  static Future<Map<String, dynamic>> getOutfit(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse('$baseUrl/outfits/$userId?location_id=$locationId')
+        : Uri.parse('$baseUrl/outfits/$userId');
+    final response = await http.get(uri);
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
@@ -279,8 +363,11 @@ class ApiService {
 
 
   // Получить историю нарядов
-  static Future<List<dynamic>> getOutfitHistory(int userId) async {
-    final response = await http.get(Uri.parse("$baseUrl/outfits/history/$userId"));
+  static Future<List<dynamic>> getOutfitHistory(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse("$baseUrl/outfits/history/$userId?location_id=$locationId")
+        : Uri.parse("$baseUrl/outfits/history/$userId");
+    final response = await http.get(uri);
     return jsonDecode(response.body);
   }
 
@@ -300,6 +387,56 @@ class ApiService {
     return jsonDecode(response.body)["recommendation"];
   }
 
+  static Future<List<Map<String, dynamic>>> getMannequins(
+    int userId, {
+    int? locationId,
+    int count = 3,
+  }) async {
+    final queryParameters = <String, String>{
+      if (locationId != null) 'location_id': locationId.toString(),
+      if (count > 0) 'count': count.toString(),
+    };
+
+    final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
+    final uri = queryParameters.isEmpty
+        ? baseUri
+        : baseUri.replace(queryParameters: queryParameters);
+
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при получении манекенов');
+    }
+
+    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+
+    Map<String, dynamic> normalizeMap(Map source) {
+      return source.map((key, value) => MapEntry(key.toString(), value));
+    }
+
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((item) => normalizeMap(item as Map))
+          .take(count)
+          .toList();
+    }
+
+    if (data is Map) {
+      final mapData = normalizeMap(data as Map);
+      final mannequinsList = mapData['mannequins'];
+      if (mannequinsList is List) {
+        return mannequinsList
+            .whereType<Map>()
+            .map((item) => normalizeMap(item as Map))
+            .take(count)
+            .toList();
+      }
+      return [mapData];
+    }
+
+    return [];
+  }
+
   // Получить визуальное изображение наряда
   static Future<String> getVisualOutfit(int userId) async {
     final response = await http.get(Uri.parse("$baseUrl/ai/visual-recommendation/$userId"));
@@ -316,5 +453,81 @@ class ApiService {
   static Future<List<dynamic>> getLeastWornClothes(int userId) async {
     final response = await http.get(Uri.parse("$baseUrl/analytics/least_worn/$userId"));
     return jsonDecode(response.body);
+  }
+
+  static Future<List<dynamic>> getWardrobeLocations(int userId) async {
+    final response = await http.get(Uri.parse('$baseUrl/locations/$userId'));
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Ошибка при получении локаций гардероба');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createWardrobeLocation({
+    required int userId,
+    required String name,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/locations/$userId'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "name": name,
+        "latitude": latitude,
+        "longitude": longitude,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Ошибка при создании локации');
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateWardrobeLocation({
+    required int userId,
+    required int locationId,
+    String? name,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final Map<String, dynamic> payload = {};
+    if (name != null) {
+      payload['name'] = name;
+    }
+    if (latitude != null) {
+      payload['latitude'] = latitude;
+    }
+    if (longitude != null) {
+      payload['longitude'] = longitude;
+    }
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/locations/$userId/$locationId'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Ошибка при обновлении локации');
+    }
+  }
+
+  static Future<void> deleteWardrobeLocation({
+    required int userId,
+    required int locationId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/locations/$userId/$locationId'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при удалении локации');
+    }
   }
 }
