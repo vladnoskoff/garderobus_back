@@ -77,6 +77,7 @@ class Clothes(Base):
         if value is None:
             if self.metadata_entry:
                 self.metadata_entry.data = None
+            self._ai_metadata_legacy = None
             return
 
         payload = value
