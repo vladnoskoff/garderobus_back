@@ -19,6 +19,26 @@ class _PlacesScreenState extends State<PlacesScreen> {
   bool _isLoading = false;
   String? _homeCoordinates;
 
+  int? _parseLocationId(dynamic value) {
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    if (value != null) {
+      return int.tryParse(value.toString());
+    }
+    return null;
+  }
+
+  double? _parseCoordinate(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    if (value is String) {
+      final normalised = value.replaceAll(',', '.');
+      return double.tryParse(normalised.trim());
+    }
+    return null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -35,10 +55,12 @@ class _PlacesScreenState extends State<PlacesScreen> {
 
       final user = await ApiService.getUser(parsedId);
       final locations = await ApiService.getWardrobeLocations(parsedId);
+      final mappedLocations =
+          locations.whereType<Map<String, dynamic>>().toList(growable: false);
 
       setState(() {
         _userId = parsedId;
-        _locations = locations;
+        _locations = mappedLocations;
         _homeCoordinates = user['location']?.toString();
       });
     } catch (e) {
@@ -58,8 +80,11 @@ class _PlacesScreenState extends State<PlacesScreen> {
     if (latitude == null || longitude == null) {
       return 'Координаты не указаны';
     }
-    final lat = (latitude as num).toDouble();
-    final lon = (longitude as num).toDouble();
+    final lat = _parseCoordinate(latitude);
+    final lon = _parseCoordinate(longitude);
+    if (lat == null || lon == null) {
+      return 'Координаты не указаны';
+    }
     return '${lat.toStringAsFixed(6)}, ${lon.toStringAsFixed(6)}';
   }
 
@@ -67,7 +92,8 @@ class _PlacesScreenState extends State<PlacesScreen> {
     if (_userId == null) return;
     try {
       final locations = await ApiService.getWardrobeLocations(_userId!);
-      setState(() => _locations = locations);
+      setState(() =>
+          _locations = locations.whereType<Map<String, dynamic>>().toList());
     } catch (e) {
       _showError('Ошибка обновления списка: $e');
     }
@@ -118,19 +144,16 @@ class _PlacesScreenState extends State<PlacesScreen> {
 
     final isEdit = location != null;
     final initialName = location?['name']?.toString() ?? '';
-    final initialLatitude = location?['latitude'] != null
-        ? (location!['latitude'] as num).toDouble()
-        : null;
-    final initialLongitude = location?['longitude'] != null
-        ? (location!['longitude'] as num).toDouble()
-        : null;
+    final initialLatitude = _parseCoordinate(location?['latitude']);
+    final initialLongitude = _parseCoordinate(location?['longitude']);
 
     final nameController = TextEditingController(text: initialName);
     double? latitude = initialLatitude;
     double? longitude = initialLongitude;
 
-    String? coordinatesDisplay =
-        latitude != null && longitude != null ? '$latitude, $longitude' : null;
+    String? coordinatesDisplay = latitude != null && longitude != null
+        ? '${latitude!.toStringAsFixed(6)}, ${longitude!.toStringAsFixed(6)}'
+        : null;
 
     await showDialog<void>(
       context: context,
@@ -168,7 +191,8 @@ class _PlacesScreenState extends State<PlacesScreen> {
                             setStateDialog(() {
                               latitude = lat;
                               longitude = lon;
-                              coordinatesDisplay = '$lat, $lon';
+                              coordinatesDisplay =
+                                  '${lat.toStringAsFixed(6)}, ${lon.toStringAsFixed(6)}';
                             });
                           }
                         }
@@ -204,10 +228,20 @@ class _PlacesScreenState extends State<PlacesScreen> {
                         return;
                       }
 
+                      if (!isEdit && (latitude == null || longitude == null)) {
+                        _showError('Выберите координаты на карте');
+                        return;
+                      }
+
                       if (isEdit) {
+                        final locationId = _parseLocationId(location?['id']);
+                        if (locationId == null) {
+                          _showError('Некорректная локация');
+                          return;
+                        }
                         await ApiService.updateWardrobeLocation(
                           userId: _userId!,
-                          locationId: location!['id'] as int,
+                          locationId: locationId,
                           name: name,
                           latitude: latitude,
                           longitude: longitude,
@@ -236,10 +270,15 @@ class _PlacesScreenState extends State<PlacesScreen> {
     );
   }
 
-  Future<void> _deleteLocation(int locationId) async {
+  Future<void> _deleteLocation(dynamic locationId) async {
     if (_userId == null) return;
     try {
-      await ApiService.deleteWardrobeLocation(userId: _userId!, locationId: locationId);
+      final parsedId = _parseLocationId(locationId);
+      if (parsedId == null) {
+        _showError('Некорректная локация');
+        return;
+      }
+      await ApiService.deleteWardrobeLocation(userId: _userId!, locationId: parsedId);
       await _refreshLocations();
     } catch (e) {
       _showError('Не удалось удалить локацию: $e');
@@ -334,7 +373,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.delete, color: Colors.redAccent),
-            onPressed: () => _deleteLocation(location['id'] as int),
+            onPressed: () => _deleteLocation(location['id']),
           ),
         ],
       ),
@@ -364,7 +403,9 @@ class _PlacesScreenState extends State<PlacesScreen> {
                       child: const Text('Локации гардероба пока не добавлены'),
                     )
                   else
-                    ..._locations.map((loc) => _buildLocationTile(loc as Map<String, dynamic>)),
+                    ..._locations
+                        .whereType<Map<String, dynamic>>()
+                        .map(_buildLocationTile),
                   const SizedBox(height: 80),
                 ],
               ),
