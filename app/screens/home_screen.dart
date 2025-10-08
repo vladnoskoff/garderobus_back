@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/theme_controller.dart';
 import 'settings/home_settings/home_screen_settings.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -298,8 +299,36 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeNotifier = ThemeScope.of(context);
+    final isDarkMode = themeNotifier.themeMode == ThemeMode.dark;
+
     return Scaffold(
-      appBar: AppBar(title: Text("Гардеробус")),
+      appBar: AppBar(
+        title: const Text("Гардеробус"),
+        actions: [
+          IconButton(
+            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            tooltip: isDarkMode ? 'Включить светлую тему' : 'Включить тёмную тему',
+            onPressed: () async {
+              try {
+                await themeNotifier.toggleTheme();
+                if (!mounted) return;
+                final message = themeNotifier.themeMode == ThemeMode.dark
+                    ? 'Тёмная тема включена'
+                    : 'Светлая тема включена';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(message)),
+                );
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Не удалось сменить тему: $error')),
+                );
+              }
+            },
+          ),
+        ],
+      ),
       body: weather == null
           ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(

@@ -7,6 +7,49 @@ class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
   static final storage = FlutterSecureStorage();
 
+  static Future<int?> getStoredUserId() async {
+    final id = await storage.read(key: "user_id");
+    if (id == null) return null;
+    return int.tryParse(id);
+  }
+
+  static Future<String?> getCachedThemePreference() async {
+    final theme = await storage.read(key: "theme_preference");
+    if (theme == null || theme.trim().isEmpty) {
+      return null;
+    }
+    return theme;
+  }
+
+  static Future<void> cacheThemePreference(String theme) async {
+    await storage.write(key: "theme_preference", value: theme);
+  }
+
+  static Future<String?> fetchThemePreference(int userId) async {
+    try {
+      final user = await getUser(userId);
+      final preference = user['theme_preference'];
+      if (preference is String && preference.trim().isNotEmpty) {
+        return preference;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> updateThemePreference(int userId, String theme) async {
+    await updateUser(userId, 'theme_preference', theme);
+    await cacheThemePreference(theme);
+  }
+
+  static Future<void> rememberUserTheme(int userId) async {
+    final remoteTheme = await fetchThemePreference(userId);
+    if (remoteTheme != null) {
+      await cacheThemePreference(remoteTheme);
+    }
+  }
+
   // Регистрация пользователя
   static Future<Map<String, dynamic>> register(
     String name,
@@ -47,7 +90,14 @@ class ApiService {
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
       await storage.write(key: "token", value: data["access_token"]);
-      await storage.write(key: "user_id", value: data["user_id"].toString());// <-- вот здесь
+      await storage.write(
+        key: "user_id",
+        value: data["user_id"].toString(),
+      );
+      final userId = int.tryParse(data["user_id"].toString());
+      if (userId != null) {
+        await rememberUserTheme(userId);
+      }
       return data;
     } else {
       throw Exception("Ошибка входа");
