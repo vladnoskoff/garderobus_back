@@ -179,6 +179,198 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     });
   }
 
+  List<String> get _availableCategories {
+    final categories = _allClothes
+        .map((item) => item.category.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    categories.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return categories;
+  }
+
+  List<String> get _availableSeasons {
+    final values = _allClothes
+        .map((item) => item.season.trim())
+        .where((value) => value.isNotEmpty)
+        .toSet()
+        .toList();
+    const preferredSeasonOrder = ['Зима', 'Весна', 'Лето', 'Осень'];
+    values.sort((a, b) {
+      final indexA = preferredSeasonOrder.indexOf(a);
+      final indexB = preferredSeasonOrder.indexOf(b);
+      if (indexA != -1 && indexB != -1) {
+        return indexA.compareTo(indexB);
+      }
+      if (indexA != -1) return -1;
+      if (indexB != -1) return 1;
+      return a.toLowerCase().compareTo(b.toLowerCase());
+    });
+    return values;
+  }
+
+  Widget _buildActiveFilters() {
+    final chips = <Widget>[];
+    if (_selectedCategoryFilter != null) {
+      chips.add(
+        Chip(
+          label: Text('Категория: ${_selectedCategoryFilter!}'),
+          onDeleted: () {
+            setState(() {
+              _selectedCategoryFilter = null;
+              clothes = _filterClothes(_allClothes);
+            });
+          },
+        ),
+      );
+    }
+    if (_selectedSeasonFilter != null) {
+      chips.add(
+        Chip(
+          label: Text('Сезон: ${_selectedSeasonFilter!}'),
+          onDeleted: () {
+            setState(() {
+              _selectedSeasonFilter = null;
+              clothes = _filterClothes(_allClothes);
+            });
+          },
+        ),
+      );
+    }
+
+    if (chips.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: chips,
+      ),
+    );
+  }
+
+  void _openFilterSheet() {
+    final categories = _availableCategories;
+    final seasons = _availableSeasons;
+    String? tempCategory = _selectedCategoryFilter;
+    String? tempSeason = _selectedSeasonFilter;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Padding(
+          padding: MediaQuery.of(context).viewInsets,
+          child: StatefulBuilder(
+            builder: (context, setModalState) {
+              return Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Фильтры гардероба',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    if (categories.isEmpty && seasons.isEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Text(
+                          'Фильтры появятся, когда будут добавлены вещи с категориями и сезонами.',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                    if (categories.isNotEmpty)
+                      DropdownButtonFormField<String?>(
+                        value: tempCategory,
+                        decoration: const InputDecoration(
+                          labelText: 'Категория',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Все категории'),
+                          ),
+                          ...categories.map(
+                            (category) => DropdownMenuItem<String?>(
+                              value: category,
+                              child: Text(category),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setModalState(() => tempCategory = value);
+                        },
+                      ),
+                    if (categories.isNotEmpty) const SizedBox(height: 16),
+                    if (seasons.isNotEmpty)
+                      DropdownButtonFormField<String?>(
+                        value: tempSeason,
+                        decoration: const InputDecoration(
+                          labelText: 'Сезон',
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String?>(
+                            value: null,
+                            child: Text('Все сезоны'),
+                          ),
+                          ...seasons.map(
+                            (season) => DropdownMenuItem<String?>(
+                              value: season,
+                              child: Text(season),
+                            ),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          setModalState(() => tempSeason = value);
+                        },
+                      ),
+                    const SizedBox(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedCategoryFilter = null;
+                              _selectedSeasonFilter = null;
+                              clothes = _filterClothes(_allClothes);
+                            });
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Сбросить'),
+                        ),
+                        FilledButton(
+                          onPressed: () {
+                            setState(() {
+                              _selectedCategoryFilter = tempCategory;
+                              _selectedSeasonFilter = tempSeason;
+                              clothes = _filterClothes(_allClothes);
+                            });
+                            Navigator.pop(context);
+                          },
+                          child: const Text('Применить'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> confirmAndDeleteClothes(int clothesId) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -254,22 +446,28 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     return value != null ? '$value°C' : null;
   }
 
-  Widget _buildInfoPill(IconData icon, String label) {
+  Widget _buildInfoPill(BuildContext context, IconData icon, String label) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textStyle = theme.textTheme.labelSmall?.copyWith(
+      color: colorScheme.onSecondaryContainer,
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.08),
+        color: colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.black87),
+          Icon(icon, size: 14, color: colorScheme.onSecondaryContainer),
           const SizedBox(width: 4),
           Flexible(
             child: Text(
               label,
-              style: const TextStyle(fontSize: 12, color: Colors.black87),
+              style: textStyle,
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -291,13 +489,16 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 
   Widget _buildClothesCard(Clothes item) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     final temperatureText = _temperatureRangeText(item);
     final careText = item.careInstructions?.trim();
     final materialText = item.material?.trim();
     final description = item.promptDescription?.trim();
 
     return Card(
-      color: const Color(0xFF62DEFA),
+      clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
@@ -311,46 +512,44 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (item.imageUrl != null && item.imageUrl!.isNotEmpty)
-                      Image.network(
-                        item.imageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Center(
-                          child: Icon(
-                            Icons.broken_image_outlined,
-                            color: Colors.white70,
-                            size: 40,
+                      if (item.imageUrl != null && item.imageUrl!.isNotEmpty)
+                        Image.network(
+                          item.imageUrl!,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Center(
+                            child: Icon(
+                              Icons.broken_image_outlined,
+                              color: colorScheme.onSurfaceVariant,
+                              size: 40,
+                            ),
                           ),
-                        ),
-                      )
+                        )
                     else
                       Container(
-                        color: const Color(0xFFB0E6F5),
-                        child: const Center(
-                          child: Icon(
-                            Icons.image_not_supported,
-                            color: Colors.white70,
-                            size: 40,
-                          ),
+                        color: colorScheme.surfaceVariant,
+                        child: Icon(
+                          Icons.image_not_supported,
+                          color: colorScheme.onSurfaceVariant,
+                          size: 40,
                         ),
                       ),
                     Positioned(
                       right: 8,
                       top: 8,
                       child: Material(
-                        color: Colors.redAccent,
+                        color: colorScheme.errorContainer,
                         borderRadius: BorderRadius.circular(8),
                         child: InkWell(
                           borderRadius: BorderRadius.circular(8),
                           onTap: () async {
                             await confirmAndDeleteClothes(item.id);
                           },
-                          child: const Padding(
-                            padding: EdgeInsets.all(6),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
                             child: Icon(
                               Icons.delete,
                               size: 18,
-                              color: Colors.white,
+                              color: colorScheme.onErrorContainer,
                             ),
                           ),
                         ),
@@ -369,23 +568,19 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                     item.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.black,
-                    ),
+                    style: textTheme.titleMedium,
                   ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      _buildInfoPill(Icons.checkroom, item.category),
-                      _buildInfoPill(Icons.calendar_today_outlined, item.season),
+                      _buildInfoPill(context, Icons.checkroom, item.category),
+                      _buildInfoPill(context, Icons.calendar_today_outlined, item.season),
                       if (temperatureText != null)
-                        _buildInfoPill(Icons.device_thermostat, temperatureText),
+                        _buildInfoPill(context, Icons.device_thermostat, temperatureText),
                       if (materialText != null && materialText.isNotEmpty)
-                        _buildInfoPill(Icons.texture, materialText),
+                        _buildInfoPill(context, Icons.texture, materialText),
                     ],
                   ),
                   if ((description != null && description.isNotEmpty) ||
@@ -396,10 +591,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: Colors.black87,
-                      ),
+                      style: textTheme.bodyMedium,
                     ),
                   if (careText != null && careText.isNotEmpty)
                     Padding(
@@ -408,9 +600,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                         'Уход: $careText',
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.black87,
+                        style: textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSurfaceVariant,
                         ),
                       ),
                     ),
@@ -425,6 +616,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final locationDropdownItems = wardrobeLocations
         .whereType<Map<String, dynamic>>()
         .map((loc) {
@@ -440,27 +633,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         })
         .whereType<DropdownMenuItem<int?>>()
         .toList();
-
-    final categoryOptions = _allClothes
-        .map((item) => item.category.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-
-    final seasonValues = _allClothes
-        .map((item) => item.season.trim())
-        .where((value) => value.isNotEmpty)
-        .toSet();
-    const preferredSeasonOrder = ['Зима', 'Весна', 'Лето', 'Осень'];
-    final additionalSeasons = seasonValues
-        .where((season) => !preferredSeasonOrder.contains(season))
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    final seasons = [
-      ...preferredSeasonOrder.where(seasonValues.contains),
-      ...additionalSeasons,
-    ];
+    final categoryOptions = _availableCategories;
+    final seasons = _availableSeasons;
     final filtersAreActive =
         _selectedCategoryFilter != null || _selectedSeasonFilter != null;
 
@@ -469,6 +643,31 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         title: Text('Гардеробус'),
         centerTitle: true,
         actions: [
+          IconButton(
+            icon: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Icon(Icons.filter_list),
+                if (filtersAreActive)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: colorScheme.error,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            tooltip: 'Фильтры',
+            onPressed: categoryOptions.isEmpty && seasons.isEmpty && _allClothes.isEmpty
+                ? null
+                : _openFilterSheet,
+          ),
           IconButton(
             icon: const Icon(Icons.history),
             tooltip: 'История нарядов',
@@ -500,76 +699,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 },
               ),
             ),
-          if (categoryOptions.isNotEmpty || seasons.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: Column(
-                children: [
-                  if (categoryOptions.isNotEmpty)
-                    DropdownButtonFormField<String?>(
-                      value: _selectedCategoryFilter,
-                      decoration: const InputDecoration(
-                        labelText: 'Категория',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('Все категории'),
-                        ),
-                        ...categoryOptions.map(
-                          (category) => DropdownMenuItem<String?>(
-                            value: category,
-                            child: Text(category),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedCategoryFilter = value;
-                        });
-                        _applyFilters();
-                      },
-                    ),
-                  if (categoryOptions.isNotEmpty) const SizedBox(height: 12),
-                  if (seasons.isNotEmpty)
-                    DropdownButtonFormField<String?>(
-                      value: _selectedSeasonFilter,
-                      decoration: const InputDecoration(
-                        labelText: 'Сезон',
-                        border: OutlineInputBorder(),
-                      ),
-                      items: [
-                        const DropdownMenuItem<String?>(
-                          value: null,
-                          child: Text('Все сезоны'),
-                        ),
-                        ...seasons.map(
-                          (season) => DropdownMenuItem<String?>(
-                            value: season,
-                            child: Text(season),
-                          ),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedSeasonFilter = value;
-                        });
-                        _applyFilters();
-                      },
-                    ),
-                  if (filtersAreActive)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        onPressed: _resetFilters,
-                        icon: const Icon(Icons.clear),
-                        label: const Text('Сбросить фильтры'),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+          if (filtersAreActive) _buildActiveFilters(),
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: GestureDetector(
@@ -577,15 +707,14 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
               child: Container(
                 height: 60,
                 decoration: BoxDecoration(
-                  color: Colors.lightBlueAccent,
+                  color: colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Center(
-                  child: Icon(
-                    Icons.add,
-                    color: Colors.black,
-                    size: 32,
-                  ),
+                alignment: Alignment.center,
+                child: Icon(
+                  Icons.add,
+                  color: colorScheme.onPrimaryContainer,
+                  size: 32,
                 ),
               ),
             ),

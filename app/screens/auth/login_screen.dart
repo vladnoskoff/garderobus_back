@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../services/api_service.dart';
 import '../../services/theme_controller.dart';
+import 'pin_unlock_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -34,7 +35,35 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       setState(() => isLoading = false);
-      Navigator.pushReplacementNamed(context, '/home');
+      if (!mounted) return;
+      final userId = int.tryParse(response["user_id"].toString());
+      final hasPin = response["has_pin"] == true;
+
+      if (hasPin && userId != null) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PinUnlockScreen(
+              userId: userId,
+              onUnlocked: () {
+                Navigator.pushReplacementNamed(context, '/home');
+              },
+              onCancel: () async {
+                await storage.deleteAll();
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                }
+              },
+            ),
+          ),
+        );
+      } else {
+        Navigator.pushReplacementNamed(context, '/home');
+      }
     } catch (e) {
       setState(() => isLoading = false);
       showDialog(
@@ -52,8 +81,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF00BCD4),
+      backgroundColor: colorScheme.background,
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Center(
@@ -62,26 +94,43 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 Image.asset("assets/logo.png", height: 150),
                 const SizedBox(height: 20),
-                const Text("Добро пожаловать!", style: TextStyle(fontSize: 28, color: Colors.white, fontWeight: FontWeight.bold)),
+                Text(
+                  "Добро пожаловать!",
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: colorScheme.onBackground,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
                 const SizedBox(height: 20),
                 TextField(
                   controller: emailController,
-                  decoration: const InputDecoration(labelText: "Email", filled: true, fillColor: Colors.white),
+                  decoration: const InputDecoration(labelText: "Email"),
                 ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: passwordController,
                   obscureText: true,
-                  decoration: const InputDecoration(labelText: "Пароль", filled: true, fillColor: Colors.white),
+                  decoration: const InputDecoration(labelText: "Пароль"),
                 ),
                 const SizedBox(height: 24),
-                ElevatedButton(
+                FilledButton(
                   onPressed: isLoading ? null : login,
-                  child: isLoading ? const CircularProgressIndicator() : const Text("Войти"),
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text("Войти"),
                 ),
                 TextButton(
                   onPressed: () => Navigator.pushNamed(context, '/register'),
-                  child: const Text("Нет аккаунта? Зарегистрироваться", style: TextStyle(color: Colors.white)),
+                  child: Text(
+                    "Нет аккаунта? Зарегистрироваться",
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.primary,
+                    ),
+                  ),
                 ),
               ],
             ),

@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'services/theme_controller.dart';
+import 'screens/auth/pin_unlock_screen.dart';
+import 'services/api_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,22 +22,64 @@ class WardrobeApp extends StatelessWidget {
   const WardrobeApp({super.key, required this.themeNotifier});
 
   ThemeData _buildLightTheme() {
-    final scheme = ColorScheme.fromSeed(seedColor: Colors.blue, brightness: Brightness.light);
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF3F51B5),
+      brightness: Brightness.light,
+    );
     return ThemeData(
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.background,
       useMaterial3: true,
-      appBarTheme: AppBarTheme(backgroundColor: scheme.primary, foregroundColor: scheme.onPrimary),
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+      ),
+      cardTheme: CardTheme(
+        color: scheme.surface,
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceVariant,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
+        ),
+      ),
     );
   }
 
   ThemeData _buildDarkTheme() {
-    final scheme = ColorScheme.fromSeed(seedColor: Colors.blueGrey, brightness: Brightness.dark);
+    final scheme = ColorScheme.fromSeed(
+      seedColor: const Color(0xFF90CAF9),
+      brightness: Brightness.dark,
+    );
     return ThemeData(
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.background,
       useMaterial3: true,
-      appBarTheme: AppBarTheme(backgroundColor: scheme.surface, foregroundColor: scheme.onSurface),
+      appBarTheme: AppBarTheme(
+        backgroundColor: Colors.transparent,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+      ),
+      cardTheme: CardTheme(
+        color: scheme.surface,
+        elevation: 1,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: scheme.surfaceVariant,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: scheme.primary, width: 2),
+        ),
+      ),
     );
   }
 
@@ -72,9 +116,12 @@ class AuthWrapper extends StatefulWidget {
   State<AuthWrapper> createState() => _AuthWrapperState();
 }
 
+enum _AuthDestination { loading, login, pin, home }
+
 class _AuthWrapperState extends State<AuthWrapper> {
   final storage = const FlutterSecureStorage();
-  String? _initialScreen;
+  _AuthDestination _destination = _AuthDestination.loading;
+  int? _userId;
 
   @override
   void initState() {
@@ -85,21 +132,59 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void checkLoginStatus() async {
     final token = await storage.read(key: "token");
     final userId = await storage.read(key: "user_id");
-
-    setState(() {
-      _initialScreen = (token != null && userId != null) ? 'main' : 'login';
-    });
+    if (token != null && userId != null) {
+      final parsedId = int.tryParse(userId);
+      bool requiresPin = false;
+      if (parsedId != null) {
+        try {
+          final user = await ApiService.getUser(parsedId);
+          requiresPin = user['has_pin'] == true;
+        } catch (_) {
+          requiresPin = await ApiService.loadCachedHasPin();
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _userId = parsedId;
+        _destination = requiresPin ? _AuthDestination.pin : _AuthDestination.home;
+      });
+    } else {
+      setState(() {
+        _destination = _AuthDestination.login;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_initialScreen == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+    switch (_destination) {
+      case _AuthDestination.loading:
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      case _AuthDestination.login:
+        return const LoginScreen();
+      case _AuthDestination.pin:
+        if (_userId == null) {
+          return const LoginScreen();
+        }
+        return PinUnlockScreen(
+          userId: _userId!,
+          onUnlocked: () {
+            setState(() => _destination = _AuthDestination.home);
+          },
+          onCancel: () async {
+            await storage.deleteAll();
+            if (!mounted) return;
+            setState(() {
+              _destination = _AuthDestination.login;
+              _userId = null;
+            });
+          },
+        );
+      case _AuthDestination.home:
+        return const MainNavigation();
     }
-
-    return _initialScreen == 'main' ? const MainNavigation() : const LoginScreen();
   }
 }
 

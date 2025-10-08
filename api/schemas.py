@@ -12,6 +12,7 @@ class UserCreate(BaseModel):
     weather_api_key: Optional[str] = None
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
+    pin_code: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -27,6 +28,7 @@ class UserResponse(BaseModel):
     location: Optional[str] = None
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
+    has_pin: bool = False
 
     class Config:
         from_attributes = True
@@ -39,6 +41,11 @@ class UserUpdate(BaseModel):
     location: Optional[str] = None
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
+    pin_code: Optional[str] = None
+
+
+class PinVerificationRequest(BaseModel):
+    pin_code: str
     
 class ApiKeysUpdate(BaseModel):
     openai_api_key: Optional[str]

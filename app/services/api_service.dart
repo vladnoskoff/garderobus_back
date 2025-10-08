@@ -55,8 +55,9 @@ class ApiService {
     String name,
     String email,
     String password,
-    String gender,
-  ) async {
+    String gender, {
+    String? pinCode,
+  }) async {
     final response = await http.post(
       Uri.parse("$baseUrl/users/register"),
       headers: {"Content-Type": "application/json"},
@@ -65,6 +66,7 @@ class ApiService {
         "email": email,
         "password": password,
         "gender": gender,
+        if (pinCode != null && pinCode.trim().isNotEmpty) "pin_code": pinCode.trim(),
       }),
     );
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -94,6 +96,7 @@ class ApiService {
         key: "user_id",
         value: data["user_id"].toString(),
       );
+      await cacheHasPin(data["has_pin"] == true);
       final userId = int.tryParse(data["user_id"].toString());
       if (userId != null) {
         await rememberUserTheme(userId);
@@ -109,7 +112,9 @@ class ApiService {
     final response = await http.get(Uri.parse('$baseUrl/users/$userId'));
 
     if (response.statusCode == 200) {
-      return json.decode(response.body);
+      final data = json.decode(response.body) as Map<String, dynamic>;
+      await cacheHasPin(data['has_pin'] == true);
+      return data;
     } else {
       throw Exception('Ошибка при получении данных пользователя');
     }
@@ -149,6 +154,44 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception("Ошибка при обновлении пользователя");
     }
+    if (field == 'pin_code') {
+      await cacheHasPin(value.trim().isNotEmpty);
+    }
+  }
+
+  static Future<void> cacheHasPin(bool hasPin) async {
+    await storage.write(key: "has_pin", value: hasPin ? 'true' : 'false');
+  }
+
+  static Future<bool> loadCachedHasPin() async {
+    final value = await storage.read(key: "has_pin");
+    return value == 'true';
+  }
+
+  static Future<bool> verifyPin(int userId, String pinCode) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/users/$userId/verify_pin'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"pin_code": pinCode}),
+    );
+
+    if (response.statusCode == 200) {
+      return true;
+    }
+
+    if (response.statusCode == 401) {
+      return false;
+    }
+
+    throw Exception('Не удалось проверить PIN-код');
+  }
+
+  static Future<void> setPinCode(int userId, String pinCode) async {
+    await updateUser(userId, 'pin_code', pinCode);
+  }
+
+  static Future<void> clearPinCode(int userId) async {
+    await updateUser(userId, 'pin_code', '');
   }
 
   // Обновление стиля
@@ -394,47 +437,78 @@ class ApiService {
   }) async {
     final queryParameters = <String, String>{
       if (locationId != null) 'location_id': locationId.toString(),
-      if (count > 0) 'count': count.toString(),
     };
 
-    final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
-    final uri = queryParameters.isEmpty
-        ? baseUri
-        : baseUri.replace(queryParameters: queryParameters);
+    Future<List<Map<String, dynamic>>> fetchBatch() async {
+      final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
+      final uri = queryParameters.isEmpty
+          ? baseUri
+          : baseUri.replace(queryParameters: queryParameters);
 
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception('Ошибка при получении манекенов');
-    }
-
-    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
-
-    Map<String, dynamic> normalizeMap(Map source) {
-      return source.map((key, value) => MapEntry(key.toString(), value));
-    }
-
-    if (data is List) {
-      return data
-          .whereType<Map>()
-          .map((item) => normalizeMap(item as Map))
-          .take(count)
-          .toList();
-    }
-
-    if (data is Map) {
-      final mapData = normalizeMap(data as Map);
-      final mannequinsList = mapData['mannequins'];
-      if (mannequinsList is List) {
-        return mannequinsList
-            .whereType<Map>()
-            .map((item) => normalizeMap(item as Map))
-            .take(count)
-            .toList();
+      final response = await http.get(uri);
+      if (response.statusCode != 200) {
+        throw Exception('Ошибка при получении манекенов');
       }
-      return [mapData];
+
+      final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+
+      Map<String, dynamic> normalizeMap(Map source) {
+        return source.map((key, value) => MapEntry(key.toString(), value));
+      }
+
+      if (data is List) {
+        return data.whereType<Map>().map((item) => normalizeMap(item as Map)).toList();
+      }
+
+      if (data is Map) {
+        final mapData = normalizeMap(data as Map);
+        final mannequinsList = mapData['mannequins'];
+        if (mannequinsList is List) {
+          return mannequinsList
+              .whereType<Map>()
+              .map((item) => normalizeMap(item as Map))
+              .toList();
+        }
+        return [mapData];
+      }
+
+      return [];
     }
 
-    return [];
+    final List<Map<String, dynamic>> mannequins = [];
+    final Set<String> seenImages = {};
+    int attempts = 0;
+
+    while (mannequins.length < count && attempts < count * 2) {
+      attempts += 1;
+      final batch = await fetchBatch();
+      if (batch.isEmpty) {
+        break;
+      }
+
+      bool added = false;
+      for (final raw in batch) {
+        final map = raw.map((key, value) => MapEntry(key.toString(), value));
+        final imageUrl = map['image_url']?.toString() ?? map['imageUrl']?.toString();
+        if (imageUrl != null && seenImages.contains(imageUrl)) {
+          continue;
+        }
+        if (imageUrl != null) {
+          seenImages.add(imageUrl);
+        }
+        mannequins.add(map);
+        added = true;
+        if (mannequins.length >= count) {
+          break;
+        }
+      }
+
+      if (!added) {
+        break;
+      }
+    }
+
+    return mannequins.take(count).toList();
   }
 
   // Получить визуальное изображение наряда
