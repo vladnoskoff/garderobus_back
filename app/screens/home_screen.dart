@@ -368,29 +368,26 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: imageUrl != null && imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: colorScheme.surfaceVariant,
+              child: Container(
+                color: colorScheme.surfaceVariant,
+                alignment: Alignment.center,
+                child: imageUrl != null && imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        fit: BoxFit.contain,
                         alignment: Alignment.center,
-                        child: Icon(
+                        errorBuilder: (_, __, ___) => Icon(
                           Icons.broken_image_outlined,
                           color: colorScheme.onSurfaceVariant,
                           size: 40,
                         ),
-                      ),
-                    )
-                  : Container(
-                      color: colorScheme.surfaceVariant,
-                      alignment: Alignment.center,
-                      child: Icon(
+                      )
+                    : Icon(
                         Icons.image_not_supported_outlined,
                         color: colorScheme.onSurfaceVariant,
                         size: 40,
                       ),
-                    ),
+              ),
             ),
           ),
           Padding(

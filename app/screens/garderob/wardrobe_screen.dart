@@ -583,27 +583,14 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                         _buildInfoPill(context, Icons.texture, materialText),
                     ],
                   ),
-                  if ((description != null && description.isNotEmpty) ||
-                      (careText != null && careText.isNotEmpty))
-                    const SizedBox(height: 10),
+                    if (description != null && description.isNotEmpty)
+                      const SizedBox(height: 10),
                   if (description != null && description.isNotEmpty)
                     Text(
                       description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: textTheme.bodyMedium,
-                    ),
-                  if (careText != null && careText.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: Text(
-                        'Уход: $careText',
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: textTheme.bodySmall?.copyWith(
-                          color: colorScheme.onSurfaceVariant,
-                        ),
-                      ),
                     ),
                 ],
               ),

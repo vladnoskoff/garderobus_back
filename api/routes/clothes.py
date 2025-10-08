@@ -98,7 +98,8 @@ def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
             "role": "system",
             "content": (
                 "You are a fashion product analyst. Identify garment details strictly from the image. "
-                "Return ONLY valid JSON that matches the provided JSON Schema."
+                "Return ONLY valid JSON that matches the provided JSON Schema. "
+                "Populate every textual field in Russian language with natural wording."
             ),
         },
         {
@@ -107,7 +108,8 @@ def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
                 {
                     "type": "text",
                     "text": (
-                        "Проанализируй одежду и верни JSON по схеме. Сформируй лаконичное описание и нейтральный промпт для манекена."
+                        "Проанализируй одежду, заполни все текстовые поля исключительно на русском языке и верни JSON по схеме. "
+                        "Сформируй лаконичное описание и нейтральный промпт для манекена."
                     ),
                 },
                 image_content,

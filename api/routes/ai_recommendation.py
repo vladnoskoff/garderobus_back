@@ -149,7 +149,8 @@ def _build_mannequin_prompt(
 ) -> str:
     lines = [
         "Create a hyperrealistic studio photograph of a faceless mannequin wearing a cohesive outfit.",
-        "Show the entire mannequin from head to toe in a neutral pose.",
+        "Frame the mannequin in a vertical 3:4 composition with generous head and foot margins so the full body is visible.",
+        "Show the entire mannequin from head to toe in a neutral pose without any cropping.",
         "Use soft neutral lighting, clean white background, no logos or text.",
         f"Weather context: {weather.condition}, {weather.temperature}°C, humidity {weather.humidity}%, wind {weather.wind_speed or 0} m/s.",
         "Ensure the outfit feels comfortable for the current weather and coordinates colours harmoniously.",
@@ -308,7 +309,7 @@ def generate_mannequin(
         image_response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
-            size="1024x1024",
+            size="1024x1792",
             quality="high",
             n=1,
         )
