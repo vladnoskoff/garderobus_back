@@ -323,6 +323,56 @@ class ApiService {
     return jsonDecode(response.body)["recommendation"];
   }
 
+  static Future<List<Map<String, dynamic>>> getMannequins(
+    int userId, {
+    int? locationId,
+    int count = 3,
+  }) async {
+    final queryParameters = <String, String>{
+      if (locationId != null) 'location_id': locationId.toString(),
+      if (count > 0) 'count': count.toString(),
+    };
+
+    final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
+    final uri = queryParameters.isEmpty
+        ? baseUri
+        : baseUri.replace(queryParameters: queryParameters);
+
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при получении манекенов');
+    }
+
+    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+
+    Map<String, dynamic> normalizeMap(Map source) {
+      return source.map((key, value) => MapEntry(key.toString(), value));
+    }
+
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((item) => normalizeMap(item as Map))
+          .take(count)
+          .toList();
+    }
+
+    if (data is Map) {
+      final mapData = normalizeMap(data as Map);
+      final mannequinsList = mapData['mannequins'];
+      if (mannequinsList is List) {
+        return mannequinsList
+            .whereType<Map>()
+            .map((item) => normalizeMap(item as Map))
+            .take(count)
+            .toList();
+      }
+      return [mapData];
+    }
+
+    return [];
+  }
+
   // Получить визуальное изображение наряда
   static Future<String> getVisualOutfit(int userId) async {
     final response = await http.get(Uri.parse("$baseUrl/ai/visual-recommendation/$userId"));
