@@ -9,8 +9,13 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 CLOTHES_IMAGE_DIR = BASE_DIR / os.getenv("CLOTHES_IMAGE_DIR", "clothes_images")
 MANNEQUIN_IMAGE_DIR = BASE_DIR / os.getenv("MANNEQUIN_IMAGE_DIR", "mannequins")
-CLOTHES_IMAGE_URL_PREFIX = os.getenv("CLOTHES_IMAGE_URL_PREFIX", "http://aapanel-api.noksovsteam.ru/clothes_images")
-MANNEQUIN_IMAGE_URL_PREFIX = os.getenv("MANNEQUIN_IMAGE_URL_PREFIX", "http://aapanel-api.noksovsteam.ru/mannequins")
+DEFAULT_API_DOMAIN = "http://aapanel-api.noksovsteam.ru"
+CLOTHES_IMAGE_URL_PREFIX = os.getenv(
+    "CLOTHES_IMAGE_URL_PREFIX", f"{DEFAULT_API_DOMAIN}/clothes_images"
+)
+MANNEQUIN_IMAGE_URL_PREFIX = os.getenv(
+    "MANNEQUIN_IMAGE_URL_PREFIX", f"{DEFAULT_API_DOMAIN}/mannequins"
+)
 TEST_PERSON_IMAGE_URL = os.getenv(
     "TEST_PERSON_IMAGE_URL",
     "http://aapanel-api.noksovsteam.ru/chkaf/clothes_images/static/test_mannequin.png",
