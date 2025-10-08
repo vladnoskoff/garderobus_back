@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../services/api_service.dart';
+import '../../services/theme_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -24,6 +25,13 @@ class _LoginScreenState extends State<LoginScreen> {
       final storage = const FlutterSecureStorage();
       await storage.write(key: "user_id", value: response["user_id"].toString());
       await storage.write(key: "token", value: response["access_token"]);
+
+      try {
+        final themeNotifier = ThemeScope.of(context);
+        await themeNotifier.refreshFromRemote();
+      } catch (_) {
+        // Если тема недоступна, продолжаем без ошибок.
+      }
 
       setState(() => isLoading = false);
       Navigator.pushReplacementNamed(context, '/home');

@@ -83,6 +83,29 @@ def _normalize_gender(value: Optional[str]) -> Optional[str]:
     return normalized
 
 
+def _normalize_theme(value: Optional[str]) -> str:
+    if value is None:
+        return "light"
+
+    normalized = value.strip().lower()
+    if not normalized:
+        return "light"
+
+    dark_markers = {
+        "dark",
+        "dark_mode",
+        "dark theme",
+        "темная",
+        "тёмная",
+        "ночная",
+        "темная тема",
+        "тёмная тема",
+        "night",
+    }
+
+    return "dark" if normalized in dark_markers else "light"
+
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + datetime.timedelta(days=1)
@@ -103,6 +126,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         password_hash=hashed_password,
         gender=_normalize_gender(user.gender),
+        theme_preference=_normalize_theme(user.theme_preference),
     )
     db.add(new_user)
     db.commit()
@@ -161,6 +185,8 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
         user.location = updates.location
     if updates.gender is not None:
         user.gender = _normalize_gender(updates.gender)
+    if updates.theme_preference is not None:
+        user.theme_preference = _normalize_theme(updates.theme_preference)
 
     db.commit()
     db.refresh(user)

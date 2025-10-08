@@ -1,7 +1,7 @@
-import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
+import '../services/theme_controller.dart';
 import 'settings/home_settings/home_screen_settings.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -14,26 +14,24 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? weather;
-  Map<String, dynamic>? outfit;
+  List<Map<String, dynamic>> mannequins = [];
   String? weatherComment;
   String? weatherIconUrl;
   final storage = FlutterSecureStorage();
   int? userId;
+  List<dynamic> wardrobeLocations = [];
+  int? selectedLocationId;
+  bool isLocationsLoading = false;
+  bool isMannequinsLoading = false;
+  String? mannequinsError;
 
-  String cleanText(String input) {
-    try {
-      return utf8.decode(input.runes.toList());
-    } catch (_) {
-      return input;
-    }
-  }
-  
   @override
   void initState() {
     super.initState();
     loadUserId();
     fetchWeather();
-    fetchOutfit();
+    fetchMannequins();
+    _loadLocations();
     
     // Автообновление погоды каждые 10 секунд
     Timer.periodic(Duration(seconds: 10), (timer) {
@@ -49,13 +47,97 @@ class _HomeScreenState extends State<HomeScreen> {
     final idString = await storage.read(key: 'user_id');
     if (idString != null) {
       setState(() {
-        userId = int.tryParse(idString); 
+        userId = int.tryParse(idString);
       });
       fetchWeather();
-      fetchOutfit();
+      fetchMannequins();
+      _loadLocations();
       // ✅ вызываем только после загрузки
       await checkInitialSettings();
     }
+  }
+
+  Future<void> _loadLocations() async {
+    if (userId == null) return;
+    setState(() => isLocationsLoading = true);
+    try {
+      final locations = await ApiService.getWardrobeLocations(userId!);
+      final storedLocationIdString = await storage.read(key: 'selected_location_id');
+      final storedLocationId =
+          storedLocationIdString != null ? int.tryParse(storedLocationIdString) : null;
+      int? resolvedLocationId = storedLocationId;
+      if (resolvedLocationId != null &&
+          !locations.any((loc) =>
+              loc is Map<String, dynamic> && _parseLocationId(loc['id']) == resolvedLocationId)) {
+        resolvedLocationId = null;
+      }
+      resolvedLocationId ??= _deriveDefaultLocation(locations);
+      setState(() {
+        wardrobeLocations = locations;
+        selectedLocationId = resolvedLocationId;
+      });
+      await _persistSelectedLocation(resolvedLocationId);
+      fetchWeather();
+      fetchMannequins();
+    } catch (e) {
+      print('Ошибка загрузки локаций: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLocationsLoading = false);
+      }
+    }
+  }
+
+  Future<void> _persistSelectedLocation(int? locationId) async {
+    if (locationId == null) {
+      await storage.delete(key: 'selected_location_id');
+    } else {
+      await storage.write(
+        key: 'selected_location_id',
+        value: locationId.toString(),
+      );
+    }
+  }
+
+  Future<void> _handleLocationChange(int? value) async {
+    setState(() {
+      selectedLocationId = value;
+    });
+    await _persistSelectedLocation(value);
+    fetchWeather();
+    fetchMannequins();
+  }
+
+  int? _parseLocationId(dynamic rawId) {
+    if (rawId is int) return rawId;
+    if (rawId is String) {
+      return int.tryParse(rawId);
+    }
+    if (rawId != null) {
+      return int.tryParse(rawId.toString());
+    }
+    return null;
+  }
+
+  int? _deriveDefaultLocation(List<dynamic> locations) {
+    for (final loc in locations.whereType<Map<String, dynamic>>()) {
+      final lat = loc['latitude'];
+      final lon = loc['longitude'];
+      if (lat != null && lon != null) {
+        return _parseLocationId(loc['id']);
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _findLocationById(int? id) {
+    if (id == null) return null;
+    for (final loc in wardrobeLocations.whereType<Map<String, dynamic>>()) {
+      if (_parseLocationId(loc['id']) == id) {
+        return loc;
+      }
+    }
+    return null;
   }
 
   Future<void> checkInitialSettings() async {
@@ -108,7 +190,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchWeather() async {
     if (userId == null) return;
     try {
-      final weatherData = await ApiService.getWeatherByUserId(userId!);
+      int? locationIdForRequest = selectedLocationId;
+      final selectedLocation = _findLocationById(selectedLocationId);
+      if (selectedLocation != null) {
+        if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
+          locationIdForRequest = null;
+        }
+      }
+
+      final weatherData = await ApiService.getWeatherByUserId(
+        userId!,
+        locationId: locationIdForRequest,
+      );
       if (!mounted) return;
       setState(() {
         weather = weatherData;
@@ -120,39 +213,122 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> fetchOutfit() async {
+  Future<void> fetchMannequins() async {
     if (userId == null) return;
     try {
-      /* final outfitData = await ApiService.getOutfit(userId!, city); */
-      final outfitData = await ApiService.getOutfit(userId!);
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = true;
+          mannequinsError = null;
+        });
+      }
+
+      int? locationIdForRequest = selectedLocationId;
+      final selectedLocation = _findLocationById(selectedLocationId);
+      if (selectedLocation != null) {
+        if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
+          locationIdForRequest = null;
+        }
+      }
+
+      final mannequinResults = await ApiService.getMannequins(
+        userId!,
+        locationId: locationIdForRequest,
+      );
 
       if (!mounted) return;
       setState(() {
-        outfit = outfitData;
+        mannequins = mannequinResults.length > 3
+            ? mannequinResults.take(3).toList()
+            : mannequinResults;
       });
     } catch (e) {
-      print("Ошибка при получении наряда: $e");
+      print("Ошибка при получении манекенов: $e");
+      if (mounted) {
+        setState(() {
+          mannequins = [];
+          mannequinsError = 'Не удалось загрузить рекомендации';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = false;
+        });
+      }
     }
   }
 
   String generateWeatherComment(Map<String, dynamic> weather) {
-    final temp = weather['temperature'];
-    final wind = weather['wind_speed'];
+    final temp = (weather['temperature'] as num?)?.toDouble();
+    final wind = (weather['wind_speed'] as num?)?.toDouble() ?? 0;
+    final condition = weather['condition']?.toString().toLowerCase() ?? '';
 
-    if (temp <= 0) return 'Очень холодно, оденься тепло!';
-    if (temp > 0 && temp <= 10) return 'Прохладно, надень куртку.';
-    if (temp > 10 && temp <= 20) return 'Комфортная температура.';
-    if (temp > 20) return 'Жарко, надень что-нибудь лёгкое.';
+    if (temp == null) {
+      return 'Следите за погодой и подбирайте одежду по ощущениям.';
+    }
 
-    if (wind != null && wind > 6) return 'Сильный ветер, одевайся плотнее!';
-    return 'Погода нормальная.';
+    String recommendation;
+    if (temp < -10) {
+      recommendation = 'Экстремальный холод — утепляйтесь по максимуму.';
+    } else if (temp < 0) {
+      recommendation = 'Очень холодно, одевайтесь теплее и добавьте аксессуары для защиты от мороза.';
+    } else if (temp < 10) {
+      recommendation = 'Прохладно — наденьте тёплый верхний слой.';
+    } else if (temp < 18) {
+      recommendation = 'Лёгкая прохлада, возьмите ветровку или кардиган.';
+    } else if (temp < 25) {
+      recommendation = 'Комфортно, можно выбрать лёгкий повседневный образ.';
+    } else {
+      recommendation = 'Жарко, выбирайте лёгкие ткани и дышащую одежду.';
+    }
+
+    if (condition.contains('дожд') || condition.contains('rain')) {
+      recommendation += ' Возьмите зонт или дождевик.';
+    } else if (condition.contains('снег') || condition.contains('snow')) {
+      recommendation += ' Не забудьте тёплую верхнюю одежду и обувь для снега.';
+    }
+
+    if (wind >= 8) {
+      recommendation += ' На улице ветрено — выбирайте закрытые верхние слои.';
+    }
+
+    return recommendation;
   }
 
 
   @override
   Widget build(BuildContext context) {
+    final themeNotifier = ThemeScope.of(context);
+    final isDarkMode = themeNotifier.themeMode == ThemeMode.dark;
+
     return Scaffold(
-      appBar: AppBar(title: Text("Гардеробус")),
+      appBar: AppBar(
+        title: const Text("Гардеробус"),
+        actions: [
+          IconButton(
+            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
+            tooltip: isDarkMode ? 'Включить светлую тему' : 'Включить тёмную тему',
+            onPressed: () async {
+              try {
+                await themeNotifier.toggleTheme();
+                if (!mounted) return;
+                final message = themeNotifier.themeMode == ThemeMode.dark
+                    ? 'Тёмная тема включена'
+                    : 'Светлая тема включена';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(message)),
+                );
+              } catch (error) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Не удалось сменить тему: $error')),
+                );
+              }
+            },
+          ),
+        ],
+      ),
       body: weather == null
           ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -161,6 +337,46 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
+                      if (wardrobeLocations.isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF62DEFA),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: isLocationsLoading
+                              ? const LinearProgressIndicator()
+                              : DropdownButton<int?>(
+                                  value: selectedLocationId,
+                                  isExpanded: true,
+                                  hint: const Text('Выберите локацию гардероба'),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                      value: null,
+                                      child: Text('Использовать личные координаты'),
+                                    ),
+                                    ...wardrobeLocations.whereType<Map<String, dynamic>>().map((map) {
+                                      final name = map['name']?.toString() ?? 'Без названия';
+                                      final hasCoords =
+                                          map['latitude'] != null && map['longitude'] != null;
+                                      final subtitle = hasCoords ? '' : ' (нет координат)';
+                                      final parsedId = _parseLocationId(map['id']);
+                                      if (parsedId == null) {
+                                        return null;
+                                      }
+                                      return DropdownMenuItem<int?>(
+                                        value: parsedId,
+                                        child: Text('$name$subtitle'),
+                                      );
+                                    }).whereType<DropdownMenuItem<int?>>(),
+                                  ],
+                                  onChanged: (value) {
+                                    _handleLocationChange(value);
+                                  },
+                                ),
+                        ),
                       // Блок погоды
                       Container(
                         width: double.infinity,
@@ -328,7 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       
                       const SizedBox(height: 10),
-                      // Блок с одеждой
+                      // Блок с манекенами
                       Container(
                         width: double.infinity,
                         constraints: BoxConstraints(maxWidth: 400),
@@ -336,62 +552,88 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Color(0xFF62DEFA),
                           borderRadius: BorderRadius.circular(15),
                         ),
-                        padding: const EdgeInsets.all(8.0),
+                        padding: const EdgeInsets.all(12.0),
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  weatherComment ?? '',
-                                  style: TextStyle(color: Colors.black, fontSize: 14, fontWeight: FontWeight.w400),
+                                Expanded(
+                                  child: Text(
+                                    weatherComment ?? 'Подождите, загружаем рекомендации...',
+                                    style: TextStyle(
+                                      color: Colors.black,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
                                 ),
                                 IconButton(
                                   icon: Icon(Icons.refresh, size: 20, color: Colors.black),
-                                  tooltip: 'Обновить лук',
-                                  onPressed: () => fetchOutfit(),
+                                  tooltip: 'Обновить манекены',
+                                  onPressed: () => fetchMannequins(),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              alignment: WrapAlignment.center,
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: (outfit?['items']?.keys.toList() ?? []).map<Widget>((part) {
-                                final item = outfit?['items']?[part];
-                                final imageUrl = item is Map && item['image_url'] != null
-                                    ? item['image_url']
-                                    : null;
+                            const SizedBox(height: 12),
+                            if (isMannequinsLoading)
+                              const Center(child: CircularProgressIndicator())
+                            else if (mannequins.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Text(
+                                  mannequinsError ?? 'Манекены пока недоступны. Попробуйте обновить или добавьте больше одежды.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.black87, fontSize: 13),
+                                ),
+                              )
+                            else
+                              SizedBox(
+                                height: 200,
+                                child: ListView.separated(
+                                  scrollDirection: Axis.horizontal,
+                                  itemCount: mannequins.length,
+                                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                                  itemBuilder: (context, index) {
+                                    final mannequin = mannequins[index];
+                                    final imageUrl = mannequin['image_url'] ??
+                                        mannequin['imageUrl'] ??
+                                        mannequin['url'];
 
-                                return Container(
-                                  width: 80,
-                                  height: 102,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(15),
-                                    color: Colors.white,
-                                    image: imageUrl != null
-                                        ? DecorationImage(
-                                            image: NetworkImage(imageUrl),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : null,
-                                  ),
-                                  child: imageUrl == null
-                                      ? Center(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(6),
-                                            child: Text(
-                                              cleanText(item is String ? item : "Нет"),
-                                              style: TextStyle(fontSize: 10, color: Colors.black),
-                                              textAlign: TextAlign.center,
+                                    return ClipRRect(
+                                      borderRadius: BorderRadius.circular(16),
+                                      child: imageUrl != null
+                                          ? Image.network(
+                                              imageUrl,
+                                              width: 140,
+                                              fit: BoxFit.cover,
+                                              errorBuilder: (_, __, ___) => Container(
+                                                width: 140,
+                                                color: Colors.white,
+                                                alignment: Alignment.center,
+                                                child: const Text(
+                                                  'Ошибка загрузки',
+                                                  style: TextStyle(color: Colors.black54, fontSize: 12),
+                                                ),
+                                              ),
+                                            )
+                                          : Container(
+                                              width: 140,
+                                              decoration: BoxDecoration(
+                                                color: Colors.white,
+                                                borderRadius: BorderRadius.circular(16),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: const Text(
+                                                'Нет изображения',
+                                                style: TextStyle(color: Colors.black54, fontSize: 12),
+                                              ),
                                             ),
-                                          ),
-                                        )
-                                      : null,
-                                );
-                              }).toList(),
-                            ),
+                                    );
+                                  },
+                                ),
+                              ),
                           ],
                         ),
                       ),
