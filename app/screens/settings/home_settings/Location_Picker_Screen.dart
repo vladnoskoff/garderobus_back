@@ -15,23 +15,33 @@ class LocationPickerScreen extends StatefulWidget {
 }
 
 class _LocationPickerScreenState extends State<LocationPickerScreen> {
-  late LatLng selectedLocation;
+  late final MapController _mapController;
+  late LatLng _selectedLocation;
+  double _currentZoom = 13;
+
+  static const LatLng _moscowFallback =
+      LatLng(55.751669743618876, 37.6164092387259);
+
+  LatLng _parseInitialLocation() {
+    final parts = widget.initialLocation.split(',');
+    if (parts.length != 2) {
+      return _moscowFallback;
+    }
+
+    final lat = double.tryParse(parts[0].trim());
+    final lon = double.tryParse(parts[1].trim());
+    if (lat == null || lon == null) {
+      return _moscowFallback;
+    }
+
+    return LatLng(lat, lon);
+  }
 
   @override
   void initState() {
     super.initState();
-    final parts = widget.initialLocation.split(',');
-    if (parts.length == 2) {
-      final lat = double.tryParse(parts[0].trim());
-      final lon = double.tryParse(parts[1].trim());
-      if (lat != null && lon != null) {
-        selectedLocation = LatLng(lat, lon);
-      } else {
-        selectedLocation = LatLng(55.751669743618876, 37.6164092387259);
-      }
-    } else {
-      selectedLocation = LatLng(55.751669743618876, 37.6164092387259); // Москва по умолчанию
-    }
+    _mapController = MapController();
+    _selectedLocation = _parseInitialLocation();
   }
 
   @override
@@ -41,22 +51,33 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
       body: Stack(
         children: [
           FlutterMap(
+            key: ValueKey(_selectedLocation),
+            mapController: _mapController,
             options: MapOptions(
-              center: selectedLocation,
-              zoom: 13,
+              initialCenter: _selectedLocation,
+              initialZoom: _currentZoom,
               onTap: (tapPosition, point) {
-                setState(() => selectedLocation = point);
+                setState(() => _selectedLocation = point);
+                _mapController.move(point, _currentZoom);
+              },
+              onPositionChanged: (position, hasGesture) {
+                _currentZoom = position.zoom;
               },
             ),
             children: [
               TileLayer(
                 urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                userAgentPackageName: 'com.example.app',
+                tileProvider: NetworkTileProvider(
+                  headers: const {
+                    'User-Agent':
+                        'CHKAF/1.0 (contact@noksovsteam.ru, ru.noksovsteam.chkaf)',
+                  },
+                ),
               ),
               MarkerLayer(
                 markers: [
                   Marker(
-                    point: selectedLocation,
+                    point: _selectedLocation,
                     width: 40,
                     height: 40,
                     child:
@@ -93,8 +114,8 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    '${selectedLocation.latitude.toStringAsFixed(6)}, '
-                    '${selectedLocation.longitude.toStringAsFixed(6)}',
+                    '${_selectedLocation.latitude.toStringAsFixed(6)}, '
+                    '${_selectedLocation.longitude.toStringAsFixed(6)}',
                   ),
                   const SizedBox(height: 6),
                   const Text(
@@ -111,7 +132,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         child: const Icon(Icons.check),
         onPressed: () {
           final loc =
-              '${selectedLocation.latitude.toStringAsFixed(6)}, ${selectedLocation.longitude.toStringAsFixed(6)}';
+              '${_selectedLocation.latitude.toStringAsFixed(6)}, ${_selectedLocation.longitude.toStringAsFixed(6)}';
           Navigator.pop(context, loc); // ВАЖНО
         },
       ),
