@@ -8,11 +8,21 @@ class ApiService {
   static final storage = FlutterSecureStorage();
 
   // Регистрация пользователя
-  static Future<void> register(String name, String email, String password) async {
+  static Future<void> register(
+    String name,
+    String email,
+    String password,
+    String gender,
+  ) async {
     final response = await http.post(
       Uri.parse("$baseUrl/users/register"),
       headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"name": name, "email": email, "password": password}),
+      body: jsonEncode({
+        "name": name,
+        "email": email,
+        "password": password,
+        "gender": gender,
+      }),
     );
     if (response.statusCode != 200) {
       throw Exception("Ошибка регистрации");
@@ -171,6 +181,8 @@ class ApiService {
     required String color,
     String? material,
     required File image,
+    bool autoFill = false,
+    int? locationId,
   }) async {
     final storage = const FlutterSecureStorage();
     final userId = await storage.read(key: "user_id");
@@ -187,10 +199,15 @@ class ApiService {
       ..fields['name'] = name
       ..fields['category'] = category
       ..fields['season'] = season
-      ..fields['color'] = color;
+      ..fields['color'] = color
+      ..fields['auto_fill'] = autoFill.toString();
 
     if (material != null && material.isNotEmpty) {
       request.fields['material'] = material;
+    }
+
+    if (locationId != null) {
+      request.fields['location_id'] = locationId.toString();
     }
 
     request.files.add(await http.MultipartFile.fromPath('file', image.path));
@@ -246,8 +263,11 @@ class ApiService {
   }
   
   // Получить погоды по координатам
-  static Future<Map<String, dynamic>> getWeatherByUserId(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/weather/user/$userId'));
+  static Future<Map<String, dynamic>> getWeatherByUserId(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse('$baseUrl/weather/user/$userId?location_id=$locationId')
+        : Uri.parse('$baseUrl/weather/user/$userId');
+    final response = await http.get(uri);
     if (response.statusCode == 200) {
       return json.decode(utf8.decode(response.bodyBytes));
     } else {
@@ -268,8 +288,11 @@ class ApiService {
   } */
 
   // Получение наряда по погоде координатам пользователя
-  static Future<Map<String, dynamic>> getOutfit(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/outfits/$userId'));
+  static Future<Map<String, dynamic>> getOutfit(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse('$baseUrl/outfits/$userId?location_id=$locationId')
+        : Uri.parse('$baseUrl/outfits/$userId');
+    final response = await http.get(uri);
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
@@ -316,5 +339,81 @@ class ApiService {
   static Future<List<dynamic>> getLeastWornClothes(int userId) async {
     final response = await http.get(Uri.parse("$baseUrl/analytics/least_worn/$userId"));
     return jsonDecode(response.body);
+  }
+
+  static Future<List<dynamic>> getWardrobeLocations(int userId) async {
+    final response = await http.get(Uri.parse('$baseUrl/locations/$userId'));
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Ошибка при получении локаций гардероба');
+    }
+  }
+
+  static Future<Map<String, dynamic>> createWardrobeLocation({
+    required int userId,
+    required String name,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/locations/$userId'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "name": name,
+        "latitude": latitude,
+        "longitude": longitude,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Ошибка при создании локации');
+    }
+  }
+
+  static Future<Map<String, dynamic>> updateWardrobeLocation({
+    required int userId,
+    required int locationId,
+    String? name,
+    double? latitude,
+    double? longitude,
+  }) async {
+    final Map<String, dynamic> payload = {};
+    if (name != null) {
+      payload['name'] = name;
+    }
+    if (latitude != null) {
+      payload['latitude'] = latitude;
+    }
+    if (longitude != null) {
+      payload['longitude'] = longitude;
+    }
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/locations/$userId/$locationId'),
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode(payload),
+    );
+
+    if (response.statusCode == 200) {
+      return jsonDecode(utf8.decode(response.bodyBytes));
+    } else {
+      throw Exception('Ошибка при обновлении локации');
+    }
+  }
+
+  static Future<void> deleteWardrobeLocation({
+    required int userId,
+    required int locationId,
+  }) async {
+    final response = await http.delete(
+      Uri.parse('$baseUrl/locations/$userId/$locationId'),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при удалении локации');
+    }
   }
 }

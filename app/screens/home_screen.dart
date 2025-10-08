@@ -19,6 +19,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? weatherIconUrl;
   final storage = FlutterSecureStorage();
   int? userId;
+  List<dynamic> wardrobeLocations = [];
+  int? selectedLocationId;
+  bool isLocationsLoading = false;
 
   String cleanText(String input) {
     try {
@@ -34,6 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
     loadUserId();
     fetchWeather();
     fetchOutfit();
+    _loadLocations();
     
     // Автообновление погоды каждые 10 секунд
     Timer.periodic(Duration(seconds: 10), (timer) {
@@ -49,13 +53,55 @@ class _HomeScreenState extends State<HomeScreen> {
     final idString = await storage.read(key: 'user_id');
     if (idString != null) {
       setState(() {
-        userId = int.tryParse(idString); 
+        userId = int.tryParse(idString);
       });
       fetchWeather();
       fetchOutfit();
+      _loadLocations();
       // ✅ вызываем только после загрузки
       await checkInitialSettings();
     }
+  }
+
+  Future<void> _loadLocations() async {
+    if (userId == null) return;
+    setState(() => isLocationsLoading = true);
+    try {
+      final locations = await ApiService.getWardrobeLocations(userId!);
+      setState(() {
+        wardrobeLocations = locations;
+        selectedLocationId ??= _deriveDefaultLocation(locations);
+      });
+      fetchWeather();
+      fetchOutfit();
+    } catch (e) {
+      print('Ошибка загрузки локаций: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLocationsLoading = false);
+      }
+    }
+  }
+
+  int? _deriveDefaultLocation(List<dynamic> locations) {
+    for (final loc in locations) {
+      final lat = loc['latitude'];
+      final lon = loc['longitude'];
+      if (lat != null && lon != null) {
+        return loc['id'] as int?;
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _findLocationById(int? id) {
+    if (id == null) return null;
+    for (final loc in wardrobeLocations) {
+      if (loc is Map<String, dynamic> && loc['id'] == id) {
+        return loc;
+      }
+    }
+    return null;
   }
 
   Future<void> checkInitialSettings() async {
@@ -108,7 +154,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchWeather() async {
     if (userId == null) return;
     try {
-      final weatherData = await ApiService.getWeatherByUserId(userId!);
+      int? locationIdForRequest = selectedLocationId;
+      final selectedLocation = _findLocationById(selectedLocationId);
+      if (selectedLocation != null) {
+        if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
+          locationIdForRequest = null;
+        }
+      }
+
+      final weatherData = await ApiService.getWeatherByUserId(
+        userId!,
+        locationId: locationIdForRequest,
+      );
       if (!mounted) return;
       setState(() {
         weather = weatherData;
@@ -124,7 +181,18 @@ class _HomeScreenState extends State<HomeScreen> {
     if (userId == null) return;
     try {
       /* final outfitData = await ApiService.getOutfit(userId!, city); */
-      final outfitData = await ApiService.getOutfit(userId!);
+      int? locationIdForRequest = selectedLocationId;
+      final selectedLocation = _findLocationById(selectedLocationId);
+      if (selectedLocation != null) {
+        if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
+          locationIdForRequest = null;
+        }
+      }
+
+      final outfitData = await ApiService.getOutfit(
+        userId!,
+        locationId: locationIdForRequest,
+      );
 
       if (!mounted) return;
       setState(() {
@@ -161,6 +229,47 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
                     children: [
+                      if (wardrobeLocations.isNotEmpty)
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF62DEFA),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: isLocationsLoading
+                              ? const LinearProgressIndicator()
+                              : DropdownButton<int?>(
+                                  value: selectedLocationId,
+                                  isExpanded: true,
+                                  hint: const Text('Выберите локацию гардероба'),
+                                  items: [
+                                    const DropdownMenuItem<int?>(
+                                      value: null,
+                                      child: Text('Использовать личные координаты'),
+                                    ),
+                                    ...wardrobeLocations.map((loc) {
+                                      final map = loc as Map<String, dynamic>;
+                                      final name = map['name']?.toString() ?? 'Без названия';
+                                      final hasCoords =
+                                          map['latitude'] != null && map['longitude'] != null;
+                                      final subtitle = hasCoords ? '' : ' (нет координат)';
+                                      return DropdownMenuItem<int?>(
+                                        value: map['id'] as int,
+                                        child: Text('$name$subtitle'),
+                                      );
+                                    }),
+                                  ],
+                                  onChanged: (value) {
+                                    setState(() {
+                                      selectedLocationId = value;
+                                    });
+                                    fetchWeather();
+                                    fetchOutfit();
+                                  },
+                                ),
+                        ),
                       // Блок погоды
                       Container(
                         width: double.infinity,
