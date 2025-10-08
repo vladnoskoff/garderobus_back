@@ -66,13 +66,13 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
             ),
             children: [
               TileLayer(
-                urlTemplate: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-                tileProvider: NetworkTileProvider(
-                  headers: const {
-                    'User-Agent':
-                        'CHKAF/1.0 (contact@noksovsteam.ru, ru.noksovsteam.chkaf)',
-                  },
-                ),
+                urlTemplate:
+                    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+                subdomains: const ['a', 'b', 'c'],
+                userAgentPackageName: 'ru.noksovsteam.chkaf',
+                additionalOptions: const {
+                  'api': 'CHKAF',
+                },
               ),
               MarkerLayer(
                 markers: [
