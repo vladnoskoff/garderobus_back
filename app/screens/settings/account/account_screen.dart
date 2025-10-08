@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../services/api_service.dart';
+import 'pin_setup_screen.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -14,6 +15,7 @@ class _AccountScreenState extends State<AccountScreen> {
   String email = '';
   String password = '******';
   String phone = '+7 900 000 0000'; // TODO: заглушка, пока не реализовано
+  bool hasPin = false;
   int? userId;
 
   final storage = const FlutterSecureStorage();
@@ -34,6 +36,7 @@ class _AccountScreenState extends State<AccountScreen> {
         userId = data['id'];
         name = data['name'];
         email = data['email'];
+        hasPin = data['has_pin'] == true;
       });
     } catch (e) {
       print('Ошибка при загрузке данных пользователя: $e');
@@ -76,6 +79,8 @@ class _AccountScreenState extends State<AccountScreen> {
               setState(() => password = value);
               updateField("password", value); // TODO: обновить сервер при редактировании
             }),
+            const SizedBox(height: 16),
+            buildPinNavigation(),
             const Spacer(),
             buildDeleteButton(),
           ],
@@ -84,26 +89,94 @@ class _AccountScreenState extends State<AccountScreen> {
     );
   }
 
+  Widget buildPinNavigation() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: () async {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PinSetupScreen()),
+        );
+        await loadUserData();
+      },
+      child: Container(
+        width: double.infinity,
+        height: 59,
+        decoration: BoxDecoration(
+          color: colorScheme.secondaryContainer,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            Icon(Icons.shield, color: colorScheme.onSecondaryContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'PIN-код',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                        ) ??
+                        TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 18),
+                  ),
+                  Text(
+                    hasPin ? 'Установлен' : 'Не задан',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: colorScheme.onSecondaryContainer,
+                        ) ??
+                        TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: colorScheme.onSecondaryContainer),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget buildAccountOption(
       IconData icon, String title, String value, Function(String) onEdit) {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
       width: double.infinity,
       height: 59,
       decoration: BoxDecoration(
-        color: const Color(0xFF62DEFA),
+        color: colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(15),
       ),
       child: Stack(
         children: [
-          Positioned(left: 16, top: 12, child: Icon(icon, size: 24, color: Colors.black)),
+          Positioned(
+            left: 16,
+            top: 12,
+            child: Icon(icon, size: 24, color: colorScheme.onSecondaryContainer),
+          ),
           Positioned(
             left: 60,
             top: 10,
             child: Row(
               children: [
-                Text(title, style: const TextStyle(fontSize: 18)),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                      ) ??
+                      TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 18),
+                ),
                 const SizedBox(width: 10),
-                Text(value, style: const TextStyle(fontSize: 16)),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSecondaryContainer,
+                      ) ??
+                      TextStyle(color: colorScheme.onSecondaryContainer, fontSize: 16),
+                ),
               ],
             ),
           ),
@@ -116,10 +189,10 @@ class _AccountScreenState extends State<AccountScreen> {
                 width: 30,
                 height: 30,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFCFDDE0),
+                  color: colorScheme.onSecondaryContainer.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(5),
                 ),
-                child: const Icon(Icons.edit, color: Colors.black, size: 18),
+                child: Icon(Icons.edit, color: colorScheme.onSecondaryContainer, size: 18),
               ),
             ),
           ),

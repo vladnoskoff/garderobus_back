@@ -13,10 +13,12 @@ class User(Base):
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
     password_hash = Column(String)
+    pin_hash = Column(String, nullable=True)
     openai_api_key = Column(String, nullable=True)
     weather_api_key = Column(String, nullable=True)
     location = Column(String, nullable=True)
     gender = Column(String, nullable=True)
+    theme_preference = Column(String, nullable=False, default="light", server_default="light")
 
     locations = relationship(
         "WardrobeLocation",
@@ -24,6 +26,10 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @property
+    def has_pin(self) -> bool:
+        return bool(self.pin_hash)
 
 class Clothes(Base):
     __tablename__ = "clothes"
@@ -39,43 +45,12 @@ class Clothes(Base):
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
     care_instructions = Column(Text, nullable=True)
-    location_id = Column(Integer, ForeignKey("wardrobe_locations.id", ondelete="SET NULL"), nullable=True)
-    ai_metadata = Column(JSON, nullable=True)
-
-    def _metadata_dict(self) -> dict:
-        if not self.ai_metadata:
-            return {}
-        if isinstance(self.ai_metadata, dict):
-            return self.ai_metadata
-        try:
-            return json.loads(self.ai_metadata)
-        except (TypeError, json.JSONDecodeError):
-            return {}
-
-    @property
-    def temperature_min(self) -> Optional[int]:
-        data = self._metadata_dict()
-        temp_range = data.get("temp_c_range")
-        if isinstance(temp_range, (list, tuple)) and temp_range:
-            try:
-                return int(temp_range[0])
-            except (TypeError, ValueError):
-                return None
-        return None
-
-    @property
-    def temperature_max(self) -> Optional[int]:
-        data = self._metadata_dict()
-        temp_range = data.get("temp_c_range")
-        if isinstance(temp_range, (list, tuple)):
-            try:
-                if len(temp_range) >= 2:
-                    return int(temp_range[1])
-                if len(temp_range) == 1:
-                    return int(temp_range[0])
-            except (TypeError, ValueError):
-                return None
-        return None
+    location_id = Column(
+        Integer,
+        ForeignKey("wardrobe_locations.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    _ai_metadata_legacy = Column("ai_metadata", JSON, nullable=True)
 
     metadata_entry = relationship(
         "ClothesMetadata",
@@ -89,13 +64,17 @@ class Clothes(Base):
 
     @property
     def ai_metadata(self) -> Optional[dict]:
-        if not self.metadata_entry:
+        if self.metadata_entry and self.metadata_entry.data is not None:
+            payload = self.metadata_entry.data
+        else:
+            payload = self._ai_metadata_legacy
+
+        if payload is None:
             return None
-        payload = self.metadata_entry.data
-        if not payload:
-            return None
+
         if isinstance(payload, dict):
             return payload
+
         try:
             return json.loads(payload)
         except (TypeError, json.JSONDecodeError):
@@ -106,100 +85,26 @@ class Clothes(Base):
         if value is None:
             if self.metadata_entry:
                 self.metadata_entry.data = None
+            self._ai_metadata_legacy = None
             return
 
+        payload = value
         if isinstance(value, str):
             try:
-                value = json.loads(value)
+                payload = json.loads(value)
             except (TypeError, json.JSONDecodeError):
-                value = {"raw": value}
-
-        if hasattr(value, "model_dump"):
-            value = value.model_dump()  # type: ignore[assignment]
+                payload = {"raw": value}
+        elif hasattr(value, "model_dump"):
+            payload = value.model_dump()
         elif hasattr(value, "dict"):
-            value = value.dict()  # type: ignore[assignment]
+            payload = value.dict()
 
         if self.metadata_entry is None:
-            self.metadata_entry = ClothesMetadata(data=value)
+            self.metadata_entry = ClothesMetadata(data=payload)
         else:
-            self.metadata_entry.data = value
+            self.metadata_entry.data = payload
 
-    def _metadata_dict(self) -> dict:
-        payload = self.ai_metadata
-        if isinstance(payload, dict):
-            return payload
-        return {}
-
-    @property
-    def temperature_min(self) -> Optional[int]:
-        data = self._metadata_dict()
-        temp_range = data.get("temp_c_range")
-        if isinstance(temp_range, (list, tuple)) and temp_range:
-            try:
-                return int(temp_range[0])
-            except (TypeError, ValueError):
-                return None
-        return None
-
-    @property
-    def temperature_max(self) -> Optional[int]:
-        data = self._metadata_dict()
-        temp_range = data.get("temp_c_range")
-        if isinstance(temp_range, (list, tuple)):
-            try:
-                if len(temp_range) >= 2:
-                    return int(temp_range[1])
-                if len(temp_range) == 1:
-                    return int(temp_range[0])
-            except (TypeError, ValueError):
-                return None
-        return None
-
-    metadata_entry = relationship(
-        "ClothesMetadata",
-        uselist=False,
-        back_populates="clothes",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-        single_parent=True,
-    )
-
-    @property
-    def ai_metadata(self) -> Optional[dict]:
-        if not self.metadata_entry:
-            return None
-        payload = self.metadata_entry.data
-        if not payload:
-            return None
-        if isinstance(payload, dict):
-            return payload
-        try:
-            return json.loads(payload)
-        except (TypeError, json.JSONDecodeError):
-            return None
-
-    @ai_metadata.setter
-    def ai_metadata(self, value):  # type: ignore[override]
-        if value is None:
-            if self.metadata_entry:
-                self.metadata_entry.data = None
-            return
-
-        if isinstance(value, str):
-            try:
-                value = json.loads(value)
-            except (TypeError, json.JSONDecodeError):
-                value = {"raw": value}
-
-        if hasattr(value, "model_dump"):
-            value = value.model_dump()  # type: ignore[assignment]
-        elif hasattr(value, "dict"):
-            value = value.dict()  # type: ignore[assignment]
-
-        if self.metadata_entry is None:
-            self.metadata_entry = ClothesMetadata(data=value)
-        else:
-            self.metadata_entry.data = value
+        self._ai_metadata_legacy = payload
 
     def _metadata_dict(self) -> dict:
         payload = self.ai_metadata

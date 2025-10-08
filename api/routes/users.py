@@ -6,7 +6,6 @@ import jwt
 import datetime
 import models, schemas
 from database import get_db
-import settings
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -17,6 +16,8 @@ _MAX_BCRYPT_BYTES = 72
 _MIN_PASSWORD_LENGTH = 6
 _MAX_PASSWORD_LENGTH = 20
 _PASSWORD_TOO_LONG_DETAIL = "Пароль слишком длинный. Максимальная длина — 72 байта."
+_MIN_PIN_LENGTH = 4
+_MAX_PIN_LENGTH = 8
 
 
 def _ensure_password_fits_backend(password: str) -> None:
@@ -47,25 +48,40 @@ def _verify_password(password: str, password_hash: str) -> bool:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=_PASSWORD_TOO_LONG_DETAIL) from exc
 
-_MAX_BCRYPT_BYTES = 72
-_MIN_PASSWORD_LENGTH = 6
-_MAX_PASSWORD_LENGTH = 20
 
+def _normalize_pin(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
 
-def _ensure_password_fits_backend(password: str) -> None:
-    """Ensure the password length is compatible with business rules and bcrypt backend."""
-    if not (_MIN_PASSWORD_LENGTH <= len(password) <= _MAX_PASSWORD_LENGTH):
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    if not cleaned.isdigit():
+        raise HTTPException(status_code=400, detail="PIN-код должен содержать только цифры.")
+
+    if not (_MIN_PIN_LENGTH <= len(cleaned) <= _MAX_PIN_LENGTH):
         raise HTTPException(
             status_code=400,
-            detail=f"Пароль должен содержать от {_MIN_PASSWORD_LENGTH} до {_MAX_PASSWORD_LENGTH} символов.",
-        )
-    if len(password.encode("utf-8")) > _MAX_BCRYPT_BYTES:
-        raise HTTPException(
-            status_code=400,
-            detail="Пароль слишком длинный. Максимальная длина — 72 байта.",
+            detail=f"PIN-код должен содержать от {_MIN_PIN_LENGTH} до {_MAX_PIN_LENGTH} цифр.",
         )
 
+    return cleaned
 
+
+def _hash_pin(pin: str) -> str:
+    try:
+        hashed = bcrypt.hashpw(pin.encode("utf-8"), bcrypt.gensalt())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Не удалось сохранить PIN-код") from exc
+    return hashed.decode("utf-8")
+
+
+def _verify_pin(pin: str, pin_hash: str) -> bool:
+    try:
+        return bcrypt.checkpw(pin.encode("utf-8"), pin_hash.encode("utf-8"))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Не удалось проверить PIN-код") from exc
 def _normalize_gender(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -83,6 +99,29 @@ def _normalize_gender(value: Optional[str]) -> Optional[str]:
     return normalized
 
 
+def _normalize_theme(value: Optional[str]) -> str:
+    if value is None:
+        return "light"
+
+    normalized = value.strip().lower()
+    if not normalized:
+        return "light"
+
+    dark_markers = {
+        "dark",
+        "dark_mode",
+        "dark theme",
+        "темная",
+        "тёмная",
+        "ночная",
+        "темная тема",
+        "тёмная тема",
+        "night",
+    }
+
+    return "dark" if normalized in dark_markers else "light"
+
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + datetime.timedelta(days=1)
@@ -98,11 +137,15 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
     _ensure_password_fits_backend(user.password)
     hashed_password = _hash_password(user.password)
+    normalized_pin = _normalize_pin(user.pin_code)
+    pin_hash = _hash_pin(normalized_pin) if normalized_pin else None
     new_user = models.User(
         name=user.name,
         email=user.email,
         password_hash=hashed_password,
         gender=_normalize_gender(user.gender),
+        theme_preference=_normalize_theme(user.theme_preference),
+        pin_hash=pin_hash,
     )
     db.add(new_user)
     db.commit()
@@ -125,7 +168,12 @@ def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
         raise auth_error
 
     token = create_access_token({"sub": db_user.email})
-    return {"access_token": token, "token_type": "bearer", "user_id": db_user.id}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": db_user.id,
+        "has_pin": bool(db_user.pin_hash),
+    }
 
 @router.delete("/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db)):
@@ -161,6 +209,11 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
         user.location = updates.location
     if updates.gender is not None:
         user.gender = _normalize_gender(updates.gender)
+    if updates.theme_preference is not None:
+        user.theme_preference = _normalize_theme(updates.theme_preference)
+    if updates.pin_code is not None:
+        normalized_pin = _normalize_pin(updates.pin_code)
+        user.pin_hash = _hash_pin(normalized_pin) if normalized_pin else None
 
     db.commit()
     db.refresh(user)
@@ -190,3 +243,22 @@ def update_keys(user_id: int, keys: schemas.ApiKeysUpdate, db: Session = Depends
     db.commit()
     db.refresh(user)
     return {"message": "API-ключи успешно обновлены"}
+
+
+@router.post("/{user_id}/verify_pin")
+def verify_pin(user_id: int, payload: schemas.PinVerificationRequest, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if not user.pin_hash:
+        raise HTTPException(status_code=400, detail="PIN-код не установлен")
+
+    pin = _normalize_pin(payload.pin_code)
+    if pin is None:
+        raise HTTPException(status_code=400, detail="PIN-код должен содержать цифры")
+
+    if not _verify_pin(pin, user.pin_hash):
+        raise HTTPException(status_code=401, detail="Неверный PIN-код")
+
+    return {"valid": True}
