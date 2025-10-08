@@ -35,6 +35,8 @@ class ClothesDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
     final careText = clothes.careInstructions?.trim();
     final description = clothes.promptDescription?.trim();
     final material = clothes.material?.trim();
@@ -58,10 +60,10 @@ class ClothesDetailScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Гардеробус'),
+        title: const Text('Гардеробус'),
         actions: [
           IconButton(
-            icon: Icon(Icons.delete, color: Colors.red),
+            icon: const Icon(Icons.delete, color: Colors.red),
             onPressed: () => _confirmDelete(context),
           ),
         ],
@@ -69,40 +71,44 @@ class ClothesDetailScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: clothes.imageUrl != null && clothes.imageUrl!.isNotEmpty
-                ? Image.network(
-                    clothes.imageUrl!,
-                    fit: BoxFit.cover,
-                    height: 320,
-                    width: double.infinity,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      height: 320,
-                      color: const Color(0xFFE0E0E0),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: colorScheme.surfaceVariant,
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: AspectRatio(
+              aspectRatio: 3 / 4,
+              child: clothes.imageUrl != null && clothes.imageUrl!.isNotEmpty
+                  ? Image.network(
+                      clothes.imageUrl!,
+                      fit: BoxFit.contain,
                       alignment: Alignment.center,
-                      child: const Icon(
-                        Icons.broken_image_outlined,
+                      errorBuilder: (context, error, stackTrace) => Container(
+                        color: colorScheme.surfaceVariant,
+                        alignment: Alignment.center,
+                        child: Icon(
+                          Icons.broken_image_outlined,
+                          size: 48,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    )
+                  : Container(
+                      color: colorScheme.surfaceVariant,
+                      alignment: Alignment.center,
+                      child: Icon(
+                        Icons.image_not_supported,
                         size: 48,
-                        color: Colors.black45,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
-                  )
-                : Container(
-                    height: 320,
-                    color: const Color(0xFFE0E0E0),
-                    alignment: Alignment.center,
-                    child: const Icon(
-                      Icons.image_not_supported,
-                      size: 48,
-                      color: Colors.black45,
-                    ),
-                  ),
+            ),
           ),
           const SizedBox(height: 16),
           Text(
             clothes.name,
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -119,37 +125,37 @@ class ClothesDetailScreen extends StatelessWidget {
           ),
           if (description != null && description.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Описание',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
               description,
-              style: const TextStyle(fontSize: 15),
+              style: textTheme.bodyMedium,
             ),
           ],
           if (careText != null && careText.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Рекомендации по уходу',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
               careText,
-              style: const TextStyle(fontSize: 15),
+              style: textTheme.bodyMedium,
             ),
           ],
           const SizedBox(height: 16),
           Text(
             'Цвет: ${clothes.color}',
-            style: const TextStyle(fontSize: 15),
+            style: textTheme.bodyMedium,
           ),
           const SizedBox(height: 8),
           Text(
             'Добавлено: $createdText',
-            style: const TextStyle(fontSize: 13, color: Colors.black54),
+            style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
           ),
         ],
       ),
@@ -165,20 +171,26 @@ class _InfoChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.07),
+        color: colorScheme.surfaceVariant,
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: Colors.black87),
+          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
+            style: textTheme.bodySmall?.copyWith(
+              color: colorScheme.onSurface,
+              fontSize: 14,
+            ),
           ),
         ],
       ),
