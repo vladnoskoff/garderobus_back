@@ -1,10 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
 
 class AddClothesScreen extends StatefulWidget {
-  const AddClothesScreen({super.key});
+  final int? initialLocationId;
+
+  const AddClothesScreen({super.key, this.initialLocationId});
 
   @override
   _AddClothesScreenState createState() => _AddClothesScreenState();
@@ -12,33 +17,164 @@ class AddClothesScreen extends StatefulWidget {
 
 class _AddClothesScreenState extends State<AddClothesScreen> {
   final _formKey = GlobalKey<FormState>();
-  String name = '';
-  String category = '';
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _categoryController = TextEditingController();
+  final TextEditingController _colorController = TextEditingController();
+  final TextEditingController _materialController = TextEditingController();
   String season = '';
-  String color = '';
-  String? material;
-  String? imageUrl;
   File? _image;
   bool _isLoading = false;
+  bool _useAiAutoFill = false;
+  int? _selectedLocationId;
+  List<dynamic> _locations = [];
+  bool _isLocationsLoading = false;
 
   final picker = ImagePicker();
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserIdAndLocations();
+  }
+
+  Future<void> _loadUserIdAndLocations() async {
+    setState(() => _isLocationsLoading = true);
+    try {
+      final idString = await _storage.read(key: 'user_id');
+      if (idString == null) return;
+      final parsedId = int.tryParse(idString);
+      if (parsedId == null) return;
+      final locations = await ApiService.getWardrobeLocations(parsedId);
+      final storedLocationIdString = await _storage.read(key: 'selected_location_id');
+      final storedLocationId = storedLocationIdString != null
+          ? int.tryParse(storedLocationIdString)
+          : null;
+      int? initialLocationId = widget.initialLocationId ?? storedLocationId;
+      if (initialLocationId != null) {
+        final exists = locations.any((loc) {
+          if (loc is! Map<String, dynamic>) return false;
+          return _parseLocationId(loc['id']) == initialLocationId;
+        });
+        if (!exists) {
+          initialLocationId = null;
+        }
+      }
+      setState(() {
+        _locations = locations;
+        _selectedLocationId = initialLocationId;
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось загрузить локации: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isLocationsLoading = false);
+      }
+    }
+  }
+
+  Future<bool> _ensurePermission(ImageSource source) async {
+    PermissionStatus status;
+    if (source == ImageSource.camera) {
+      status = await Permission.camera.request();
+    } else {
+      if (Platform.isIOS) {
+        status = await Permission.photos.request();
+      } else {
+        status = await Permission.storage.request();
+      }
+    }
+
+    if (status.isGranted || status.isLimited) {
+      return true;
+    }
+
+    if (status.isPermanentlyDenied) {
+      final shouldOpenSettings = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Нет доступа'),
+          content: Text(
+            source == ImageSource.camera
+                ? 'Для съемки одежды предоставьте доступ к камере в настройках.'
+                : 'Для выбора из галереи предоставьте доступ к фотографиям в настройках.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Открыть настройки'),
+            ),
+          ],
+        ),
+      );
+
+      if (shouldOpenSettings == true) {
+        await openAppSettings();
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            source == ImageSource.camera
+                ? 'Доступ к камере отклонен'
+                : 'Доступ к фотографиям отклонен',
+          ),
+        ),
+      );
+    }
+
+    return false;
+  }
 
   Future<void> _pickImage(ImageSource source) async {
-    final pickedFile = await picker.pickImage(source: source);
-    if (pickedFile != null) {
-      setState(() {
-        _image = File(pickedFile.path);
-      });
+    try {
+      final hasPermission = await _ensurePermission(source);
+      if (!hasPermission) {
+        return;
+      }
+
+      final pickedFile = await picker.pickImage(
+        source: source,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _image = File(pickedFile.path);
+        });
+      }
+    } on PlatformException catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            source == ImageSource.camera
+                ? 'Не удалось открыть камеру: ${e.message ?? e.code}'
+                : 'Не удалось открыть галерею: ${e.message ?? e.code}',
+          ),
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Ошибка при выборе изображения: $e'),
+        ),
+      );
     }
   }
 
   Future<void> submit() async {
-  if (_formKey.currentState!.validate()) {
-    _formKey.currentState!.save();
+    if (!_useAiAutoFill && !_formKey.currentState!.validate()) {
+      return;
+    }
 
     if (_image == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Пожалуйста, выберите изображение')),
+        const SnackBar(content: Text('Пожалуйста, выберите изображение')),
       );
       return;
     }
@@ -47,22 +183,54 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
       _isLoading = true;
     });
 
-    await ApiService.addClothes(
-      name: name,
-      category: category,
-      season: season,
-      color: color,
-      material: material,
-      image: _image!,
-    );
+    try {
+      await ApiService.addClothes(
+        name: _useAiAutoFill ? '' : _nameController.text.trim(),
+        category: _useAiAutoFill ? '' : _categoryController.text.trim(),
+        season: _useAiAutoFill ? '' : season,
+        color: _useAiAutoFill ? '' : _colorController.text.trim(),
+        material: _materialController.text.trim().isEmpty
+            ? null
+            : _materialController.text.trim(),
+        image: _image!,
+        autoFill: _useAiAutoFill,
+        locationId: _selectedLocationId,
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка добавления одежды: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
-}
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _categoryController.dispose();
+    _colorController.dispose();
+    _materialController.dispose();
+    super.dispose();
+  }
+
+  int? _parseLocationId(dynamic rawId) {
+    if (rawId is int) return rawId;
+    if (rawId is String) {
+      return int.tryParse(rawId);
+    }
+    if (rawId != null) {
+      return int.tryParse(rawId.toString());
+    }
+    return null;
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -75,34 +243,130 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
               key: _formKey,
               child: ListView(
                 children: [
+                  DropdownButtonFormField<bool>(
+                    value: _useAiAutoFill,
+                    decoration: const InputDecoration(
+                      labelText: 'Заполнение данных',
+                    ),
+                    items: const [
+                      DropdownMenuItem(
+                        value: false,
+                        child: Text('Заполнить самостоятельно'),
+                      ),
+                      DropdownMenuItem(
+                        value: true,
+                        child: Text('Использовать заполнение ИИ'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _useAiAutoFill = value ?? false;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  if (_isLocationsLoading)
+                    const LinearProgressIndicator()
+                  else if (_locations.isNotEmpty)
+                    DropdownButtonFormField<int?>(
+                      value: _selectedLocationId,
+                      decoration: const InputDecoration(
+                        labelText: 'Локация гардероба',
+                      ),
+                      items: [
+                        const DropdownMenuItem<int?>(
+                          value: null,
+                          child: Text('Без привязки'),
+                        ),
+                        ..._locations
+                            .whereType<Map<String, dynamic>>()
+                            .map((loc) {
+                          final parsedId = _parseLocationId(loc['id']);
+                          if (parsedId == null) {
+                            return null;
+                          }
+                          final name = loc['name']?.toString() ?? 'Без названия';
+                          return DropdownMenuItem<int?>(
+                            value: parsedId,
+                            child: Text(name),
+                          );
+                        }).whereType<DropdownMenuItem<int?>>(),
+                      ],
+                      onChanged: (value) {
+                        setState(() {
+                          _selectedLocationId = value;
+                        });
+                        if (value == null) {
+                          _storage.delete(key: 'selected_location_id');
+                        } else {
+                          _storage.write(
+                            key: 'selected_location_id',
+                            value: value.toString(),
+                          );
+                        }
+                      },
+                    ),
+                  const SizedBox(height: 16),
                   TextFormField(
-                    decoration: InputDecoration(labelText: 'Название'),
-                    onSaved: (value) => name = value!,
+                    controller: _nameController,
+                    enabled: !_useAiAutoFill,
+                    decoration: const InputDecoration(labelText: 'Название'),
+                    validator: (value) {
+                      if (_useAiAutoFill) return null;
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Введите название';
+                      }
+                      return null;
+                    },
                   ),
                   TextFormField(
-                    decoration: InputDecoration(labelText: 'Категория'),
-                    onSaved: (value) => category = value!,
+                    controller: _categoryController,
+                    enabled: !_useAiAutoFill,
+                    decoration: const InputDecoration(labelText: 'Категория'),
+                    validator: (value) {
+                      if (_useAiAutoFill) return null;
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Введите категорию';
+                      }
+                      return null;
+                    },
                   ),
                   DropdownButtonFormField<String>(
-                    decoration: InputDecoration(labelText: 'Сезон'),
+                    decoration: const InputDecoration(labelText: 'Сезон'),
                     value: season.isNotEmpty ? season : null,
                     items: ['Лето', 'Осень', 'Зима', 'Весна']
                         .map((s) => DropdownMenuItem(value: s, child: Text(s)))
                         .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        season = value!;
-                      });
+                    onChanged: _useAiAutoFill
+                        ? null
+                        : (value) {
+                            setState(() {
+                              season = value ?? '';
+                            });
+                          },
+                    validator: (value) {
+                      if (_useAiAutoFill) return null;
+                      if (value == null || value.isEmpty) {
+                        return 'Выберите сезон';
+                      }
+                      return null;
                     },
-                    validator: (value) => value == null || value.isEmpty ? 'Выберите сезон' : null,
                   ),
                   TextFormField(
-                    decoration: InputDecoration(labelText: 'Цвет'),
-                    onSaved: (value) => color = value!,
+                    controller: _colorController,
+                    enabled: !_useAiAutoFill,
+                    decoration: const InputDecoration(labelText: 'Цвет'),
+                    validator: (value) {
+                      if (_useAiAutoFill) return null;
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Введите цвет';
+                      }
+                      return null;
+                    },
                   ),
                   TextFormField(
-                    decoration: InputDecoration(labelText: 'Материал (необязательно)'),
-                    onSaved: (value) => material = value,
+                    controller: _materialController,
+                    decoration: const InputDecoration(labelText: 'Материал (необязательно)'),
                   ),
                   const SizedBox(height: 16),
                   if (_image != null)

@@ -11,6 +11,7 @@ class UserCreate(BaseModel):
     openai_api_key: Optional[str] = None
     weather_api_key: Optional[str] = None
     gender: Optional[str] = None
+    theme_preference: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: str
@@ -25,6 +26,7 @@ class UserResponse(BaseModel):
     weather_api_key: Optional[str] = None
     location: Optional[str] = None
     gender: Optional[str] = None
+    theme_preference: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -36,6 +38,7 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     location: Optional[str] = None
     gender: Optional[str] = None
+    theme_preference: Optional[str] = None
     
 class ApiKeysUpdate(BaseModel):
     openai_api_key: Optional[str]
