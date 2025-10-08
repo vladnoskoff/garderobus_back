@@ -15,15 +15,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? selectedGender;
   bool isLoading = false;
 
-  void register() async {
+  Future<void> register() async {
     setState(() => isLoading = true);
     try {
-      await ApiService.register(
+      final response = await ApiService.register(
         nameController.text.trim(),
         emailController.text.trim(),
         passwordController.text.trim(),
         selectedGender ?? 'not_specified',
       );
+
+      final newUserId = _extractUserId(response);
+      if (newUserId != null) {
+        try {
+          await ApiService.createWardrobeLocation(
+            userId: newUserId,
+            name: 'Место 1',
+          );
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Не удалось создать стартовую локацию: $e')),
+            );
+          }
+        }
+      }
 
       setState(() => isLoading = false);
       Navigator.pop(context);
@@ -38,6 +54,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       );
     }
+  }
+
+  int? _extractUserId(Map<String, dynamic> response) {
+    final idValue = response['user_id'] ?? response['id'];
+    if (idValue is int) return idValue;
+    if (idValue is String) {
+      return int.tryParse(idValue);
+    }
+    return null;
   }
 
   @override

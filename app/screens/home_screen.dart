@@ -61,10 +61,21 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => isLocationsLoading = true);
     try {
       final locations = await ApiService.getWardrobeLocations(userId!);
+      final storedLocationIdString = await storage.read(key: 'selected_location_id');
+      final storedLocationId =
+          storedLocationIdString != null ? int.tryParse(storedLocationIdString) : null;
+      int? resolvedLocationId = storedLocationId;
+      if (resolvedLocationId != null &&
+          !locations.any((loc) =>
+              loc is Map<String, dynamic> && _parseLocationId(loc['id']) == resolvedLocationId)) {
+        resolvedLocationId = null;
+      }
+      resolvedLocationId ??= _deriveDefaultLocation(locations);
       setState(() {
         wardrobeLocations = locations;
-        selectedLocationId ??= _deriveDefaultLocation(locations);
+        selectedLocationId = resolvedLocationId;
       });
+      await _persistSelectedLocation(resolvedLocationId);
       fetchWeather();
       fetchMannequins();
     } catch (e) {
@@ -76,12 +87,43 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> _persistSelectedLocation(int? locationId) async {
+    if (locationId == null) {
+      await storage.delete(key: 'selected_location_id');
+    } else {
+      await storage.write(
+        key: 'selected_location_id',
+        value: locationId.toString(),
+      );
+    }
+  }
+
+  Future<void> _handleLocationChange(int? value) async {
+    setState(() {
+      selectedLocationId = value;
+    });
+    await _persistSelectedLocation(value);
+    fetchWeather();
+    fetchMannequins();
+  }
+
+  int? _parseLocationId(dynamic rawId) {
+    if (rawId is int) return rawId;
+    if (rawId is String) {
+      return int.tryParse(rawId);
+    }
+    if (rawId != null) {
+      return int.tryParse(rawId.toString());
+    }
+    return null;
+  }
+
   int? _deriveDefaultLocation(List<dynamic> locations) {
-    for (final loc in locations) {
+    for (final loc in locations.whereType<Map<String, dynamic>>()) {
       final lat = loc['latitude'];
       final lon = loc['longitude'];
       if (lat != null && lon != null) {
-        return loc['id'] as int?;
+        return _parseLocationId(loc['id']);
       }
     }
     return null;
@@ -89,8 +131,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Map<String, dynamic>? _findLocationById(int? id) {
     if (id == null) return null;
-    for (final loc in wardrobeLocations) {
-      if (loc is Map<String, dynamic> && loc['id'] == id) {
+    for (final loc in wardrobeLocations.whereType<Map<String, dynamic>>()) {
+      if (_parseLocationId(loc['id']) == id) {
         return loc;
       }
     }
@@ -286,24 +328,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                       value: null,
                                       child: Text('Использовать личные координаты'),
                                     ),
-                                    ...wardrobeLocations.map((loc) {
-                                      final map = loc as Map<String, dynamic>;
+                                    ...wardrobeLocations.whereType<Map<String, dynamic>>().map((map) {
                                       final name = map['name']?.toString() ?? 'Без названия';
                                       final hasCoords =
                                           map['latitude'] != null && map['longitude'] != null;
                                       final subtitle = hasCoords ? '' : ' (нет координат)';
+                                      final parsedId = _parseLocationId(map['id']);
+                                      if (parsedId == null) {
+                                        return null;
+                                      }
                                       return DropdownMenuItem<int?>(
-                                        value: map['id'] as int,
+                                        value: parsedId,
                                         child: Text('$name$subtitle'),
                                       );
-                                    }),
+                                    }).whereType<DropdownMenuItem<int?>>(),
                                   ],
                                   onChanged: (value) {
-                                    setState(() {
-                                      selectedLocationId = value;
-                                    });
-                                    fetchWeather();
-                                    fetchMannequins();
+                                    _handleLocationChange(value);
                                   },
                                 ),
                         ),

@@ -5,7 +5,9 @@ import 'package:image_picker/image_picker.dart';
 import '../../services/api_service.dart';
 
 class AddClothesScreen extends StatefulWidget {
-  const AddClothesScreen({super.key});
+  final int? initialLocationId;
+
+  const AddClothesScreen({super.key, this.initialLocationId});
 
   @override
   _AddClothesScreenState createState() => _AddClothesScreenState();
@@ -42,8 +44,23 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
       final parsedId = int.tryParse(idString);
       if (parsedId == null) return;
       final locations = await ApiService.getWardrobeLocations(parsedId);
+      final storedLocationIdString = await _storage.read(key: 'selected_location_id');
+      final storedLocationId = storedLocationIdString != null
+          ? int.tryParse(storedLocationIdString)
+          : null;
+      int? initialLocationId = widget.initialLocationId ?? storedLocationId;
+      if (initialLocationId != null) {
+        final exists = locations.any((loc) {
+          if (loc is! Map<String, dynamic>) return false;
+          return _parseLocationId(loc['id']) == initialLocationId;
+        });
+        if (!exists) {
+          initialLocationId = null;
+        }
+      }
       setState(() {
         _locations = locations;
+        _selectedLocationId = initialLocationId;
       });
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -118,6 +135,17 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
     _materialController.dispose();
     super.dispose();
   }
+
+  int? _parseLocationId(dynamic rawId) {
+    if (rawId is int) return rawId;
+    if (rawId is String) {
+      return int.tryParse(rawId);
+    }
+    if (rawId != null) {
+      return int.tryParse(rawId.toString());
+    }
+    return null;
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,18 +193,32 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
                           value: null,
                           child: Text('Без привязки'),
                         ),
-                        ..._locations.map((loc) {
+                        ..._locations
+                            .whereType<Map<String, dynamic>>()
+                            .map((loc) {
+                          final parsedId = _parseLocationId(loc['id']);
+                          if (parsedId == null) {
+                            return null;
+                          }
                           final name = loc['name']?.toString() ?? 'Без названия';
                           return DropdownMenuItem<int?>(
-                            value: loc['id'] as int,
+                            value: parsedId,
                             child: Text(name),
                           );
-                        }),
+                        }).whereType<DropdownMenuItem<int?>>(),
                       ],
                       onChanged: (value) {
                         setState(() {
                           _selectedLocationId = value;
                         });
+                        if (value == null) {
+                          _storage.delete(key: 'selected_location_id');
+                        } else {
+                          _storage.write(
+                            key: 'selected_location_id',
+                            value: value.toString(),
+                          );
+                        }
                       },
                     ),
                   const SizedBox(height: 16),

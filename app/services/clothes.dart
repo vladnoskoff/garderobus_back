@@ -8,6 +8,7 @@ class Clothes {
   final String? material;
   final String? imageUrl;
   final DateTime createdAt;
+  final int? locationId;
 
   Clothes({
     required this.id,
@@ -19,6 +20,7 @@ class Clothes {
     this.material,
     this.imageUrl,
     required this.createdAt,
+    this.locationId,
   });
 
   factory Clothes.fromJson(Map<String, dynamic> json) {
@@ -32,6 +34,9 @@ class Clothes {
       material: json['material'],
       imageUrl: json['image_url'],
       createdAt: DateTime.parse(json['created_at']),
+      locationId: json['location_id'] is int
+          ? json['location_id'] as int
+          : int.tryParse(json['location_id']?.toString() ?? ''),
     );
   }
 }

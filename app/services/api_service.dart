@@ -8,7 +8,7 @@ class ApiService {
   static final storage = FlutterSecureStorage();
 
   // Регистрация пользователя
-  static Future<void> register(
+  static Future<Map<String, dynamic>> register(
     String name,
     String email,
     String password,
@@ -24,9 +24,17 @@ class ApiService {
         "gender": gender,
       }),
     );
-    if (response.statusCode != 200) {
-      throw Exception("Ошибка регистрации");
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      if (response.body.isEmpty) {
+        return {};
+      }
+      final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+      return {};
     }
+    throw Exception("Ошибка регистрации");
   }
 
   // Логин пользователя
@@ -162,8 +170,11 @@ class ApiService {
   }
 
   // Получение одежды пользователя
-  static Future<List<dynamic>> getUserClothes(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/clothes/user/$userId'));
+  static Future<List<dynamic>> getUserClothes(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse('$baseUrl/clothes/user/$userId?location_id=$locationId')
+        : Uri.parse('$baseUrl/clothes/user/$userId');
+    final response = await http.get(uri);
 
     if (response.statusCode == 200) {
       final utf8Response = utf8.decode(response.bodyBytes); // Для корректной обработки русских символов
@@ -302,8 +313,11 @@ class ApiService {
 
 
   // Получить историю нарядов
-  static Future<List<dynamic>> getOutfitHistory(int userId) async {
-    final response = await http.get(Uri.parse("$baseUrl/outfits/history/$userId"));
+  static Future<List<dynamic>> getOutfitHistory(int userId, {int? locationId}) async {
+    final uri = locationId != null
+        ? Uri.parse("$baseUrl/outfits/history/$userId?location_id=$locationId")
+        : Uri.parse("$baseUrl/outfits/history/$userId");
+    final response = await http.get(uri);
     return jsonDecode(response.body);
   }
 
