@@ -1,4 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Body, APIRouter
+from fastapi.staticfiles import StaticFiles
+
 import models
 from database import engine
 from routes import (
@@ -14,6 +16,8 @@ from routes import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 
+import settings
+
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
@@ -25,6 +29,17 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.mount(
+    "/clothes_images",
+    StaticFiles(directory=str(settings.CLOTHES_IMAGE_DIR)),
+    name="clothes_images",
+)
+app.mount(
+    "/mannequins",
+    StaticFiles(directory=str(settings.MANNEQUIN_IMAGE_DIR)),
+    name="mannequins",
 )
 
 app.include_router(users.router)
