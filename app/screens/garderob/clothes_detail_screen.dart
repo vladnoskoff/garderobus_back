@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../services/clothes.dart';
+
 import '../../services/api_service.dart';
+import '../../services/clothes.dart';
 
 class ClothesDetailScreen extends StatelessWidget {
   final Clothes clothes;
@@ -34,6 +35,27 @@ class ClothesDetailScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final careText = clothes.careInstructions?.trim();
+    final description = clothes.promptDescription?.trim();
+    final material = clothes.material?.trim();
+    final temperatureMin = clothes.temperatureMin;
+    final temperatureMax = clothes.temperatureMax;
+    String? temperatureRange;
+    if (temperatureMin != null || temperatureMax != null) {
+      if (temperatureMin != null && temperatureMax != null) {
+        temperatureRange = temperatureMin == temperatureMax
+            ? '$temperatureMin°C'
+            : '$temperatureMin–$temperatureMax°C';
+      } else {
+        final value = temperatureMin ?? temperatureMax;
+        temperatureRange = value != null ? '$value°C' : null;
+      }
+    }
+    final created = clothes.createdAt.toLocal();
+    final createdText =
+        '${created.day.toString().padLeft(2, '0')}.${created.month.toString().padLeft(2, '0')}.${created.year} '
+        '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Гардеробус'),
@@ -44,44 +66,121 @@ class ClothesDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                clothes.imageUrl ?? '',
-                fit: BoxFit.cover,
-                height: 300,
-                width: double.infinity,
-              ),
-            ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: clothes.imageUrl != null && clothes.imageUrl!.isNotEmpty
+                ? Image.network(
+                    clothes.imageUrl!,
+                    fit: BoxFit.cover,
+                    height: 320,
+                    width: double.infinity,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      height: 320,
+                      color: const Color(0xFFE0E0E0),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.broken_image_outlined,
+                        size: 48,
+                        color: Colors.black45,
+                      ),
+                    ),
+                  )
+                : Container(
+                    height: 320,
+                    color: const Color(0xFFE0E0E0),
+                    alignment: Alignment.center,
+                    child: const Icon(
+                      Icons.image_not_supported,
+                      size: 48,
+                      color: Colors.black45,
+                    ),
+                  ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            clothes.name,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              _InfoChip(icon: Icons.checkroom, label: clothes.category),
+              _InfoChip(icon: Icons.calendar_month_outlined, label: clothes.season),
+              if (temperatureRange != null)
+                _InfoChip(icon: Icons.device_thermostat, label: temperatureRange),
+              if (material != null && material.isNotEmpty)
+                _InfoChip(icon: Icons.texture, label: material),
+            ],
+          ),
+          if (description != null && description.isNotEmpty) ...[
             const SizedBox(height: 16),
+            const Text(
+              'Описание',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
             Text(
-              clothes.name,
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                Column(
-                  children: [
-                    Icon(Icons.checkroom, size: 32),
-                    Text('${clothes.category}'),
-                  ],
-                ),
-                Column(
-                  children: [
-                    Icon(Icons.thermostat, size: 32),
-                    Text('${clothes.season}'),
-                  ],
-                ),
-              ],
+              description,
+              style: const TextStyle(fontSize: 15),
             ),
           ],
-        ),
+          if (careText != null && careText.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text(
+              'Рекомендации по уходу',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              careText,
+              style: const TextStyle(fontSize: 15),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Text(
+            'Цвет: ${clothes.color}',
+            style: const TextStyle(fontSize: 15),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Добавлено: $createdText',
+            style: const TextStyle(fontSize: 13, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _InfoChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _InfoChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: Colors.black87),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+        ],
       ),
     );
   }
