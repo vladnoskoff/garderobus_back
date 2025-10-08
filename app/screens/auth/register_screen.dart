@@ -13,13 +13,31 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final emailController = TextEditingController();
   final nameController = TextEditingController();
   final passwordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
   final pinController = TextEditingController();
   String? selectedGender;
   bool isLoading = false;
 
+  bool get _passwordsMatch =>
+      passwordController.text == confirmPasswordController.text;
+
+  bool get _showPasswordMatchMessage =>
+      passwordController.text.isNotEmpty &&
+      confirmPasswordController.text.isNotEmpty;
+
   Future<void> register() async {
     setState(() => isLoading = true);
     try {
+      final password = passwordController.text.trim();
+      final confirmPassword = confirmPasswordController.text.trim();
+      if (password != confirmPassword) {
+        setState(() => isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пароли не совпадают.')),
+        );
+        return;
+      }
+
       final pin = pinController.text.trim();
       if (pin.isNotEmpty && (pin.length < 4 || pin.length > 8 || !RegExp(r'^[0-9]+$').hasMatch(pin))) {
         setState(() => isLoading = false);
@@ -31,7 +49,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       final response = await ApiService.register(
         nameController.text.trim(),
         emailController.text.trim(),
-        passwordController.text.trim(),
+        password,
         selectedGender ?? 'not_specified',
         pinCode: pin.isEmpty ? null : pin,
       );
@@ -77,6 +95,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   @override
+  void dispose() {
+    emailController.dispose();
+    nameController.dispose();
+    passwordController.dispose();
+    confirmPasswordController.dispose();
+    pinController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -113,7 +141,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: passwordController,
                   obscureText: true,
                   decoration: const InputDecoration(labelText: "Пароль"),
+                  onChanged: (_) => setState(() {}),
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(labelText: "Повторите пароль"),
+                  onChanged: (_) => setState(() {}),
+                ),
+                const SizedBox(height: 8),
+                if (_showPasswordMatchMessage)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      _passwordsMatch ? 'Пароли совпадают' : 'Пароли не совпадают',
+                      style: TextStyle(
+                        color: _passwordsMatch
+                            ? Colors.green
+                            : theme.colorScheme.error,
+                      ),
+                    ),
+                  ),
                 const SizedBox(height: 16),
                 TextField(
                   controller: pinController,
