@@ -324,7 +324,7 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
               Expanded(
                 child: FilledButton.icon(
                   onPressed: () => _editLocationCoordinates(data),
-                  icon: const Icon(Icons.place_alt),
+                  icon: const Icon(Icons.place_outlined),
                   label: const Text('Изменить точку'),
                 ),
               ),

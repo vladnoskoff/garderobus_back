@@ -191,24 +191,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     setState(() => selectedGender = value);
                   },
                 ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  value: selectedGender,
-                  decoration: const InputDecoration(
-                    labelText: "Пол",
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  hint: const Text('Выберите пол'),
-                  items: const [
-                    DropdownMenuItem(value: 'male', child: Text('Мужской')),
-                    DropdownMenuItem(value: 'female', child: Text('Женский')),
-                    DropdownMenuItem(value: 'not_specified', child: Text('Не указывать')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => selectedGender = value);
-                  },
-                ),
                 const SizedBox(height: 24),
                 FilledButton(
                   onPressed: isLoading ? null : register,

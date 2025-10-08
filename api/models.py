@@ -50,8 +50,6 @@ class Clothes(Base):
         ForeignKey("wardrobe_locations.id", ondelete="SET NULL"),
         nullable=True,
     )
-    _ai_metadata_legacy = Column("ai_metadata", JSON, nullable=True)
-
     metadata_entry = relationship(
         "ClothesMetadata",
         uselist=False,
@@ -66,19 +64,13 @@ class Clothes(Base):
     def ai_metadata(self) -> Optional[dict]:
         if self.metadata_entry and self.metadata_entry.data is not None:
             payload = self.metadata_entry.data
-        else:
-            payload = self._ai_metadata_legacy
-
-        if payload is None:
-            return None
-
-        if isinstance(payload, dict):
-            return payload
-
-        try:
-            return json.loads(payload)
-        except (TypeError, json.JSONDecodeError):
-            return None
+            if isinstance(payload, dict):
+                return payload
+            try:
+                return json.loads(payload)
+            except (TypeError, json.JSONDecodeError):
+                return None
+        return None
 
     @ai_metadata.setter
     def ai_metadata(self, value):  # type: ignore[override]
@@ -103,8 +95,6 @@ class Clothes(Base):
             self.metadata_entry = ClothesMetadata(data=payload)
         else:
             self.metadata_entry.data = payload
-
-        self._ai_metadata_legacy = payload
 
     def _metadata_dict(self) -> dict:
         payload = self.ai_metadata
