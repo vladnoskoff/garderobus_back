@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../services/api_service.dart';
+import '../../services/biometric_auth_service.dart';
 
 class PinUnlockScreen extends StatefulWidget {
   final int userId;
@@ -20,12 +22,44 @@ class PinUnlockScreen extends StatefulWidget {
 class _PinUnlockScreenState extends State<PinUnlockScreen> {
   final TextEditingController _pinController = TextEditingController();
   bool _isVerifying = false;
+  bool _isBiometricAuthenticating = false;
+  bool _canUseBiometrics = false;
+  bool _hasAttemptedBiometric = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricSupport();
+  }
 
   @override
   void dispose() {
     _pinController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBiometricSupport() async {
+    final support = await BiometricAuthService.checkSupport();
+    if (!mounted || !support.canAuthenticate) return;
+
+    setState(() {
+      _canUseBiometrics = true;
+    });
+
+    _attemptBiometricUnlock();
+  }
+
+  void _attemptBiometricUnlock() {
+    if (!_canUseBiometrics || _hasAttemptedBiometric || _isBiometricAuthenticating) {
+      return;
+    }
+
+    _hasAttemptedBiometric = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _unlockWithBiometrics();
+    });
   }
 
   Future<void> _verifyPin() async {
@@ -63,6 +97,33 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
           _isVerifying = false;
         });
       }
+    }
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    if (!mounted) return;
+    setState(() {
+      _isBiometricAuthenticating = true;
+      _error = null;
+    });
+
+    final success = await BiometricAuthService.authenticate(
+      reason: 'Подтвердите личность для доступа к гардеробу',
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _isBiometricAuthenticating = false;
+      });
+      widget.onUnlocked();
+    } else {
+      setState(() {
+        _error =
+            'Биометрическая аутентификация не выполнена. Введите PIN-код.';
+        _isBiometricAuthenticating = false;
+      });
     }
   }
 
@@ -117,6 +178,12 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                       )
                     : const Text('Разблокировать'),
               ),
+              if (_isBiometricAuthenticating) ...[
+                const SizedBox(height: 16),
+                const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ],
               if (widget.onCancel != null)
                 TextButton(
                   onPressed: widget.onCancel,
