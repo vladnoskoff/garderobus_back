@@ -1,10 +1,11 @@
 import base64
 import json
 from datetime import datetime
+from decimal import Decimal
 from uuid import uuid4
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Union
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 import models
@@ -21,6 +22,16 @@ client = get_openai_client()
 MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
 MANNEQUIN_URL_PREFIX = settings.MANNEQUIN_IMAGE_URL_PREFIX.rstrip("/")
+
+
+def _coerce_int(value: Optional[Union[int, float, Decimal]]) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return int(round(float(value)))
+    if isinstance(value, float):
+        return int(round(value))
+    return int(value)
 
 
 def _safe_metadata(item: models.Clothes) -> dict:
@@ -175,7 +186,7 @@ def _build_mannequin_prompt(
     return "\n".join(lines)
 
 
-def _save_mannequin_image(image_b64: str, user_id: int) -> str:
+def _save_mannequin_image(image_b64: str, user_id: int, request: Request) -> str:
     filename = f"mannequin_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}.png"
     user_dir = MANNEQUIN_DIR / str(user_id)
 
@@ -195,7 +206,8 @@ def _save_mannequin_image(image_b64: str, user_id: int) -> str:
     relative_path = f"{user_id}/{filename}"
     if MANNEQUIN_URL_PREFIX:
         return f"{MANNEQUIN_URL_PREFIX}/{relative_path}"
-    return f"/{relative_path}"
+
+    return request.url_for("mannequins", path=relative_path)
 
 
 @router.get("/recommendation/{user_id}")
@@ -279,6 +291,7 @@ def ai_recommendation(user_id: int, db: Session = Depends(get_db)):
 @router.get("/mannequin/{user_id}", response_model=schemas.MannequinResponse)
 def generate_mannequin(
     user_id: int,
+    request: Request,
     location_id: Optional[int] = Query(default=None, description="Выбор гардероба по локации"),
     db: Session = Depends(get_db),
 ):
@@ -309,7 +322,7 @@ def generate_mannequin(
         image_response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
-            size="1024x1792",
+            size="1024x1536",
             quality="high",
             n=1,
         )
@@ -319,15 +332,15 @@ def generate_mannequin(
     if not image_response.data:
         raise HTTPException(status_code=502, detail="AI не вернул изображение")
 
-    image_url = _save_mannequin_image(image_response.data[0].b64_json, user_id)
+    image_url = _save_mannequin_image(image_response.data[0].b64_json, user_id, request)
 
     return schemas.MannequinResponse(
         image_url=image_url,
         weather=schemas.WeatherSnapshot(
-            temperature=weather.temperature,
-            humidity=weather.humidity,
+            temperature=_coerce_int(weather.temperature),
+            humidity=_coerce_int(weather.humidity),
             condition=weather.condition,
-            wind_speed=weather.wind_speed,
+            wind_speed=_coerce_int(weather.wind_speed),
         ),
         items=[schemas.MannequinItem.model_validate(item) for item in selected_items],
     )
