@@ -1,8 +1,9 @@
 import base64
 import json
 from datetime import datetime
+from decimal import Decimal
 from uuid import uuid4
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
@@ -21,6 +22,16 @@ client = get_openai_client()
 MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
 MANNEQUIN_URL_PREFIX = settings.MANNEQUIN_IMAGE_URL_PREFIX.rstrip("/")
+
+
+def _coerce_int(value: Optional[Union[int, float, Decimal]]) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        return int(round(float(value)))
+    if isinstance(value, float):
+        return int(round(value))
+    return int(value)
 
 
 def _safe_metadata(item: models.Clothes) -> dict:
@@ -326,10 +337,10 @@ def generate_mannequin(
     return schemas.MannequinResponse(
         image_url=image_url,
         weather=schemas.WeatherSnapshot(
-            temperature=weather.temperature,
-            humidity=weather.humidity,
+            temperature=_coerce_int(weather.temperature),
+            humidity=_coerce_int(weather.humidity),
             condition=weather.condition,
-            wind_speed=weather.wind_speed,
+            wind_speed=_coerce_int(weather.wind_speed),
         ),
         items=[schemas.MannequinItem.model_validate(item) for item in selected_items],
     )
