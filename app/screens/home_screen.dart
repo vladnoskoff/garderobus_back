@@ -149,23 +149,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  String? _formatLocationCoordinates(Map<String, dynamic>? location) {
-    if (location == null) {
-      return 'Используются личные координаты';
-    }
-    final latRaw = location['latitude'];
-    final lonRaw = location['longitude'];
-    if (latRaw == null || lonRaw == null) {
-      return 'Координаты не указаны';
-    }
-    final lat = double.tryParse(latRaw.toString());
-    final lon = double.tryParse(lonRaw.toString());
-    if (lat == null || lon == null) {
-      return 'Координаты не указаны';
-    }
-    return null;
-  }
-
   Future<void> checkInitialSettings() async {
     if (userId == null) return;
 
@@ -455,9 +438,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDarkMode = themeNotifier.themeMode == ThemeMode.dark;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final selectedLocation = _findLocationById(selectedLocationId);
-    final locationTitle = selectedLocation?['name']?.toString() ?? 'Личные данные';
-    final locationSubtitle = _formatLocationCoordinates(selectedLocation);
     final pressureValue = weather?["pressure"];
     final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
 
@@ -591,38 +571,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: colorScheme.onPrimaryContainer,
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-                      // Блок помещения
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxWidth: 400),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              locationTitle,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                            if (locationSubtitle != null) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                locationSubtitle,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                              ),
-                            ],
                           ],
                         ),
                       ),

@@ -24,8 +24,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   bool _isVerifying = false;
   bool _isBiometricAuthenticating = false;
   bool _canUseBiometrics = false;
-  String? _biometricButtonLabel;
-  IconData _biometricIcon = Icons.fingerprint;
+  bool _hasAttemptedBiometric = false;
   String? _error;
 
   @override
@@ -44,30 +43,22 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     final support = await BiometricAuthService.checkSupport();
     if (!mounted || !support.canAuthenticate) return;
 
-    String label = 'Войти по биометрии';
-    IconData icon = Icons.fingerprint;
-
-    switch (support.preferredMethod) {
-      case BiometricMethod.face:
-        label = 'Войти с Face ID';
-        icon = Icons.face;
-        break;
-      case BiometricMethod.fingerprint:
-        label = 'Войти с Touch ID';
-        icon = Icons.fingerprint;
-        break;
-      case BiometricMethod.other:
-        label = 'Войти по биометрии';
-        icon = Icons.verified_user;
-        break;
-      default:
-        break;
-    }
-
     setState(() {
       _canUseBiometrics = true;
-      _biometricButtonLabel = label;
-      _biometricIcon = icon;
+    });
+
+    _attemptBiometricUnlock();
+  }
+
+  void _attemptBiometricUnlock() {
+    if (!_canUseBiometrics || _hasAttemptedBiometric || _isBiometricAuthenticating) {
+      return;
+    }
+
+    _hasAttemptedBiometric = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _unlockWithBiometrics();
     });
   }
 
@@ -110,6 +101,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   }
 
   Future<void> _unlockWithBiometrics() async {
+    if (!mounted) return;
     setState(() {
       _isBiometricAuthenticating = true;
       _error = null;
@@ -128,7 +120,8 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       widget.onUnlocked();
     } else {
       setState(() {
-        _error = 'Биометрическая аутентификация не выполнена.';
+        _error =
+            'Биометрическая аутентификация не выполнена. Введите PIN-код.';
         _isBiometricAuthenticating = false;
       });
     }
@@ -185,20 +178,10 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                       )
                     : const Text('Разблокировать'),
               ),
-              if (_canUseBiometrics) ...[
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  onPressed: (_isVerifying || _isBiometricAuthenticating)
-                      ? null
-                      : _unlockWithBiometrics,
-                  icon: _isBiometricAuthenticating
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(_biometricIcon),
-                  label: Text(_biometricButtonLabel ?? 'Войти по биометрии'),
+              if (_isBiometricAuthenticating) ...[
+                const SizedBox(height: 16),
+                const Center(
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ],
               if (widget.onCancel != null)
