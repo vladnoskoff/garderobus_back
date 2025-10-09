@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import uuid4
 from typing import Iterable, List, Optional, Tuple
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 import models
@@ -175,7 +175,7 @@ def _build_mannequin_prompt(
     return "\n".join(lines)
 
 
-def _save_mannequin_image(image_b64: str, user_id: int) -> str:
+def _save_mannequin_image(image_b64: str, user_id: int, request: Request) -> str:
     filename = f"mannequin_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}.png"
     user_dir = MANNEQUIN_DIR / str(user_id)
 
@@ -195,7 +195,8 @@ def _save_mannequin_image(image_b64: str, user_id: int) -> str:
     relative_path = f"{user_id}/{filename}"
     if MANNEQUIN_URL_PREFIX:
         return f"{MANNEQUIN_URL_PREFIX}/{relative_path}"
-    return f"/{relative_path}"
+
+    return request.url_for("mannequins", path=relative_path)
 
 
 @router.get("/recommendation/{user_id}")
@@ -279,6 +280,7 @@ def ai_recommendation(user_id: int, db: Session = Depends(get_db)):
 @router.get("/mannequin/{user_id}", response_model=schemas.MannequinResponse)
 def generate_mannequin(
     user_id: int,
+    request: Request,
     location_id: Optional[int] = Query(default=None, description="Выбор гардероба по локации"),
     db: Session = Depends(get_db),
 ):
@@ -319,7 +321,7 @@ def generate_mannequin(
     if not image_response.data:
         raise HTTPException(status_code=502, detail="AI не вернул изображение")
 
-    image_url = _save_mannequin_image(image_response.data[0].b64_json, user_id)
+    image_url = _save_mannequin_image(image_response.data[0].b64_json, user_id, request)
 
     return schemas.MannequinResponse(
         image_url=image_url,
