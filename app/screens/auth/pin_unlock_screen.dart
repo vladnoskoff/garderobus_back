@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+
 import '../../services/api_service.dart';
+import '../../services/biometric_auth_service.dart';
 
 class PinUnlockScreen extends StatefulWidget {
   final int userId;
@@ -20,12 +22,53 @@ class PinUnlockScreen extends StatefulWidget {
 class _PinUnlockScreenState extends State<PinUnlockScreen> {
   final TextEditingController _pinController = TextEditingController();
   bool _isVerifying = false;
+  bool _isBiometricAuthenticating = false;
+  bool _canUseBiometrics = false;
+  String? _biometricButtonLabel;
+  IconData _biometricIcon = Icons.fingerprint;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBiometricSupport();
+  }
 
   @override
   void dispose() {
     _pinController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadBiometricSupport() async {
+    final support = await BiometricAuthService.checkSupport();
+    if (!mounted || !support.canAuthenticate) return;
+
+    String label = 'Войти по биометрии';
+    IconData icon = Icons.fingerprint;
+
+    switch (support.preferredMethod) {
+      case BiometricMethod.face:
+        label = 'Войти с Face ID';
+        icon = Icons.face;
+        break;
+      case BiometricMethod.fingerprint:
+        label = 'Войти с Touch ID';
+        icon = Icons.fingerprint;
+        break;
+      case BiometricMethod.other:
+        label = 'Войти по биометрии';
+        icon = Icons.verified_user;
+        break;
+      default:
+        break;
+    }
+
+    setState(() {
+      _canUseBiometrics = true;
+      _biometricButtonLabel = label;
+      _biometricIcon = icon;
+    });
   }
 
   Future<void> _verifyPin() async {
@@ -63,6 +106,31 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
           _isVerifying = false;
         });
       }
+    }
+  }
+
+  Future<void> _unlockWithBiometrics() async {
+    setState(() {
+      _isBiometricAuthenticating = true;
+      _error = null;
+    });
+
+    final success = await BiometricAuthService.authenticate(
+      reason: 'Подтвердите личность для доступа к гардеробу',
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _isBiometricAuthenticating = false;
+      });
+      widget.onUnlocked();
+    } else {
+      setState(() {
+        _error = 'Биометрическая аутентификация не выполнена.';
+        _isBiometricAuthenticating = false;
+      });
     }
   }
 
@@ -117,6 +185,22 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                       )
                     : const Text('Разблокировать'),
               ),
+              if (_canUseBiometrics) ...[
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: (_isVerifying || _isBiometricAuthenticating)
+                      ? null
+                      : _unlockWithBiometrics,
+                  icon: _isBiometricAuthenticating
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(_biometricIcon),
+                  label: Text(_biometricButtonLabel ?? 'Войти по биометрии'),
+                ),
+              ],
               if (widget.onCancel != null)
                 TextButton(
                   onPressed: widget.onCancel,
