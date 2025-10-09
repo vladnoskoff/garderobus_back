@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../services/api_service.dart';
 import '../../services/theme_controller.dart';
 import 'pin_unlock_screen.dart';
@@ -16,6 +18,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final passwordController = TextEditingController();
   bool isLoading = false;
 
+  @override
+  void dispose() {
+    emailController.dispose();
+    passwordController.dispose();
+    super.dispose();
+  }
+
   void login() async {
     setState(() => isLoading = true);
     try {
@@ -26,6 +35,11 @@ class _LoginScreenState extends State<LoginScreen> {
       final storage = const FlutterSecureStorage();
       await storage.write(key: "user_id", value: response["user_id"].toString());
       await storage.write(key: "token", value: response["access_token"]);
+      try {
+        await TextInput.finishAutofillContext();
+      } catch (_) {
+        // Игнорируем, если контекст автозаполнения отсутствует.
+      }
 
       try {
         final themeNotifier = ThemeScope.of(context);
@@ -49,7 +63,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 Navigator.pushReplacementNamed(context, '/home');
               },
               onCancel: () async {
-                await storage.deleteAll();
+                await storage.delete(key: "user_id");
+                await storage.delete(key: "token");
                 if (context.mounted) {
                   Navigator.pushAndRemoveUntil(
                     context,
@@ -102,15 +117,32 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                TextField(
-                  controller: emailController,
-                  decoration: const InputDecoration(labelText: "Email"),
-                ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: passwordController,
-                  obscureText: true,
-                  decoration: const InputDecoration(labelText: "Пароль"),
+                AutofillGroup(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        autofillHints: const [
+                          AutofillHints.email,
+                          AutofillHints.username,
+                        ],
+                        textCapitalization: TextCapitalization.none,
+                        decoration: const InputDecoration(labelText: "Email"),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        textInputAction: TextInputAction.done,
+                        autofillHints: const [AutofillHints.password],
+                        decoration: const InputDecoration(labelText: "Пароль"),
+                        onSubmitted: (_) => login(),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 24),
                 FilledButton(

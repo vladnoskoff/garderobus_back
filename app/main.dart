@@ -174,7 +174,8 @@ class _AuthWrapperState extends State<AuthWrapper> {
             setState(() => _destination = _AuthDestination.home);
           },
           onCancel: () async {
-            await storage.deleteAll();
+            await storage.delete(key: 'user_id');
+            await storage.delete(key: 'token');
             if (!mounted) return;
             setState(() {
               _destination = _AuthDestination.login;

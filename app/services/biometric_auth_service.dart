@@ -49,6 +49,10 @@ class BiometricAuthService {
       );
     } on PlatformException {
       return const BiometricAuthSupport(canAuthenticate: false);
+    } on MissingPluginException {
+      return const BiometricAuthSupport(canAuthenticate: false);
+    } catch (_) {
+      return const BiometricAuthSupport(canAuthenticate: false);
     }
   }
 
@@ -70,6 +74,10 @@ class BiometricAuthService {
         ),
       );
     } on PlatformException {
+      return false;
+    } on MissingPluginException {
+      return false;
+    } catch (_) {
       return false;
     }
   }
