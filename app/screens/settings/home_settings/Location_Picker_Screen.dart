@@ -61,7 +61,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 _mapController.move(point, _currentZoom);
               },
               onPositionChanged: (position, hasGesture) {
-                _currentZoom = position.zoom;
+                _currentZoom = position.zoom ?? _currentZoom;
               },
             ),
             children: [

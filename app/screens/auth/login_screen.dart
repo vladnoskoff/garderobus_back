@@ -36,7 +36,8 @@ class _LoginScreenState extends State<LoginScreen> {
       await storage.write(key: "user_id", value: response["user_id"].toString());
       await storage.write(key: "token", value: response["access_token"]);
       try {
-        await TextInput.finishAutofillContext();
+        await SystemChannels.textInput
+            .invokeMethod<void>('TextInput.finishAutofillContext');
       } catch (_) {
         // Игнорируем, если контекст автозаполнения отсутствует.
       }
@@ -139,7 +140,11 @@ class _LoginScreenState extends State<LoginScreen> {
                         textInputAction: TextInputAction.done,
                         autofillHints: const [AutofillHints.password],
                         decoration: const InputDecoration(labelText: "Пароль"),
-                        onSubmitted: (_) => login(),
+                        onSubmitted: (_) {
+                          if (!isLoading) {
+                            login();
+                          }
+                        },
                       ),
                     ],
                   ),
