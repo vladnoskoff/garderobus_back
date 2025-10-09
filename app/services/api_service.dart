@@ -317,10 +317,11 @@ class ApiService {
     request.files.add(await http.MultipartFile.fromPath('file', image.path));
 
     final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+    final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
 
-    if (response.statusCode != 200) {
-      final respStr = await response.stream.bytesToString();
-      print("Ошибка при добавлении: $respStr");
+    if (!isSuccess) {
+      print("Ошибка при добавлении: $responseBody");
       throw Exception("Ошибка добавления одежды");
     }
   }
@@ -481,7 +482,16 @@ class ApiService {
 
     while (mannequins.length < count && attempts < count * 2) {
       attempts += 1;
-      final batch = await fetchBatch();
+      List<Map<String, dynamic>> batch;
+      try {
+        batch = await fetchBatch();
+      } catch (e) {
+        if (mannequins.isEmpty) {
+          rethrow;
+        }
+        print('Не удалось получить очередную генерацию манекена: $e');
+        break;
+      }
       if (batch.isEmpty) {
         break;
       }

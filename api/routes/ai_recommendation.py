@@ -309,7 +309,7 @@ def generate_mannequin(
         image_response = client.images.generate(
             model="gpt-image-1",
             prompt=prompt,
-            size="1024x1792",
+            size="1024x1536",
             quality="high",
             n=1,
         )

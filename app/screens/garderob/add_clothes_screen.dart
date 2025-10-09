@@ -247,68 +247,62 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
                       },
                     ),
                   const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _nameController,
-                    enabled: !_useAiAutoFill,
-                    decoration: const InputDecoration(labelText: 'Название'),
-                    validator: (value) {
-                      if (_useAiAutoFill) return null;
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Введите название';
-                      }
-                      return null;
-                    },
-                  ),
-                  TextFormField(
-                    controller: _categoryController,
-                    enabled: !_useAiAutoFill,
-                    decoration: const InputDecoration(labelText: 'Категория'),
-                    validator: (value) {
-                      if (_useAiAutoFill) return null;
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Введите категорию';
-                      }
-                      return null;
-                    },
-                  ),
-                  DropdownButtonFormField<String>(
-                    decoration: const InputDecoration(labelText: 'Сезон'),
-                    value: season.isNotEmpty ? season : null,
-                    items: ['Лето', 'Осень', 'Зима', 'Весна']
-                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                        .toList(),
-                    onChanged: _useAiAutoFill
-                        ? null
-                        : (value) {
-                            setState(() {
-                              season = value ?? '';
-                            });
-                          },
-                    validator: (value) {
-                      if (_useAiAutoFill) return null;
-                      if (value == null || value.isEmpty) {
-                        return 'Выберите сезон';
-                      }
-                      return null;
-                    },
-                  ),
-                  TextFormField(
-                    controller: _colorController,
-                    enabled: !_useAiAutoFill,
-                    decoration: const InputDecoration(labelText: 'Цвет'),
-                    validator: (value) {
-                      if (_useAiAutoFill) return null;
-                      if (value == null || value.trim().isEmpty) {
-                        return 'Введите цвет';
-                      }
-                      return null;
-                    },
-                  ),
-                  TextFormField(
-                    controller: _materialController,
-                    decoration: const InputDecoration(labelText: 'Материал (необязательно)'),
-                  ),
-                  const SizedBox(height: 16),
+                  if (!_useAiAutoFill) ...[
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(labelText: 'Название'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Введите название';
+                        }
+                        return null;
+                      },
+                    ),
+                    TextFormField(
+                      controller: _categoryController,
+                      decoration: const InputDecoration(labelText: 'Категория'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Введите категорию';
+                        }
+                        return null;
+                      },
+                    ),
+                    DropdownButtonFormField<String>(
+                      decoration: const InputDecoration(labelText: 'Сезон'),
+                      value: season.isNotEmpty ? season : null,
+                      items: ['Лето', 'Осень', 'Зима', 'Весна']
+                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          season = value ?? '';
+                        });
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Выберите сезон';
+                        }
+                        return null;
+                      },
+                    ),
+                    TextFormField(
+                      controller: _colorController,
+                      decoration: const InputDecoration(labelText: 'Цвет'),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Введите цвет';
+                        }
+                        return null;
+                      },
+                    ),
+                    TextFormField(
+                      controller: _materialController,
+                      decoration:
+                          const InputDecoration(labelText: 'Материал (необязательно)'),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   if (_image != null)
                     Column(
                       children: [
