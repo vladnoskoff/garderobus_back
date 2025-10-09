@@ -62,35 +62,36 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Widget buildExitButton(BuildContext context) {
-  return GestureDetector(
-    onTap: () async {
-      final storage = FlutterSecureStorage();
-      await storage.deleteAll();
+    return GestureDetector(
+      onTap: () async {
+        final storage = FlutterSecureStorage();
+        await storage.delete(key: 'user_id');
+        await storage.delete(key: 'token');
 
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-        (route) => false,
-      );
-    },
-    child: Container(
-      width: 170,
-      height: 59,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFF0C0C),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: const Center(
-        child: Text(
-          'Выход',
-          style: TextStyle(
-            color: Colors.black,
-            fontSize: 24,
-            fontWeight: FontWeight.w400,
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          (route) => false,
+        );
+      },
+      child: Container(
+        width: 170,
+        height: 59,
+        decoration: BoxDecoration(
+          color: const Color(0xFFFF0C0C),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Center(
+          child: Text(
+            'Выход',
+            style: TextStyle(
+              color: Colors.black,
+              fontSize: 24,
+              fontWeight: FontWeight.w400,
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

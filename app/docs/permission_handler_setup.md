@@ -40,6 +40,8 @@ flutter pub get
 <string>Для добавления фотографий одежды требуется доступ к камере.</string>
 <key>NSPhotoLibraryUsageDescription</key>
 <string>Для загрузки изображений одежды требуется доступ к фотогалерее.</string>
+<key>NSFaceIDUsageDescription</key>
+<string>Face ID используется для быстрого входа в приложение вместо PIN-кода.</string>
 ```
 
 После этого выполните `cd ios && pod install` (или `flutter pub get`, который запустит `pod install` автоматически).

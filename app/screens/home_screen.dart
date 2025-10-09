@@ -149,23 +149,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return null;
   }
 
-  String _formatLocationCoordinates(Map<String, dynamic>? location) {
-    if (location == null) {
-      return 'Используются личные координаты';
-    }
-    final latRaw = location['latitude'];
-    final lonRaw = location['longitude'];
-    if (latRaw == null || lonRaw == null) {
-      return 'Координаты не указаны';
-    }
-    final lat = double.tryParse(latRaw.toString());
-    final lon = double.tryParse(lonRaw.toString());
-    if (lat == null || lon == null) {
-      return 'Координаты не указаны';
-    }
-    return '${lat.toStringAsFixed(4)}, ${lon.toStringAsFixed(4)}';
-  }
-
   Future<void> checkInitialSettings() async {
     if (userId == null) return;
 
@@ -455,9 +438,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final isDarkMode = themeNotifier.themeMode == ThemeMode.dark;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final selectedLocation = _findLocationById(selectedLocationId);
-    final locationTitle = selectedLocation?['name']?.toString() ?? 'Личные данные';
-    final locationSubtitle = _formatLocationCoordinates(selectedLocation);
+    final pressureValue = weather?["pressure"];
+    final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
 
     return Scaffold(
       appBar: AppBar(
@@ -568,6 +550,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     color: colorScheme.onPrimaryContainer,
                                   ),
                                 ),
+                                if (pressureMm != null) ...[
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Давление: $pressureMm мм рт. ст.',
+                                    style: theme.textTheme.titleMedium?.copyWith(
+                                      color: colorScheme.onPrimaryContainer,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                             Image.network(
@@ -580,90 +571,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 color: colorScheme.onPrimaryContainer,
                               ),
                             ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-                      // Блок помещения
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxWidth: 400),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              locationTitle,
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              locationSubtitle,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onPrimaryContainer,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 10),
-                      // Блок давления
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxWidth: 400),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "${(weather!["pressure"] * 0.75006).round()}",
-                                      style: theme.textTheme.displaySmall?.copyWith(
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                    Text(
-                                      "мм рт. ст.",
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: colorScheme.onPrimaryContainer,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                Icon(
-                                  Icons.trending_up,
-                                  size: 48,
-                                  color: colorScheme.onPrimaryContainer,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            // Container(
-                            //   height: 80,
-                            //   decoration: BoxDecoration(
-                            //     color: Colors.white.withOpacity(0.8),
-                            //     borderRadius: BorderRadius.circular(10),
-                            //   ),
-                            //   child: Center(
-                            //     child: Text("🔧 Здесь будет график давления"), // или график через `fl_chart`
-                            //   ),
-                            // ),
                           ],
                         ),
                       ),
