@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 
@@ -14,10 +14,12 @@ class UserCreate(BaseModel):
     theme_preference: Optional[str] = None
     pin_code: Optional[str] = None
 
+
 class UserLogin(BaseModel):
     email: str
     password: str
-    
+
+
 class UserResponse(BaseModel):
     id: int
     name: str
@@ -33,10 +35,11 @@ class UserResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
-    #phone: Optional[str] = None
+    # phone: Optional[str] = None
     password: Optional[str] = None
     location: Optional[str] = None
     gender: Optional[str] = None
@@ -46,12 +49,13 @@ class UserUpdate(BaseModel):
 
 class PinVerificationRequest(BaseModel):
     pin_code: str
-    
+
+
 class ApiKeysUpdate(BaseModel):
     openai_api_key: Optional[str]
     weather_api_key: Optional[str]
-    
-    
+
+
 class ClothesCreate(BaseModel):
     name: str
     category: str
@@ -59,11 +63,14 @@ class ClothesCreate(BaseModel):
     color: str
     material: Optional[str] = None
     image_url: Optional[str] = None
+    prompt_description: Optional[str] = None
     care_instructions: Optional[str] = None
     temperature_min: Optional[int] = None
     temperature_max: Optional[int] = None
     ai_metadata: Optional[dict] = None
     location_id: Optional[int] = None
+    image_gallery: List[str] = Field(default_factory=list)
+
 
 class ClothesResponse(ClothesCreate):
     id: int
@@ -72,6 +79,20 @@ class ClothesResponse(ClothesCreate):
 
     class Config:
         from_attributes = True
+
+
+class ClothesUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    season: Optional[str] = None
+    color: Optional[str] = None
+    material: Optional[str] = None
+    prompt_description: Optional[str] = None
+    care_instructions: Optional[str] = None
+    temperature_min: Optional[int] = None
+    temperature_max: Optional[int] = None
+    ai_metadata: Optional[dict] = None
+    location_id: Optional[int] = None
 
 
 class ClothesInsights(BaseModel):
@@ -132,6 +153,19 @@ class MannequinResponse(BaseModel):
     items: List[MannequinItem]
 
 
+class StoredMannequinResponse(BaseModel):
+    id: int
+    user_id: int
+    image_url: str
+    location_id: Optional[int] = None
+    created_at: datetime
+    items: List[MannequinItem] = Field(default_factory=list)
+    weather: Optional[WeatherSnapshot] = None
+
+    class Config:
+        from_attributes = True
+
+
 class WardrobeLocationBase(BaseModel):
     name: str
     latitude: Optional[float] = None
@@ -156,11 +190,13 @@ class WardrobeLocationResponse(WardrobeLocationBase):
     class Config:
         from_attributes = True
 
+
 class WeatherCreate(BaseModel):
     temperature: int
     humidity: int
     condition: str
     wind_speed: Optional[int] = None
+
 
 class WeatherResponse(WeatherCreate):
     id: int
@@ -169,10 +205,12 @@ class WeatherResponse(WeatherCreate):
     class Config:
         from_attributes = True
 
+
 class OutfitCreate(BaseModel):
     user_id: int
     weather_id: int
     clothing_ids: List[int]
+
 
 class OutfitResponse(OutfitCreate):
     id: int
@@ -181,6 +219,7 @@ class OutfitResponse(OutfitCreate):
 
     class Config:
         from_attributes = True
+
 
 class WearHistoryResponse(BaseModel):
     id: int
