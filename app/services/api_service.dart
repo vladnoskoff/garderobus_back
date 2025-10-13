@@ -279,6 +279,22 @@ class ApiService {
   }
 
 
+  // Добавление одежды пользователя
+  static Future<void> addClothes({
+    required String name,
+    required String category,
+    required String season,
+    required String color,
+    String? material,
+    required List<File> images,
+    bool autoFill = false,
+    int? locationId,
+    String? promptDescription,
+    String? careInstructions,
+  }) async {
+    final storage = const FlutterSecureStorage();
+    final userId = await storage.read(key: "user_id");
+
 // Добовление одежды пользователя
 static Future<void> addClothes({
   required String name,
@@ -295,13 +311,32 @@ static Future<void> addClothes({
   final storage = const FlutterSecureStorage();
   final userId = await storage.read(key: "user_id");
 
-  if (userId == null) {
-    throw Exception("user_id не найден в хранилище");
-  }
+    if (images.isEmpty) {
+      throw Exception("Не выбраны изображения для загрузки");
+    }
 
-  if (images.isEmpty) {
-    throw Exception("Не выбраны изображения для загрузки");
-  }
+    final request = http.MultipartRequest(
+      'POST',
+      Uri.parse('$baseUrl/clothes/'),
+    )
+      ..fields['user_id'] = userId
+      ..fields['name'] = name
+      ..fields['category'] = category
+      ..fields['season'] = season
+      ..fields['color'] = color
+      ..fields['auto_fill'] = autoFill.toString();
+
+    if (material != null && material.trim().isNotEmpty) {
+      request.fields['material'] = material.trim();
+    }
+
+    if (promptDescription != null) {
+      request.fields['prompt_description'] = promptDescription.trim();
+    }
+
+    if (careInstructions != null) {
+      request.fields['care_instructions'] = careInstructions.trim();
+    }
 
   final request = http.MultipartRequest(
     'POST',
@@ -314,9 +349,9 @@ static Future<void> addClothes({
     ..fields['color'] = color
     ..fields['auto_fill'] = autoFill.toString();
 
-  if (material != null && material.trim().isNotEmpty) {
-    request.fields['material'] = material.trim();
-  }
+    for (final image in images) {
+      request.files.add(await http.MultipartFile.fromPath('files', image.path));
+    }
 
   if (promptDescription != null) {
     request.fields['prompt_description'] = promptDescription.trim();
