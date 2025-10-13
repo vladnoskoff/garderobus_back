@@ -82,10 +82,16 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
 
 Future<bool> _requestPermission(Permission permission) async {
-  final status = await permission.request();
-  if (status.isGranted) {
+  var status = await permission.status;
+  if (status.isGranted || status.isLimited) {
     return true;
   }
+
+  status = await permission.request();
+  if (status.isGranted || status.isLimited) {
+    return true;
+  }
+
   if (status.isPermanentlyDenied && mounted) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -97,7 +103,7 @@ Future<bool> _requestPermission(Permission permission) async {
       ),
     );
   }
-  return status.isGranted;
+  return false;
 }
 
 Future<void> _addImageFromCamera() async {
