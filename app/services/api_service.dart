@@ -295,9 +295,21 @@ class ApiService {
     final storage = const FlutterSecureStorage();
     final userId = await storage.read(key: "user_id");
 
-    if (userId == null) {
-      throw Exception("user_id не найден в хранилище");
-    }
+// Добовление одежды пользователя
+static Future<void> addClothes({
+  required String name,
+  required String category,
+  required String season,
+  required String color,
+  String? material,
+  required List<File> images,
+  bool autoFill = false,
+  int? locationId,
+  String? promptDescription,
+  String? careInstructions,
+}) async {
+  final storage = const FlutterSecureStorage();
+  final userId = await storage.read(key: "user_id");
 
     if (images.isEmpty) {
       throw Exception("Не выбраны изображения для загрузки");
@@ -326,23 +338,47 @@ class ApiService {
       request.fields['care_instructions'] = careInstructions.trim();
     }
 
-    if (locationId != null) {
-      request.fields['location_id'] = locationId.toString();
-    }
+  final request = http.MultipartRequest(
+    'POST',
+    Uri.parse('$baseUrl/clothes/'),
+  )
+    ..fields['user_id'] = userId
+    ..fields['name'] = name
+    ..fields['category'] = category
+    ..fields['season'] = season
+    ..fields['color'] = color
+    ..fields['auto_fill'] = autoFill.toString();
 
     for (final image in images) {
       request.files.add(await http.MultipartFile.fromPath('files', image.path));
     }
 
-    final response = await request.send();
-    final responseBody = await response.stream.bytesToString();
-    final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
-
-    if (!isSuccess) {
-      print("Ошибка при добавлении: $responseBody");
-      throw Exception("Ошибка добавления одежды");
-    }
+  if (promptDescription != null) {
+    request.fields['prompt_description'] = promptDescription.trim();
   }
+
+  if (careInstructions != null) {
+    request.fields['care_instructions'] = careInstructions.trim();
+  }
+}
+
+  if (locationId != null) {
+    request.fields['location_id'] = locationId.toString();
+  }
+
+  for (final image in images) {
+    request.files.add(await http.MultipartFile.fromPath('files', image.path));
+  }
+
+  final response = await request.send();
+  final responseBody = await response.stream.bytesToString();
+  final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
+
+  if (!isSuccess) {
+    print("Ошибка при добавлении: $responseBody");
+    throw Exception("Ошибка добавления одежды");
+  }
+}
 
   // Загрузка изображения
   static Future<String> uploadImage(File image) async {
@@ -535,6 +571,7 @@ static Future<Clothes> updateClothes({
           .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
           .toList();
     }
+  }
 
     return const [];
   }
@@ -563,6 +600,9 @@ static Future<Clothes> updateClothes({
 
     throw Exception('Не удалось прочитать ответ при генерации манекена');
   }
+
+  return history.take(count).toList();
+}
 
   // Получить визуальное изображение наряда
   static Future<String> getVisualOutfit(int userId) async {
