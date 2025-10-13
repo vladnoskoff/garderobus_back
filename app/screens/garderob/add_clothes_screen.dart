@@ -87,7 +87,17 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
 
 
+  static const _photosPermissionOptions = PermissionRequestOptions(
+    ios: IosPermissionOptions(
+      presentModalOnPermission: true,
+      presentModalOnLimited: true,
+    ),
+  );
+
   Future<bool> _requestPermission(Permission permission) async {
+    final options = permission == Permission.photos
+        ? _photosPermissionOptions
+        : const PermissionRequestOptions();
     var status = await permission.status;
 
     if (status.isGranted) {
@@ -98,7 +108,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
       return await _handleLimitedPhotoPermission(permission);
     }
 
-    status = await permission.request();
+    status = await permission.request(options);
 
     if (status.isGranted) {
       return true;
@@ -199,7 +209,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
     switch (action) {
       case _PhotoPermissionAction.chooseMore:
-        final updatedStatus = await permission.request();
+        final updatedStatus = await permission.request(_photosPermissionOptions);
         if (updatedStatus.isGranted || updatedStatus.isLimited) {
           return true;
         }
