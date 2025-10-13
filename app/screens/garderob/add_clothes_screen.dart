@@ -6,6 +6,12 @@ import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
 
+enum _PhotoPermissionAction {
+  keepLimited,
+  chooseMore,
+  openSettings,
+}
+
 class AddClothesScreen extends StatefulWidget {
   final int? initialLocationId;
 
@@ -81,21 +87,54 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
 
 
-Future<bool> _requestPermission(Permission permission) async {
-  var status = await permission.status;
-  if (status.isGranted || status.isLimited) {
-    return true;
+  Future<bool> _requestPermission(Permission permission) async {
+    var status = await permission.status;
+
+    if (status.isGranted) {
+      return true;
+    }
+
+    if (status.isLimited && permission == Permission.photos) {
+      return await _handleLimitedPhotoPermission(permission);
+    }
+
+    status = await permission.request();
+
+    if (status.isGranted) {
+      return true;
+    }
+
+    if (status.isLimited && permission == Permission.photos) {
+      return await _handleLimitedPhotoPermission(permission);
+    }
+
+    if (mounted) {
+      if (status.isPermanentlyDenied || status.isRestricted) {
+        _showPermissionSettingsSnackBar(permission);
+      } else if (status.isDenied) {
+        _showPermissionRationaleSnackBar(permission);
+      }
+    }
+
+    return false;
   }
 
-  status = await permission.request();
-  if (status.isGranted || status.isLimited) {
-    return true;
+  void _showPermissionRationaleSnackBar(Permission permission) {
+    final description = permission == Permission.camera
+        ? 'Камера недоступна без разрешения.'
+        : 'Чтобы выбрать фото, разрешите доступ к библиотеке.';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(description)),
+    );
   }
 
-  if (status.isPermanentlyDenied && mounted) {
+  void _showPermissionSettingsSnackBar(Permission permission) {
+    final description = permission == Permission.camera
+        ? 'Разрешите доступ к камере через настройки приложения'
+        : 'Разрешите доступ к Фото через настройки приложения';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Разрешите доступ через настройки приложения'),
+        content: Text(description),
         action: SnackBarAction(
           label: 'Настройки',
           onPressed: () => openAppSettings(),
@@ -103,8 +142,80 @@ Future<bool> _requestPermission(Permission permission) async {
       ),
     );
   }
-  return false;
-}
+
+  Future<bool> _handleLimitedPhotoPermission(Permission permission) async {
+    if (!mounted) return false;
+
+    final action = await showModalBottomSheet<_PhotoPermissionAction>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'У вас включен частичный доступ к Фото',
+                  style: theme.textTheme.titleMedium,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Вы можете продолжить с выбранными изображениями или разрешить '
+                  'приложению доступ ко всем фото.',
+                  style: theme.textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.check_circle, color: colorScheme.primary),
+                  title: const Text('Продолжить с текущим доступом'),
+                  onTap: () => Navigator.pop(context, _PhotoPermissionAction.keepLimited),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.collections, color: colorScheme.primary),
+                  title: const Text('Выбрать другие фотографии'),
+                  subtitle: const Text('Откроется системный диалог с выбором доступа'),
+                  onTap: () => Navigator.pop(context, _PhotoPermissionAction.chooseMore),
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.settings, color: colorScheme.primary),
+                  title: const Text('Настроить через настройки iOS'),
+                  subtitle: const Text('Можно дать полный доступ ко всем фото'),
+                  onTap: () => Navigator.pop(context, _PhotoPermissionAction.openSettings),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    switch (action) {
+      case _PhotoPermissionAction.chooseMore:
+        final updatedStatus = await permission.request();
+        if (updatedStatus.isGranted || updatedStatus.isLimited) {
+          return true;
+        }
+        if (mounted &&
+            (updatedStatus.isPermanentlyDenied || updatedStatus.isRestricted)) {
+          _showPermissionSettingsSnackBar(permission);
+        }
+        return false;
+      case _PhotoPermissionAction.openSettings:
+        await openAppSettings();
+        return false;
+      case _PhotoPermissionAction.keepLimited:
+      case null:
+        return true;
+    }
+  }
 
 Future<void> _addImageFromCamera() async {
   final granted = await _requestPermission(Permission.camera);
