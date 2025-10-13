@@ -1,7 +1,10 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http/http.dart' as http;
+
 import 'clothes.dart';
 
 class ApiService {
@@ -256,7 +259,7 @@ class ApiService {
     
     if (response.statusCode == 200) {
       final utf8Response = utf8.decode(response.bodyBytes); // Декодируем в utf8
-      print("Ответ от сервера: $utf8Response"); // Выводим ответ в консоль Flutter
+      debugPrint("Ответ от сервера: $utf8Response"); // Выводим ответ в консоль Flutter
       return jsonDecode(utf8Response);
     } else {
       throw Exception("Ошибка при загрузке одежды: ${response.statusCode}");
@@ -295,21 +298,9 @@ class ApiService {
     final storage = const FlutterSecureStorage();
     final userId = await storage.read(key: "user_id");
 
-// Добовление одежды пользователя
-static Future<void> addClothes({
-  required String name,
-  required String category,
-  required String season,
-  required String color,
-  String? material,
-  required List<File> images,
-  bool autoFill = false,
-  int? locationId,
-  String? promptDescription,
-  String? careInstructions,
-}) async {
-  final storage = const FlutterSecureStorage();
-  final userId = await storage.read(key: "user_id");
+    if (userId == null || userId.isEmpty) {
+      throw Exception('Не удалось определить пользователя для добавления одежды');
+    }
 
     if (images.isEmpty) {
       throw Exception("Не выбраны изображения для загрузки");
@@ -330,55 +321,30 @@ static Future<void> addClothes({
       request.fields['material'] = material.trim();
     }
 
-    if (promptDescription != null) {
+    if (promptDescription != null && promptDescription.trim().isNotEmpty) {
       request.fields['prompt_description'] = promptDescription.trim();
     }
 
-    if (careInstructions != null) {
+    if (careInstructions != null && careInstructions.trim().isNotEmpty) {
       request.fields['care_instructions'] = careInstructions.trim();
     }
 
-  final request = http.MultipartRequest(
-    'POST',
-    Uri.parse('$baseUrl/clothes/'),
-  )
-    ..fields['user_id'] = userId
-    ..fields['name'] = name
-    ..fields['category'] = category
-    ..fields['season'] = season
-    ..fields['color'] = color
-    ..fields['auto_fill'] = autoFill.toString();
+    if (locationId != null) {
+      request.fields['location_id'] = locationId.toString();
+    }
 
     for (final image in images) {
       request.files.add(await http.MultipartFile.fromPath('files', image.path));
     }
 
-  if (promptDescription != null) {
-    request.fields['prompt_description'] = promptDescription.trim();
-  }
+    final response = await request.send();
+    final responseBody = await response.stream.bytesToString();
+    final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
 
-  if (careInstructions != null) {
-    request.fields['care_instructions'] = careInstructions.trim();
+    if (!isSuccess) {
+      throw Exception("Ошибка добавления одежды: $responseBody");
+    }
   }
-}
-
-  if (locationId != null) {
-    request.fields['location_id'] = locationId.toString();
-  }
-
-  for (final image in images) {
-    request.files.add(await http.MultipartFile.fromPath('files', image.path));
-  }
-
-  final response = await request.send();
-  final responseBody = await response.stream.bytesToString();
-  final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
-
-  if (!isSuccess) {
-    print("Ошибка при добавлении: $responseBody");
-    throw Exception("Ошибка добавления одежды");
-  }
-}
 
   // Загрузка изображения
   static Future<String> uploadImage(File image) async {
@@ -567,11 +533,10 @@ static Future<Clothes> updateClothes({
     final dynamic data = json.decode(utf8.decode(response.bodyBytes));
     if (data is List) {
       return data
-          .whereType<Map>()
-          .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+          .whereType<Map<String, dynamic>>()
+          .map((item) => Map<String, dynamic>.from(item))
           .toList();
     }
-  }
 
     return const [];
   }
@@ -600,9 +565,6 @@ static Future<Clothes> updateClothes({
 
     throw Exception('Не удалось прочитать ответ при генерации манекена');
   }
-
-  return history.take(count).toList();
-}
 
   // Получить визуальное изображение наряда
   static Future<String> getVisualOutfit(int userId) async {
