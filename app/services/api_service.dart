@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'dart:io';
+import 'clothes.dart';
 
 class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
@@ -277,22 +278,29 @@ class ApiService {
     }
   }
 
-  // Добовление одежды пользователя
+
+  // Добавление одежды пользователя
   static Future<void> addClothes({
     required String name,
     required String category,
     required String season,
     required String color,
     String? material,
-    required File image,
+    required List<File> images,
     bool autoFill = false,
     int? locationId,
+    String? promptDescription,
+    String? careInstructions,
   }) async {
     final storage = const FlutterSecureStorage();
     final userId = await storage.read(key: "user_id");
 
     if (userId == null) {
       throw Exception("user_id не найден в хранилище");
+    }
+
+    if (images.isEmpty) {
+      throw Exception("Не выбраны изображения для загрузки");
     }
 
     final request = http.MultipartRequest(
@@ -306,15 +314,25 @@ class ApiService {
       ..fields['color'] = color
       ..fields['auto_fill'] = autoFill.toString();
 
-    if (material != null && material.isNotEmpty) {
-      request.fields['material'] = material;
+    if (material != null && material.trim().isNotEmpty) {
+      request.fields['material'] = material.trim();
+    }
+
+    if (promptDescription != null) {
+      request.fields['prompt_description'] = promptDescription.trim();
+    }
+
+    if (careInstructions != null) {
+      request.fields['care_instructions'] = careInstructions.trim();
     }
 
     if (locationId != null) {
       request.fields['location_id'] = locationId.toString();
     }
 
-    request.files.add(await http.MultipartFile.fromPath('file', image.path));
+    for (final image in images) {
+      request.files.add(await http.MultipartFile.fromPath('files', image.path));
+    }
 
     final response = await request.send();
     final responseBody = await response.stream.bytesToString();
@@ -347,7 +365,65 @@ class ApiService {
     }
   }
 
-  // Удалить вещь
+  
+static Future<Clothes> updateClothes({
+  required int clothesId,
+  String? name,
+  String? category,
+  String? season,
+  String? color,
+  String? material,
+  String? promptDescription,
+  String? careInstructions,
+  int? temperatureMin,
+  int? temperatureMax,
+  int? locationId,
+  Map<String, dynamic>? aiMetadata,
+}) async {
+  final uri = Uri.parse('$baseUrl/clothes/$clothesId');
+  final Map<String, dynamic> body = {};
+
+  void setField(String key, dynamic value) {
+    if (value != null) {
+      body[key] = value;
+    }
+  }
+
+  setField('name', name);
+  setField('category', category);
+  setField('season', season);
+  setField('color', color);
+  setField('material', material);
+  setField('prompt_description', promptDescription);
+  setField('care_instructions', careInstructions);
+  setField('temperature_min', temperatureMin);
+  setField('temperature_max', temperatureMax);
+  setField('location_id', locationId);
+  setField('ai_metadata', aiMetadata);
+
+  if (body.isEmpty) {
+    throw Exception('Нет данных для обновления');
+  }
+
+  final response = await http.patch(
+    uri,
+    headers: {'Content-Type': 'application/json'},
+    body: jsonEncode(body),
+  );
+
+  if (response.statusCode != 200) {
+    final message = response.body.isNotEmpty ? response.body : 'Ошибка обновления одежды';
+    throw Exception(message);
+  }
+
+  final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+  if (decoded is Map<String, dynamic>) {
+    return Clothes.fromJson(decoded);
+  }
+  throw Exception('Неожиданный формат ответа при обновлении одежды');
+}
+
+// Удалить вещь
   static Future<void> deleteClothes(int clothesId) async {
     final response = await http.delete(Uri.parse("$baseUrl/clothes/$clothesId"));
     if (response.statusCode != 200) {
@@ -431,94 +507,61 @@ class ApiService {
     return jsonDecode(response.body)["recommendation"];
   }
 
-  static Future<List<Map<String, dynamic>>> getMannequins(
+
+  static Future<List<Map<String, dynamic>>> getMannequinHistory(
     int userId, {
     int? locationId,
-    int count = 3,
+    int limit = 1,
   }) async {
-    final queryParameters = <String, String>{
+    final query = <String, String>{
+      'limit': limit.toString(),
       if (locationId != null) 'location_id': locationId.toString(),
     };
 
-    Future<List<Map<String, dynamic>>> fetchBatch() async {
-      final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
-      final uri = queryParameters.isEmpty
-          ? baseUri
-          : baseUri.replace(queryParameters: queryParameters);
+    final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId/history");
+    final uri = query.isEmpty
+        ? baseUri
+        : baseUri.replace(queryParameters: query);
 
-      final response = await http.get(uri);
-      if (response.statusCode != 200) {
-        throw Exception('Ошибка при получении манекенов');
-      }
-
-      final dynamic data = json.decode(utf8.decode(response.bodyBytes));
-
-      Map<String, dynamic> normalizeMap(Map source) {
-        return source.map((key, value) => MapEntry(key.toString(), value));
-      }
-
-      if (data is List) {
-        return data.whereType<Map>().map((item) => normalizeMap(item as Map)).toList();
-      }
-
-      if (data is Map) {
-        final mapData = normalizeMap(data as Map);
-        final mannequinsList = mapData['mannequins'];
-        if (mannequinsList is List) {
-          return mannequinsList
-              .whereType<Map>()
-              .map((item) => normalizeMap(item as Map))
-              .toList();
-        }
-        return [mapData];
-      }
-
-      return [];
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при получении истории манекенов');
     }
 
-    final List<Map<String, dynamic>> mannequins = [];
-    final Set<String> seenImages = {};
-    int attempts = 0;
-
-    while (mannequins.length < count && attempts < count * 2) {
-      attempts += 1;
-      List<Map<String, dynamic>> batch;
-      try {
-        batch = await fetchBatch();
-      } catch (e) {
-        if (mannequins.isEmpty) {
-          rethrow;
-        }
-        print('Не удалось получить очередную генерацию манекена: $e');
-        break;
-      }
-      if (batch.isEmpty) {
-        break;
-      }
-
-      bool added = false;
-      for (final raw in batch) {
-        final map = raw.map((key, value) => MapEntry(key.toString(), value));
-        final imageUrl = map['image_url']?.toString() ?? map['imageUrl']?.toString();
-        if (imageUrl != null && seenImages.contains(imageUrl)) {
-          continue;
-        }
-        if (imageUrl != null) {
-          seenImages.add(imageUrl);
-        }
-        mannequins.add(map);
-        added = true;
-        if (mannequins.length >= count) {
-          break;
-        }
-      }
-
-      if (!added) {
-        break;
-      }
+    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+    if (data is List) {
+      return data
+          .whereType<Map>()
+          .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+          .toList();
     }
 
-    return mannequins.take(count).toList();
+    return const [];
+  }
+
+  static Future<Map<String, dynamic>> generateMannequin(
+    int userId, {
+    int? locationId,
+  }) async {
+    final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
+    final params = <String, String>{
+      if (locationId != null) 'location_id': locationId.toString(),
+    };
+    final uri = params.isEmpty
+        ? baseUri
+        : baseUri.replace(queryParameters: params);
+
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при генерации манекена');
+    }
+
+    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+    if (data is Map) {
+      return data.map((key, value) => MapEntry(key.toString(), value));
+    }
+
+    throw Exception('Не удалось прочитать ответ при генерации манекена');
   }
 
   // Получить визуальное изображение наряда

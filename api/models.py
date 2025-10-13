@@ -1,10 +1,22 @@
 import json
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, ForeignKey, JSON, TIMESTAMP, Text, Float
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    ForeignKey,
+    JSON,
+    TIMESTAMP,
+    Text,
+    Float,
+    Boolean,
+)
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from database import Base
+
 
 class User(Base):
     __tablename__ = "users"
@@ -18,7 +30,9 @@ class User(Base):
     weather_api_key = Column(String, nullable=True)
     location = Column(String, nullable=True)
     gender = Column(String, nullable=True)
-    theme_preference = Column(String, nullable=False, default="light", server_default="light")
+    theme_preference = Column(
+        String, nullable=False, default="light", server_default="light"
+    )
 
     locations = relationship(
         "WardrobeLocation",
@@ -30,6 +44,7 @@ class User(Base):
     @property
     def has_pin(self) -> bool:
         return bool(self.pin_hash)
+
 
 class Clothes(Base):
     __tablename__ = "clothes"
@@ -57,6 +72,13 @@ class Clothes(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
         single_parent=True,
+    )
+    images = relationship(
+        "ClothesImage",
+        back_populates="clothes",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ClothesImage.created_at",
     )
     location = relationship("WardrobeLocation", back_populates="clothes")
 
@@ -127,6 +149,37 @@ class Clothes(Base):
                 return None
         return None
 
+    @property
+    def image_gallery(self) -> list[str]:
+        gallery: list[str] = []
+        if self.images:
+            ordered = sorted(
+                self.images,
+                key=lambda item: (not item.is_primary, item.created_at or datetime.min),
+            )
+            gallery.extend([item.image_url for item in ordered if item.image_url])
+        if not gallery and self.image_url:
+            gallery.append(self.image_url)
+        return gallery
+
+
+class ClothesImage(Base):
+    __tablename__ = "clothes_gallery_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    clothes_id = Column(
+        Integer,
+        ForeignKey("clothes.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    image_url = Column(String, nullable=False)
+    is_primary = Column(Boolean, nullable=False, default=False, server_default="false")
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+    clothes = relationship("Clothes", back_populates="images")
+
+
 class Weather(Base):
     __tablename__ = "weather"
 
@@ -136,6 +189,7 @@ class Weather(Base):
     condition = Column(String, nullable=False)
     wind_speed = Column(Integer, nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
+
 
 class Outfit(Base):
     __tablename__ = "outfits"
@@ -147,6 +201,7 @@ class Outfit(Base):
     image_url = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
     rating = Column(Integer, nullable=True)
+
 
 class WearHistory(Base):
     __tablename__ = "wear_history"
@@ -160,7 +215,9 @@ class WearHistory(Base):
 class ClothesMetadata(Base):
     __tablename__ = "clothes_metadata"
 
-    clothes_id = Column(Integer, ForeignKey("clothes.id", ondelete="CASCADE"), primary_key=True)
+    clothes_id = Column(
+        Integer, ForeignKey("clothes.id", ondelete="CASCADE"), primary_key=True
+    )
     data = Column(JSON, nullable=True)
 
     clothes = relationship("Clothes", back_populates="metadata_entry")
@@ -170,7 +227,9 @@ class WardrobeLocation(Base):
     __tablename__ = "wardrobe_locations"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
     name = Column(String, nullable=False)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
@@ -178,3 +237,22 @@ class WardrobeLocation(Base):
 
     user = relationship("User", back_populates="locations")
     clothes = relationship("Clothes", back_populates="location")
+
+
+class MannequinImage(Base):
+    __tablename__ = "mannequin_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    location_id = Column(
+        Integer, ForeignKey("wardrobe_locations.id", ondelete="SET NULL"), nullable=True
+    )
+    image_url = Column(String, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    items = Column(JSON, nullable=True)
+    weather = Column(JSON, nullable=True)
+
+    user = relationship("User", backref="mannequin_images")
+    location = relationship("WardrobeLocation")

@@ -24,13 +24,10 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLocationsLoading = false;
   bool isMannequinsLoading = false;
   String? mannequinsError;
-  late final PageController _mannequinController;
-  int _activeMannequinIndex = 0;
 
   @override
   void initState() {
     super.initState();
-    _mannequinController = PageController(viewportFraction: 0.85);
     loadUserId();
     fetchWeather();
     fetchMannequins();
@@ -44,12 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
         timer.cancel();
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _mannequinController.dispose();
-    super.dispose();
   }
 
   Future<void> loadUserId() async {
@@ -115,6 +106,21 @@ class _HomeScreenState extends State<HomeScreen> {
     await _persistSelectedLocation(value);
     fetchWeather();
     fetchMannequins();
+  }
+
+  int? _locationIdForRequests() {
+    if (selectedLocationId == null) {
+      return null;
+    }
+    final selectedLocation = _findLocationById(selectedLocationId);
+    if (selectedLocation == null) {
+      return null;
+    }
+    if (selectedLocation['latitude'] == null ||
+        selectedLocation['longitude'] == null) {
+      return null;
+    }
+    return selectedLocationId;
   }
 
   int? _parseLocationId(dynamic rawId) {
@@ -199,13 +205,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> fetchWeather() async {
     if (userId == null) return;
     try {
-      int? locationIdForRequest = selectedLocationId;
-      final selectedLocation = _findLocationById(selectedLocationId);
-      if (selectedLocation != null) {
-        if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
-          locationIdForRequest = null;
-        }
-      }
+      final locationIdForRequest = _locationIdForRequests();
 
       final weatherData = await ApiService.getWeatherByUserId(
         userId!,
@@ -232,38 +232,59 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      int? locationIdForRequest = selectedLocationId;
-      final selectedLocation = _findLocationById(selectedLocationId);
-      if (selectedLocation != null) {
-        if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
-          locationIdForRequest = null;
-        }
-      }
+      final locationIdForRequest = _locationIdForRequests();
 
-      final mannequinResults = await ApiService.getMannequins(
+      final mannequinResults = await ApiService.getMannequinHistory(
         userId!,
         locationId: locationIdForRequest,
-        count: 3,
+        limit: 1,
       );
 
       if (!mounted) return;
       setState(() {
-        mannequins = mannequinResults;
-        _activeMannequinIndex = 0;
-      });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_mannequinController.hasClients) {
-          _mannequinController.jumpToPage(0);
-        }
+        mannequins = mannequinResults.take(1).toList();
       });
     } catch (e) {
       print("Ошибка при получении манекенов: $e");
       if (mounted) {
         setState(() {
           mannequins = [];
-          mannequinsError = 'Не удалось загрузить рекомендации';
+          mannequinsError = 'Не удалось загрузить историю манекенов';
         });
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _generateMannequin() async {
+    if (userId == null) return;
+    try {
+      setState(() {
+        isMannequinsLoading = true;
+        mannequinsError = null;
+      });
+
+      final locationIdForRequest = _locationIdForRequests();
+      final mannequin = await ApiService.generateMannequin(
+        userId!,
+        locationId: locationIdForRequest,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        mannequins = [mannequin];
+      });
+    } catch (e) {
+      print('Ошибка при генерации манекена: $e');
+      if (!mounted) return;
+      setState(() {
+        mannequinsError = 'Не удалось создать манекен. Попробуйте снова.';
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -314,8 +335,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildMannequinCard(
     BuildContext context,
     Map<String, dynamic> mannequin,
-    int index,
-    bool isActive,
   ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -328,22 +347,18 @@ class _HomeScreenState extends State<HomeScreen> {
             .toList(growable: false) ??
         const [];
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeOut,
+    return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: isActive
-            ? [
-                BoxShadow(
-                  color: theme.shadowColor.withOpacity(0.12),
-                  blurRadius: 18,
-                  offset: const Offset(0, 10),
-                ),
-              ]
-            : [],
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withOpacity(0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -379,7 +394,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Манекен ${index + 1}',
+                  'Манекен',
                   style: theme.textTheme.titleMedium,
                 ),
                 if (items.isNotEmpty) ...[
@@ -410,7 +425,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 style: theme.textTheme.bodySmall?.copyWith(
                                   color: colorScheme.onSecondaryContainer.withOpacity(0.7),
                                 ),
-                              ),
+                            ),
                           ],
                         ),
                       );
@@ -644,23 +659,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    weatherComment ?? 'Подождите, загружаем рекомендации...',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSecondaryContainer,
-                                    ),
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: Icon(Icons.refresh, color: colorScheme.onSecondaryContainer),
-                                  tooltip: 'Обновить манекены',
-                                  onPressed: fetchMannequins,
-                                ),
-                              ],
+                            Text(
+                              weatherComment ?? 'Подождите, загружаем рекомендации...',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSecondaryContainer,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: FilledButton.icon(
+                                onPressed: isMannequinsLoading ? null : _generateMannequin,
+                                icon: const Icon(Icons.autorenew),
+                                label: const Text('Создать манекен'),
+                              ),
                             ),
                             const SizedBox(height: 16),
                             if (isMannequinsLoading)
@@ -670,53 +682,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                 padding: const EdgeInsets.symmetric(vertical: 24),
                                 child: Text(
                                   mannequinsError ??
-                                      'Манекены пока недоступны. Попробуйте обновить или добавьте больше вещей в выбранный гардероб.',
+                                      'Нажмите «Создать манекен», чтобы ИИ подобрал образ для текущей погоды и гардероба.',
                                   textAlign: TextAlign.center,
                                   style: theme.textTheme.bodySmall?.copyWith(
                                     color: colorScheme.onSecondaryContainer,
                                   ),
                                 ),
                               )
-                            else ...[
+                            else
                               SizedBox(
-                                height: 300,
-                                child: PageView.builder(
-                                  controller: _mannequinController,
-                                  itemCount: mannequins.length,
-                                  onPageChanged: (index) {
-                                    setState(() => _activeMannequinIndex = index);
-                                  },
-                                  itemBuilder: (context, index) {
-                                    final mannequin = mannequins[index];
-                                    return _buildMannequinCard(
-                                      context,
-                                      mannequin,
-                                      index,
-                                      index == _activeMannequinIndex,
-                                    );
-                                  },
+                                height: 320,
+                                child: _buildMannequinCard(
+                                  context,
+                                  mannequins.first,
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: List.generate(mannequins.length, (index) {
-                                  final isActive = index == _activeMannequinIndex;
-                                  return AnimatedContainer(
-                                    duration: const Duration(milliseconds: 200),
-                                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                                    width: isActive ? 24 : 10,
-                                    height: 10,
-                                    decoration: BoxDecoration(
-                                      color: isActive
-                                          ? colorScheme.onSecondaryContainer
-                                          : colorScheme.onSecondaryContainer.withOpacity(0.3),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  );
-                                }),
-                              ),
-                            ],
                           ],
                         ),
                       ),
