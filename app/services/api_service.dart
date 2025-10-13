@@ -325,6 +325,7 @@ static Future<void> addClothes({
   if (careInstructions != null) {
     request.fields['care_instructions'] = careInstructions.trim();
   }
+}
 
   if (locationId != null) {
     request.fields['location_id'] = locationId.toString();
@@ -535,6 +536,7 @@ static Future<Clothes> updateClothes({
           .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
           .toList();
     }
+  }
 
     return const [];
   }
@@ -563,6 +565,9 @@ static Future<Clothes> updateClothes({
 
     throw Exception('Не удалось прочитать ответ при генерации манекена');
   }
+
+  return history.take(count).toList();
+}
 
   // Получить визуальное изображение наряда
   static Future<String> getVisualOutfit(int userId) async {
