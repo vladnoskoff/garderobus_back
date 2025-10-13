@@ -325,6 +325,7 @@ static Future<void> addClothes({
   if (careInstructions != null) {
     request.fields['care_instructions'] = careInstructions.trim();
   }
+}
 
   if (locationId != null) {
     request.fields['location_id'] = locationId.toString();
@@ -508,21 +509,20 @@ static Future<Clothes> updateClothes({
   }
 
 
-static Future<List<Map<String, dynamic>>> getMannequins(
-  int userId, {
-  int? locationId,
-  int count = 3,
-}) async {
-  final historyQuery = <String, String>{
-    'limit': count.toString(),
-    if (locationId != null) 'location_id': locationId.toString(),
-  };
+  static Future<List<Map<String, dynamic>>> getMannequinHistory(
+    int userId, {
+    int? locationId,
+    int limit = 1,
+  }) async {
+    final query = <String, String>{
+      'limit': limit.toString(),
+      if (locationId != null) 'location_id': locationId.toString(),
+    };
 
-  Future<List<Map<String, dynamic>>> fetchHistory() async {
     final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId/history");
-    final uri = historyQuery.isEmpty
+    final uri = query.isEmpty
         ? baseUri
-        : baseUri.replace(queryParameters: historyQuery);
+        : baseUri.replace(queryParameters: query);
 
     final response = await http.get(uri);
     if (response.statusCode != 200) {
@@ -536,11 +536,15 @@ static Future<List<Map<String, dynamic>>> getMannequins(
           .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
           .toList();
     }
+  }
 
     return const [];
   }
 
-  Future<void> requestGeneration() async {
+  static Future<Map<String, dynamic>> generateMannequin(
+    int userId, {
+    int? locationId,
+  }) async {
     final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
     final params = <String, String>{
       if (locationId != null) 'location_id': locationId.toString(),
@@ -553,19 +557,13 @@ static Future<List<Map<String, dynamic>>> getMannequins(
     if (response.statusCode != 200) {
       throw Exception('Ошибка при генерации манекена');
     }
-  }
 
-  List<Map<String, dynamic>> history = await fetchHistory();
-  int attempts = 0;
-
-  while (history.length < count && attempts < count) {
-    attempts += 1;
-    await requestGeneration();
-    final refreshed = await fetchHistory();
-    if (refreshed.length <= history.length) {
-      break;
+    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+    if (data is Map) {
+      return data.map((key, value) => MapEntry(key.toString(), value));
     }
-    history = refreshed;
+
+    throw Exception('Не удалось прочитать ответ при генерации манекена');
   }
 
   return history.take(count).toList();
