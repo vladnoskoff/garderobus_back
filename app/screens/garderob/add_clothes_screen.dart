@@ -18,7 +18,7 @@ class AddClothesScreen extends StatefulWidget {
   const AddClothesScreen({super.key, this.initialLocationId});
 
   @override
-  _AddClothesScreenState createState() => _AddClothesScreenState();
+  State<AddClothesScreen> createState() => _AddClothesScreenState();
 }
 
 class _AddClothesScreenState extends State<AddClothesScreen> {
@@ -74,6 +74,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
         _selectedLocationId = initialLocationId;
       });
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Не удалось загрузить локации: $e')),
       );
@@ -84,20 +85,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
     }
   }
 
-
-
-
-  static const _photosPermissionOptions = PermissionRequestOptions(
-    ios: IosPermissionOptions(
-      presentModalOnPermission: true,
-      presentModalOnLimited: true,
-    ),
-  );
-
   Future<bool> _requestPermission(Permission permission) async {
-    final options = permission == Permission.photos
-        ? _photosPermissionOptions
-        : const PermissionRequestOptions();
     var status = await permission.status;
 
     if (status.isGranted) {
@@ -108,7 +96,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
       return await _handleLimitedPhotoPermission(permission);
     }
 
-    status = await permission.request(options);
+    status = await permission.request();
 
     if (status.isGranted) {
       return true;
@@ -209,7 +197,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
 
     switch (action) {
       case _PhotoPermissionAction.chooseMore:
-        final updatedStatus = await permission.request(_photosPermissionOptions);
+        final updatedStatus = await permission.request();
         if (updatedStatus.isGranted || updatedStatus.isLimited) {
           return true;
         }
@@ -272,7 +260,7 @@ Future<void> _addImagesFromGallery() async {
   if (!granted) return;
   try {
     final pickedFiles = await picker.pickMultiImage();
-    if (pickedFiles == null || pickedFiles.isEmpty) {
+    if (pickedFiles.isEmpty) {
       return;
     }
     final existingPaths = _images.map((file) => file.path).toSet();
@@ -335,7 +323,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     return Container(
       height: 220,
       decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant,
+        color: colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(16),
       ),
       alignment: Alignment.center,
@@ -361,7 +349,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
               return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 4),
                 decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant,
+                  color: colorScheme.surfaceContainerHighest,
                 ),
                 child: Image.file(
                   _images[index],
@@ -377,7 +365,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
           right: 12,
           child: IconButton(
             style: IconButton.styleFrom(
-              backgroundColor: colorScheme.surface.withOpacity(0.7),
+              backgroundColor: colorScheme.surface.withValues(alpha: 0.7),
             ),
             onPressed: _isLoading ? null : () => _removeImage(_currentImageIndex),
             icon: const Icon(Icons.delete_outline),
@@ -411,7 +399,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
                   decoration: BoxDecoration(
                     color: isActive
                         ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant.withOpacity(0.4),
+                        : colorScheme.onSurfaceVariant.withValues(alpha: 0.4),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 );
@@ -456,6 +444,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка добавления одежды: $e')),
       );
