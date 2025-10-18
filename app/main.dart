@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'screens/garderob/wardrobe_screen.dart';
@@ -10,6 +8,7 @@ import 'screens/auth/register_screen.dart';
 import 'services/theme_controller.dart';
 import 'screens/auth/pin_unlock_screen.dart';
 import 'services/api_service.dart';
+import 'widgets/fisheye_navigation_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -263,63 +262,33 @@ class _MainNavigationState extends State<MainNavigation> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      extendBody: true,
       body: _pages[_currentIndex],
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(26),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: colorScheme.surface.withOpacity(isDark ? 0.7 : 0.85),
-                border: Border.all(
-                  color: colorScheme.outlineVariant.withOpacity(isDark ? 0.4 : 0.3),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.12),
-                    blurRadius: 28,
-                    offset: const Offset(0, 18),
-                  ),
-                ],
-              ),
-              child: SafeArea(
-                top: false,
-                child: NavigationBar(
-                  selectedIndex: _currentIndex,
-                  backgroundColor: Colors.transparent,
-                  surfaceTintColor: Colors.transparent,
-                  height: 70,
-                  indicatorColor: colorScheme.primary.withOpacity(isDark ? 0.3 : 0.18),
-                  labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
-                  onDestinationSelected: (index) {
-                    setState(() {
-                      _currentIndex = index;
-                    });
-                  },
-                  destinations: const [
-                    NavigationDestination(
-                      icon: Icon(Icons.home_outlined),
-                      selectedIcon: Icon(Icons.home_rounded),
-                      label: 'Главная',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.checkroom_outlined),
-                      selectedIcon: Icon(Icons.checkroom),
-                      label: 'Гардероб',
-                    ),
-                    NavigationDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: 'Настройки',
-                    ),
-                  ],
-                ),
-              ),
+        padding: const EdgeInsets.only(left: 26, right: 26, bottom: 4),
+        child: FisheyeNavigationBar(
+          currentIndex: _currentIndex,
+          onItemSelected: (index) {
+            setState(() {
+              _currentIndex = index;
+            });
+          },
+          items: const [
+            FisheyeNavigationBarItem(
+              icon: Icons.home_outlined,
+              selectedIcon: Icons.home_rounded,
+              label: 'Главная',
             ),
-          ),
+            FisheyeNavigationBarItem(
+              icon: Icons.checkroom_outlined,
+              selectedIcon: Icons.checkroom,
+              label: 'Гардероб',
+            ),
+            FisheyeNavigationBarItem(
+              icon: Icons.settings_outlined,
+              selectedIcon: Icons.settings,
+              label: 'Настройки',
+            ),
+          ],
         ),
       ),
     );
