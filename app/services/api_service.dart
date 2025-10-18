@@ -29,6 +29,18 @@ class ApiService {
     await storage.write(key: "theme_preference", value: theme);
   }
 
+  static Future<String?> getCachedLanguagePreference() async {
+    final language = await storage.read(key: "language_preference");
+    if (language == null || language.trim().isEmpty) {
+      return null;
+    }
+    return language;
+  }
+
+  static Future<void> cacheLanguagePreference(String languageCode) async {
+    await storage.write(key: "language_preference", value: languageCode);
+  }
+
   static Future<String?> fetchThemePreference(int userId) async {
     try {
       final user = await getUser(userId);
@@ -54,6 +66,39 @@ class ApiService {
     }
   }
 
+  static Future<String?> fetchLanguagePreference(int userId) async {
+    try {
+      final user = await getUser(userId);
+      final preference = user['language_preference'];
+      if (preference is String && preference.trim().isNotEmpty) {
+        return preference;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> updateLanguagePreference(int userId, String languageCode) async {
+    await updateUser(userId, 'language_preference', languageCode);
+    await cacheLanguagePreference(languageCode);
+  }
+
+  static Future<void> rememberUserLanguage(int userId) async {
+    final remoteLanguage = await fetchLanguagePreference(userId);
+    if (remoteLanguage != null) {
+      await cacheLanguagePreference(remoteLanguage);
+    }
+  }
+
+  static Future<String> _resolveLanguageCode() async {
+    final cached = await getCachedLanguagePreference();
+    if (cached != null && cached.trim().isNotEmpty) {
+      return cached.toLowerCase();
+    }
+    return 'ru';
+  }
+
   // Регистрация пользователя
   static Future<Map<String, dynamic>> register(
     String name,
@@ -61,6 +106,7 @@ class ApiService {
     String password,
     String gender, {
     String? pinCode,
+    String languageCode = 'ru',
   }) async {
     final response = await http.post(
       Uri.parse("$baseUrl/users/register"),
@@ -70,6 +116,7 @@ class ApiService {
         "email": email,
         "password": password,
         "gender": gender,
+        "language_preference": languageCode,
         if (pinCode != null && pinCode.trim().isNotEmpty) "pin_code": pinCode.trim(),
       }),
     );
@@ -79,6 +126,7 @@ class ApiService {
       }
       final decoded = jsonDecode(utf8.decode(response.bodyBytes));
       if (decoded is Map<String, dynamic>) {
+        await cacheLanguagePreference(languageCode);
         return decoded;
       }
       return {};
@@ -104,6 +152,7 @@ class ApiService {
       final userId = int.tryParse(data["user_id"].toString());
       if (userId != null) {
         await rememberUserTheme(userId);
+        await rememberUserLanguage(userId);
       }
       return data;
     } else {
@@ -160,6 +209,8 @@ class ApiService {
     }
     if (field == 'pin_code') {
       await cacheHasPin(value.trim().isNotEmpty);
+    } else if (field == 'language_preference') {
+      await cacheLanguagePreference(value);
     }
   }
 
@@ -540,8 +591,12 @@ static Future<Clothes> updateClothes({
 
   // Получить рекомендации от ИИ
   static Future<String> getAIRecommendation(int userId) async {
-    final response = await http.get(Uri.parse("$baseUrl/ai/recommendation/$userId"));
-    return jsonDecode(response.body)["recommendation"];
+    final lang = await _resolveLanguageCode();
+    final uri = Uri.parse("$baseUrl/ai/recommendation/$userId").replace(
+      queryParameters: {"lang": lang},
+    );
+    final response = await http.get(uri);
+    return jsonDecode(utf8.decode(response.bodyBytes))["recommendation"];
   }
 
 
@@ -550,9 +605,11 @@ static Future<Clothes> updateClothes({
     int? locationId,
     int limit = 1,
   }) async {
+    final lang = await _resolveLanguageCode();
     final query = <String, String>{
       'limit': limit.toString(),
       if (locationId != null) 'location_id': locationId.toString(),
+      'lang': lang,
     };
 
     final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId/history");
@@ -581,8 +638,10 @@ static Future<Clothes> updateClothes({
     int? locationId,
   }) async {
     final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
+    final lang = await _resolveLanguageCode();
     final params = <String, String>{
       if (locationId != null) 'location_id': locationId.toString(),
+      'lang': lang,
     };
     final uri = params.isEmpty
         ? baseUri
@@ -603,8 +662,12 @@ static Future<Clothes> updateClothes({
 
   // Получить визуальное изображение наряда
   static Future<String> getVisualOutfit(int userId) async {
-    final response = await http.get(Uri.parse("$baseUrl/ai/visual-recommendation/$userId"));
-    return jsonDecode(response.body)["image_url"];
+    final lang = await _resolveLanguageCode();
+    final uri = Uri.parse("$baseUrl/ai/visual-recommendation/$userId").replace(
+      queryParameters: {"lang": lang},
+    );
+    final response = await http.get(uri);
+    return jsonDecode(utf8.decode(response.bodyBytes))["image_url"];
   }
 
   // Получить часто используемые вещи
