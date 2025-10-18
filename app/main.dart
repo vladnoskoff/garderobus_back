@@ -262,10 +262,9 @@ class _MainNavigationState extends State<MainNavigation> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      extendBody: true,
       body: _pages[_currentIndex],
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         child: FisheyeNavigationBar(
           currentIndex: _currentIndex,
           onItemSelected: (index) {

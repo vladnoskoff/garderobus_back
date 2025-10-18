@@ -33,7 +33,7 @@ class FisheyeNavigationBar extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(26),
+      borderRadius: BorderRadius.circular(22),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
         child: DecoratedBox(
@@ -60,7 +60,7 @@ class FisheyeNavigationBar extends StatelessWidget {
           child: SafeArea(
             top: false,
             child: SizedBox(
-              height: 86,
+              height: 72,
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final double itemExtent = constraints.maxWidth / items.length;
@@ -79,8 +79,8 @@ class FisheyeNavigationBar extends StatelessWidget {
                           0,
                         ),
                         child: Container(
-                          width: math.max(itemExtent * 0.78, 86),
-                          height: 56,
+                          width: math.max(itemExtent * 0.74, 72),
+                          height: 48,
                           decoration: BoxDecoration(
                             color: colorScheme.primary.withOpacity(isDark ? 0.22 : 0.16),
                             borderRadius: BorderRadius.circular(24),
@@ -145,14 +145,14 @@ class _FisheyeItem extends StatelessWidget {
     final bool isNeighbor = distance == 1;
 
     final double targetScale = isSelected
-        ? 1.35
+        ? 1.22
         : isNeighbor
-            ? 1.12
-            : 0.98;
+            ? 1.08
+            : 0.96;
     final double targetYOffset = isSelected
-        ? -14
+        ? -10
         : isNeighbor
-            ? -6
+            ? -4
             : 0;
 
     return Expanded(
@@ -185,12 +185,12 @@ class _FisheyeItem extends StatelessWidget {
             children: [
               Icon(
                 isSelected ? item.selectedIcon : item.icon,
-                size: 26,
+                size: 24,
                 color: isSelected
                     ? colorScheme.onPrimary
                     : colorScheme.onSurfaceVariant,
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               AnimatedOpacity(
                 opacity: isSelected ? 1 : (isNeighbor ? 0.75 : 0),
                 duration: const Duration(milliseconds: 260),
