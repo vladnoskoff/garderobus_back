@@ -283,22 +283,25 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                   _buildEntryBadge(entryType, theme),
                   const SizedBox(height: 12),
                   if (imageUrl != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.network(
-                        imageUrl.toString(),
-                        height: 180,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
+                    GestureDetector(
+                      onTap: () => _openImageViewer(context, imageUrl.toString()),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          imageUrl.toString(),
                           height: 180,
-                          color: colorScheme.surfaceVariant.withOpacity(
-                            theme.brightness == Brightness.dark ? 0.5 : 1,
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Не удалось загрузить изображение',
-                            style: captionStyle,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Container(
+                            height: 180,
+                            color: colorScheme.surfaceVariant.withOpacity(
+                              theme.brightness == Brightness.dark ? 0.5 : 1,
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Не удалось загрузить изображение',
+                              style: captionStyle,
+                            ),
                           ),
                         ),
                       ),
@@ -387,6 +390,39 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
         separatorBuilder: (_, __) => const SizedBox(height: 12),
         itemCount: _history.length,
       ),
+    );
+  }
+
+  void _openImageViewer(BuildContext context, String imageUrl) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        final theme = Theme.of(context);
+        return Dialog(
+          backgroundColor: theme.dialogBackgroundColor,
+          insetPadding: const EdgeInsets.all(16),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 4,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => SizedBox(
+                  height: 320,
+                  child: Center(
+                    child: Text(
+                      'Не удалось открыть изображение',
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
