@@ -499,12 +499,33 @@ static Future<Clothes> updateClothes({
 
 
   // Получить историю нарядов
-  static Future<List<dynamic>> getOutfitHistory(int userId, {int? locationId}) async {
+  static Future<List<Map<String, dynamic>>> getOutfitHistory(int userId,
+      {int? locationId}) async {
     final uri = locationId != null
         ? Uri.parse("$baseUrl/outfits/history/$userId?location_id=$locationId")
         : Uri.parse("$baseUrl/outfits/history/$userId");
     final response = await http.get(uri);
-    return jsonDecode(response.body);
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при получении истории нарядов');
+    }
+
+    final dynamic decoded = json.decode(utf8.decode(response.bodyBytes));
+    if (decoded is List) {
+      return decoded
+          .whereType<Map<String, dynamic>>()
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+    if (decoded is Map<String, dynamic>) {
+      final history = decoded['history'];
+      if (history is List) {
+        return history
+            .whereType<Map<String, dynamic>>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList();
+      }
+    }
+    throw Exception('Некорректный формат данных истории нарядов');
   }
 
   // Оценка наряда
