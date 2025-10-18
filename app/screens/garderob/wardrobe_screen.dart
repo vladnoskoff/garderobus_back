@@ -495,7 +495,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     final temperatureText = _temperatureRangeText(item);
     final careText = item.careInstructions?.trim();
     final materialText = item.material?.trim();
-    final description = item.promptDescription?.trim();
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -583,15 +582,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                         _buildInfoPill(context, Icons.texture, materialText),
                     ],
                   ),
-                    if (description != null && description.isNotEmpty)
-                      const SizedBox(height: 10),
-                  if (description != null && description.isNotEmpty)
-                    Text(
-                      description,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: textTheme.bodyMedium,
-                    ),
                 ],
               ),
             ),
