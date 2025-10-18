@@ -5,7 +5,7 @@ import models
 import random
 from routes.weather import get_weather_by_coordinates  # Импорт функции погоды
 import schemas
-from typing import Optional
+from typing import Any, Dict, List, Optional
 from .location_utils import resolve_location_and_coordinates
 
 router = APIRouter(prefix="/outfits", tags=["Outfits"])
@@ -107,19 +107,164 @@ def get_outfit(
 
 
 
-# @router.get("/history/{user_id}", response_model=list[schemas.OutfitResponse])
-# def get_outfit_history(user_id: int, db: Session = Depends(get_db)):
-#     """
-#     Получение истории нарядов пользователя.
+@router.get("/history/{user_id}")
+def get_outfit_history(
+    user_id: int,
+    location_id: Optional[int] = Query(
+        default=None,
+        description="Фильтрация истории по конкретной локации гардероба",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Получение истории ранее собранных нарядов пользователя."""
 
-#     - **user_id**: Идентификатор пользователя.
+    outfits = (
+        db.query(models.Outfit)
+        .filter(models.Outfit.user_id == user_id)
+        .order_by(models.Outfit.created_at.desc())
+        .all()
+    )
 
-#     Получает историю нарядов пользователя на основе ранее сохраненных данных.
-#     """
-#     outfits = db.query(models.Outfit).filter(models.Outfit.user_id == user_id).order_by(models.Outfit.created_at.desc()).all()
-#     if not outfits:
-#         raise HTTPException(status_code=404, detail="История нарядов пуста")
-#     return outfits
+    if not outfits:
+        return []
+
+    # Собираем идентификаторы одежды, погод и локаций для выборки одним запросом
+    clothing_ids: set[int] = set()
+    weather_ids: set[int] = set()
+    for outfit in outfits:
+        if isinstance(outfit.clothing_ids, list):
+            clothing_ids.update(
+                cid for cid in outfit.clothing_ids if isinstance(cid, int)
+            )
+        if outfit.weather_id:
+            weather_ids.add(outfit.weather_id)
+
+    clothes_map: Dict[int, models.Clothes] = {}
+    if clothing_ids:
+        clothes = (
+            db.query(models.Clothes)
+            .filter(models.Clothes.id.in_(clothing_ids))
+            .all()
+        )
+        clothes_map = {item.id: item for item in clothes}
+
+    location_ids: set[int] = {
+        item.location_id
+        for item in clothes_map.values()
+        if item.location_id is not None
+    }
+    location_map: Dict[int, models.WardrobeLocation] = {}
+    if location_ids:
+        locations = (
+            db.query(models.WardrobeLocation)
+            .filter(models.WardrobeLocation.id.in_(location_ids))
+            .all()
+        )
+        location_map = {loc.id: loc for loc in locations}
+
+    weather_map: Dict[int, models.Weather] = {}
+    if weather_ids:
+        weather_entries = (
+            db.query(models.Weather)
+            .filter(models.Weather.id.in_(weather_ids))
+            .all()
+        )
+        weather_map = {w.id: w for w in weather_entries}
+
+    history: List[Dict[str, Any]] = []
+    for outfit in outfits:
+        clothing_details: List[Dict[str, Any]] = []
+        clothing_ids_for_outfit = [
+            cid
+            for cid in (outfit.clothing_ids or [])
+            if isinstance(cid, int)
+        ]
+
+        for cid in clothing_ids_for_outfit:
+            clothing = clothes_map.get(cid)
+            if not clothing:
+                continue
+
+            location = (
+                location_map.get(clothing.location_id)
+                if clothing.location_id is not None
+                else None
+            )
+
+            clothing_details.append(
+                {
+                    "id": clothing.id,
+                    "name": clothing.name,
+                    "category": clothing.category,
+                    "season": clothing.season,
+                    "color": clothing.color,
+                    "image_url": clothing.image_url,
+                    "location_id": clothing.location_id,
+                    "location_name": location.name if location else None,
+                }
+            )
+
+        if location_id is not None and not any(
+            item.get("location_id") == location_id for item in clothing_details
+        ):
+            # Наряд не относится к выбранной локации
+            continue
+
+        preview_image = outfit.image_url
+        if not preview_image:
+            for item in clothing_details:
+                image_url = item.get("image_url")
+                if isinstance(image_url, str) and image_url.strip():
+                    preview_image = image_url
+                    break
+
+        description_parts = [
+            part
+            for part in (
+                item.get("name") or item.get("category")
+                for item in clothing_details
+            )
+            if part
+        ]
+        description = ", ".join(description_parts) if description_parts else None
+
+        location_names = [
+            item.get("location_name")
+            for item in clothing_details
+            if item.get("location_name")
+        ]
+        location_name = location_names[0] if location_names else None
+
+        weather = weather_map.get(outfit.weather_id) if outfit.weather_id else None
+
+        history.append(
+            {
+                "id": outfit.id,
+                "title": (
+                    f"Наряд от {outfit.created_at.strftime('%d.%m.%Y %H:%M')}"
+                    if outfit.created_at
+                    else f"Наряд #{outfit.id}"
+                ),
+                "created_at": outfit.created_at.isoformat()
+                if outfit.created_at
+                else None,
+                "rating": outfit.rating,
+                "image_url": preview_image,
+                "description": description,
+                "items": clothing_details,
+                "location_name": location_name,
+                "weather": {
+                    "temperature": weather.temperature,
+                    "condition": weather.condition,
+                    "humidity": weather.humidity,
+                    "wind_speed": weather.wind_speed,
+                }
+                if weather
+                else None,
+            }
+        )
+
+    return history
     
 # @router.put("/rate/{outfit_id}")
 # def rate_outfit(outfit_id: int, rating: int, db: Session = Depends(get_db)):

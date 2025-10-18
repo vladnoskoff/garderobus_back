@@ -55,8 +55,8 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
       if (!mounted) return;
       setState(() {
         _history = response
-            .whereType<Map<String, dynamic>>()
-            .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+            .map((item) =>
+                item.map((key, value) => MapEntry(key.toString(), value)))
             .toList();
         _isLoading = false;
       });
@@ -99,11 +99,22 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
         itemBuilder: (context, index) {
           final item = _history[index];
           final title = item['title'] ?? item['name'] ?? 'Наряд ${index + 1}';
-          final description = item['description'] ?? item['summary'] ?? 'Описание отсутствует';
-          final createdAt = _formatDate(item['created_at'] ?? item['createdAt'] ?? item['date']);
+          final description =
+              item['description'] ?? item['summary'] ?? 'Описание отсутствует';
+          final createdAt =
+              _formatDate(item['created_at'] ?? item['createdAt'] ?? item['date']);
           final rating = item['rating'];
           final imageUrl = item['image_url'] ?? item['imageUrl'];
           final locationName = item['location_name'] ?? item['locationName'];
+          final weather =
+              (item['weather'] is Map) ? Map<String, dynamic>.from(item['weather']) : null;
+          final items = (item['items'] is List)
+              ? (item['items'] as List)
+                  .whereType<Map>()
+                  .map((e) =>
+                      Map<String, dynamic>.from(e.map((key, value) => MapEntry(key.toString(), value))))
+                  .toList()
+              : <Map<String, dynamic>>[];
 
           return Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -149,21 +160,57 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                     description.toString(),
                     style: const TextStyle(fontSize: 14),
                   ),
+                  if (weather != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.wb_sunny, size: 18, color: Colors.orangeAccent),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${weather['temperature']}°C — ${weather['condition']}',
+                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (locationName != null) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      'Локация: $locationName',
-                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on, size: 18, color: Colors.teal),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            locationName.toString(),
+                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                   if (rating != null) ...[
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
                     Row(
                       children: [
                         const Icon(Icons.star, color: Colors.amber, size: 18),
                         const SizedBox(width: 4),
                         Text(rating.toString()),
                       ],
+                    ),
+                  ],
+                  if (items.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Состав наряда',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: items.map(_buildClothingChip).toList(),
                     ),
                   ],
                 ],
@@ -214,6 +261,52 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                     Expanded(child: _buildHistoryList()),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildClothingChip(Map<String, dynamic> item) {
+    final category = item['category'];
+    final name = item['name'];
+    final color = item['color'];
+    final season = item['season'];
+    final subtitle = [
+      if (color != null && color.toString().trim().isNotEmpty) color,
+      if (season != null && season.toString().trim().isNotEmpty) season,
+    ].join(' • ');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F5F7),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      width: 160,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            name?.toString() ?? category?.toString() ?? 'Без названия',
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+          ),
+          if (category != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                category.toString(),
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
+              ),
+            ),
+          if (subtitle.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                subtitle,
+                style: const TextStyle(fontSize: 10, color: Colors.black45),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
