@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../services/api_service.dart';
+import '../../widgets/rounded_back_button.dart';
 
 class OutfitHistoryScreen extends StatefulWidget {
   final int? locationId;
@@ -435,6 +436,7 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: const RoundedBackButton(),
         title: const Text('История нарядов'),
       ),
       body: _isLoading

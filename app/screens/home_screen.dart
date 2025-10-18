@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/clothes.dart';
 import '../services/theme_controller.dart';
+import '../widgets/rounded_back_button.dart';
 import 'garderob/clothes_detail_screen.dart';
 import 'settings/home_settings/home_screen_settings.dart';
 
@@ -120,6 +121,7 @@ class _MannequinImageViewer extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
+        leading: const RoundedBackButton(),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -636,7 +638,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Гардеробус"),
+        title: const Text("Гардероб 26"),
         actions: [
           IconButton(
             icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),

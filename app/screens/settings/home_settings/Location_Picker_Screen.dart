@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../../../widgets/rounded_back_button.dart';
 
 class LocationPickerScreen extends StatefulWidget {
   final String initialLocation;
@@ -47,7 +48,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Выбор координат")),
+      appBar: AppBar(
+        leading: const RoundedBackButton(),
+        title: const Text("Выбор координат"),
+      ),
       body: Stack(
         children: [
           FlutterMap(

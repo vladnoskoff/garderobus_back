@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../services/api_service.dart';
+import '../../../widgets/rounded_back_button.dart';
 import '../home_settings/Location_Picker_Screen.dart';
 
 class PlacesScreen extends StatefulWidget {
@@ -384,6 +385,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: const RoundedBackButton(),
         title: const Text('Места'),
         centerTitle: true,
       ),

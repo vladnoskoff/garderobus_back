@@ -1,3 +1,5 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'screens/garderob/wardrobe_screen.dart';
@@ -34,6 +36,31 @@ class WardrobeApp extends StatelessWidget {
         backgroundColor: scheme.surface,
         foregroundColor: scheme.onSurface,
         elevation: 0,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontWeight: FontWeight.w600,
+          fontSize: 18,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        height: 70,
+        elevation: 0,
+        indicatorShape: const StadiumBorder(),
+        labelTextStyle: MaterialStateProperty.all(
+          TextStyle(
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurface,
+          ),
+        ),
+        iconTheme: MaterialStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(MaterialState.selected)
+                ? scheme.onPrimary
+                : scheme.onSurfaceVariant,
+          ),
+        ),
       ),
       cardTheme: CardTheme(
         color: scheme.surface,
@@ -65,6 +92,31 @@ class WardrobeApp extends StatelessWidget {
         backgroundColor: Colors.transparent,
         foregroundColor: scheme.onSurface,
         elevation: 0,
+        titleTextStyle: TextStyle(
+          color: scheme.onSurface,
+          fontWeight: FontWeight.w600,
+          fontSize: 18,
+        ),
+      ),
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        surfaceTintColor: Colors.transparent,
+        height: 70,
+        elevation: 0,
+        indicatorShape: const StadiumBorder(),
+        labelTextStyle: MaterialStateProperty.all(
+          TextStyle(
+            fontWeight: FontWeight.w600,
+            color: scheme.onSurface,
+          ),
+        ),
+        iconTheme: MaterialStateProperty.resolveWith(
+          (states) => IconThemeData(
+            color: states.contains(MaterialState.selected)
+                ? scheme.onPrimary
+                : scheme.onSurfaceVariant,
+          ),
+        ),
       ),
       cardTheme: CardTheme(
         color: scheme.surface,
@@ -92,7 +144,7 @@ class WardrobeApp extends StatelessWidget {
           notifier: themeNotifier,
           child: MaterialApp(
             debugShowCheckedModeBanner: false,
-            title: 'Гардеробус',
+            title: 'Гардероб 26',
             themeMode: themeNotifier.themeMode,
             theme: _buildLightTheme(),
             darkTheme: _buildDarkTheme(),
@@ -207,20 +259,68 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      extendBody: true,
       body: _pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.checkroom), label: ''),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: ''),
-        ],
+      bottomNavigationBar: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: colorScheme.surface.withOpacity(isDark ? 0.7 : 0.85),
+                border: Border.all(
+                  color: colorScheme.outlineVariant.withOpacity(isDark ? 0.4 : 0.3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(isDark ? 0.35 : 0.12),
+                    blurRadius: 28,
+                    offset: const Offset(0, 18),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                top: false,
+                child: NavigationBar(
+                  selectedIndex: _currentIndex,
+                  backgroundColor: Colors.transparent,
+                  surfaceTintColor: Colors.transparent,
+                  height: 70,
+                  indicatorColor: colorScheme.primary.withOpacity(isDark ? 0.3 : 0.18),
+                  labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
+                  onDestinationSelected: (index) {
+                    setState(() {
+                      _currentIndex = index;
+                    });
+                  },
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.home_outlined),
+                      selectedIcon: Icon(Icons.home_rounded),
+                      label: 'Главная',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.checkroom_outlined),
+                      selectedIcon: Icon(Icons.checkroom),
+                      label: 'Гардероб',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.settings_outlined),
+                      selectedIcon: Icon(Icons.settings),
+                      label: 'Настройки',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

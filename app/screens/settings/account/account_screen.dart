@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../services/api_service.dart';
+import '../../../widgets/rounded_back_button.dart';
 import 'pin_setup_screen.dart';
 
 class AccountScreen extends StatefulWidget {
@@ -58,7 +59,11 @@ class _AccountScreenState extends State<AccountScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Аккаунт'), centerTitle: true),
+      appBar: AppBar(
+        leading: const RoundedBackButton(),
+        title: const Text('Аккаунт'),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

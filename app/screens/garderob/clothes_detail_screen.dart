@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
+import '../../widgets/rounded_back_button.dart';
 
 class ClothesDetailScreen extends StatefulWidget {
   final Clothes clothes;
@@ -266,7 +267,8 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Гардеробус'),
+        leading: const RoundedBackButton(),
+        title: const Text('Гардероб 26'),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit_outlined),
