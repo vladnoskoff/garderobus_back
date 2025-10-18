@@ -65,6 +65,51 @@ class _MannequinItemChip extends StatelessWidget {
   }
 }
 
+class _MannequinRefreshButton extends StatelessWidget {
+  const _MannequinRefreshButton({
+    required this.onPressed,
+    required this.isLoading,
+  });
+
+  final VoidCallback onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foregroundColor = colorScheme.onSecondaryContainer;
+
+    return Tooltip(
+      message: 'Обновить манекен',
+      child: Material(
+        color: foregroundColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: isLoading ? null : onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: isLoading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
+                    ),
+                  )
+                : Icon(
+                    Icons.autorenew,
+                    color: foregroundColor,
+                    size: 20,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MannequinImageViewer extends StatelessWidget {
   const _MannequinImageViewer({required this.imageUrl});
 
@@ -439,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const [];
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
@@ -788,63 +833,54 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Stack(
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    weatherComment ?? 'Подождите, загружаем рекомендации...',
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: colorScheme.onSecondaryContainer,
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 56, top: 4),
+                                    child: Text(
+                                      weatherComment ??
+                                          'Подождите, загружаем рекомендации...',
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSecondaryContainer,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                const SizedBox(width: 8),
-                                IconButton.filledTonal(
-                                  onPressed: isMannequinsLoading ? null : _generateMannequin,
-                                  icon: isMannequinsLoading
-                                      ? SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor: AlwaysStoppedAnimation<Color>(
-                                              colorScheme.onSecondaryContainer,
-                                            ),
-                                          ),
-                                        )
-                                      : const Icon(Icons.autorenew),
-                                  tooltip: 'Обновить манекен',
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            if (isMannequinsLoading)
-                              const Center(child: CircularProgressIndicator())
-                            else if (mannequins.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 24),
-                                child: Text(
-                                  mannequinsError ??
-                                      'Нажмите «Создать манекен», чтобы ИИ подобрал образ для текущей погоды и гардероба.',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSecondaryContainer,
-                                  ),
-                                ),
-                              )
-                            else
-                              SizedBox(
-                                height: 420,
-                                child: _buildMannequinCard(
-                                  context,
-                                  mannequins.first,
-                                ),
+                                  const SizedBox(height: 18),
+                                  if (isMannequinsLoading)
+                                    const Center(child: CircularProgressIndicator())
+                                  else if (mannequins.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 24),
+                                      child: Text(
+                                        mannequinsError ??
+                                            'Нажмите «Создать манекен», чтобы ИИ подобрал образ для текущей погоды и гардероба.',
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: colorScheme.onSecondaryContainer,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    _buildMannequinCard(
+                                      context,
+                                      mannequins.first,
+                                    ),
+                                ],
                               ),
+                            ),
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: _MannequinRefreshButton(
+                                onPressed: _generateMannequin,
+                                isLoading: isMannequinsLoading,
+                              ),
+                            ),
                           ],
                         ),
                       ),
