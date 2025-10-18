@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/home_screen.dart';
 import 'screens/garderob/wardrobe_screen.dart';
 import 'screens/settings/settings_screen.dart';
@@ -8,19 +9,28 @@ import 'screens/auth/register_screen.dart';
 import 'services/theme_controller.dart';
 import 'screens/auth/pin_unlock_screen.dart';
 import 'services/api_service.dart';
+import 'services/language_controller.dart';
+import 'l10n/app_localizations.dart';
+import 'l10n/l10n_extensions.dart';
 import 'widgets/fisheye_navigation_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final themeNotifier = ThemeNotifier();
   await themeNotifier.initialize();
-  runApp(WardrobeApp(themeNotifier: themeNotifier));
+  final languageNotifier = LanguageNotifier();
+  await languageNotifier.initialize();
+  runApp(WardrobeApp(
+    themeNotifier: themeNotifier,
+    languageNotifier: languageNotifier,
+  ));
 }
 
 class WardrobeApp extends StatelessWidget {
   final ThemeNotifier themeNotifier;
+  final LanguageNotifier languageNotifier;
 
-  const WardrobeApp({super.key, required this.themeNotifier});
+  const WardrobeApp({super.key, required this.themeNotifier, required this.languageNotifier});
 
   ThemeData _buildLightTheme() {
     final scheme = ColorScheme.fromSeed(
@@ -137,22 +147,33 @@ class WardrobeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: themeNotifier,
+      animation: Listenable.merge([themeNotifier, languageNotifier]),
       builder: (context, _) {
         return ThemeScope(
           notifier: themeNotifier,
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            title: 'Гардероб 26',
-            themeMode: themeNotifier.themeMode,
-            theme: _buildLightTheme(),
-            darkTheme: _buildDarkTheme(),
-            home: const AuthWrapper(),
-            routes: {
-              '/login': (context) => const LoginScreen(),
-              '/register': (context) => const RegisterScreen(),
-              '/home': (context) => const MainNavigation(),
-            },
+          child: LanguageScope(
+            notifier: languageNotifier,
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              onGenerateTitle: (context) => context.l10n.appTitle,
+              themeMode: themeNotifier.themeMode,
+              theme: _buildLightTheme(),
+              darkTheme: _buildDarkTheme(),
+              locale: languageNotifier.locale,
+              supportedLocales: LanguageNotifier.supportedLocales,
+              localizationsDelegates: const [
+                AppLocalizationsDelegate(),
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              home: const AuthWrapper(),
+              routes: {
+                '/login': (context) => const LoginScreen(),
+                '/register': (context) => const RegisterScreen(),
+                '/home': (context) => const MainNavigation(),
+              },
+            ),
           ),
         );
       },

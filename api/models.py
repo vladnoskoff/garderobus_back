@@ -33,6 +33,9 @@ class User(Base):
     theme_preference = Column(
         String, nullable=False, default="light", server_default="light"
     )
+    language_preference = Column(
+        String(10), nullable=False, default="ru", server_default="ru"
+    )
 
     locations = relationship(
         "WardrobeLocation",
