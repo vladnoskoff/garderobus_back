@@ -92,6 +92,51 @@ AI_JSON_SCHEMA = {
     "additionalProperties": False,
 }
 
+_AI_LANGUAGE_PROMPTS = {
+    "ru": {
+        "system": (
+            "You are a fashion product analyst. Identify garment details strictly from the image. "
+            "Return ONLY valid JSON that matches the provided JSON Schema. "
+            "Populate every textual field in Russian language with natural wording."
+        ),
+        "user": (
+            "Проанализируй одежду, заполни все текстовые поля исключительно на русском языке и верни JSON по схеме. "
+            "Сформируй лаконичное описание и нейтральный промпт для манекена."
+        ),
+    },
+    "en": {
+        "system": (
+            "You are a fashion product analyst. Identify garment details strictly from the image. "
+            "Return ONLY valid JSON that matches the provided JSON Schema. "
+            "Populate every textual field in English with natural, idiomatic wording."
+        ),
+        "user": (
+            "Analyse the garment, fill in every text field exclusively in English and return JSON that matches the schema. "
+            "Provide a concise catalogue description and a neutral mannequin prompt."
+        ),
+    },
+}
+
+
+def _normalize_language_code(value: Optional[str]) -> str:
+    if value is None:
+        return "ru"
+
+    normalized = value.strip().lower()
+    if not normalized:
+        return "ru"
+
+    if normalized in _AI_LANGUAGE_PROMPTS:
+        return normalized
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "Неподдерживаемый язык анализа. Допустимые значения: "
+            f"{', '.join(sorted(_AI_LANGUAGE_PROMPTS))}"
+        ),
+    )
+
 
 @router.get("/user/{user_id}", response_model=list[schemas.ClothesResponse])
 def get_user_clothes(
@@ -108,7 +153,10 @@ def get_user_clothes(
     return query.all()
 
 
-def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
+def _build_ai_messages(
+    image_payload: str, is_base64: bool, language_code: str
+) -> list[dict]:
+    prompts = _AI_LANGUAGE_PROMPTS[language_code]
     if is_base64:
         image_content = {
             "type": "image_url",
@@ -120,21 +168,14 @@ def _build_ai_messages(image_payload: str, is_base64: bool) -> list[dict]:
     return [
         {
             "role": "system",
-            "content": (
-                "You are a fashion product analyst. Identify garment details strictly from the image. "
-                "Return ONLY valid JSON that matches the provided JSON Schema. "
-                "Populate every textual field in Russian language with natural wording."
-            ),
+            "content": prompts["system"],
         },
         {
             "role": "user",
             "content": [
                 {
                     "type": "text",
-                    "text": (
-                        "Проанализируй одежду, заполни все текстовые поля исключительно на русском языке и верни JSON по схеме. "
-                        "Сформируй лаконичное описание и нейтральный промпт для манекена."
-                    ),
+                    "text": prompts["user"],
                 },
                 image_content,
             ],
@@ -165,7 +206,7 @@ def _call_ai_for_insights(messages: list[dict]) -> str:
 
 
 async def _analyze_image_bytes(
-    image_bytes_list: Sequence[bytes],
+    image_bytes_list: Sequence[bytes], language_code: str
 ) -> schemas.ClothesInsights:
     payloads = []
     for blob in image_bytes_list:
@@ -177,7 +218,9 @@ async def _analyze_image_bytes(
         raise HTTPException(status_code=400, detail="Пустой файл изображения")
 
     try:
-        raw_response = _call_ai_for_insights(_build_ai_messages(payloads, True))
+        raw_response = _call_ai_for_insights(
+            _build_ai_messages(payloads, True, language_code)
+        )
     except HTTPException:
         raise
     except Exception as exc:
@@ -220,11 +263,14 @@ def _insights_to_autofill(insights: schemas.ClothesInsights) -> schemas.ClothesA
 
 
 @router.post("/autofill", response_model=schemas.ClothesAutoFill)
-async def autofill_clothes_fields(file: UploadFile = File(...)):
+async def autofill_clothes_fields(
+    file: UploadFile = File(...), language_code: str = Form("ru")
+):
     image_bytes = await file.read()
     if not image_bytes:
         raise HTTPException(status_code=400, detail="Файл изображения пустой")
-    insights = await _analyze_image_bytes(image_bytes)
+    normalized_language = _normalize_language_code(language_code)
+    insights = await _analyze_image_bytes(image_bytes, normalized_language)
     return _insights_to_autofill(insights)
 
 
@@ -243,6 +289,7 @@ async def add_clothes(
     ai_metadata: Optional[str] = Form(None),
     auto_fill: bool = Form(False),
     location_id: Optional[int] = Form(None),
+    language_code: Optional[str] = Form(None),
     files: list[UploadFile] = File(...),
     db: Session = Depends(get_db),
 ):
@@ -268,9 +315,11 @@ async def add_clothes(
 
     image_payloads = [content for _, content in uploads]
 
+    normalized_language = _normalize_language_code(language_code)
+
     autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
     if auto_fill or not all([name, category, season, color]):
-        insights = await _analyze_image_bytes(image_payloads)
+        insights = await _analyze_image_bytes(image_payloads, normalized_language)
         autofilled_metadata = _insights_to_autofill(insights)
 
         def _merge_field(

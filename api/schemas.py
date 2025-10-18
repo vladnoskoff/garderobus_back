@@ -13,6 +13,7 @@ class UserCreate(BaseModel):
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
     pin_code: Optional[str] = None
+    language_preference: Optional[str] = None
 
 
 class UserLogin(BaseModel):
@@ -31,6 +32,7 @@ class UserResponse(BaseModel):
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
     has_pin: bool = False
+    language_preference: Optional[str] = "ru"
 
     class Config:
         from_attributes = True
@@ -45,6 +47,7 @@ class UserUpdate(BaseModel):
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
     pin_code: Optional[str] = None
+    language_preference: Optional[str] = None
 
 
 class PinVerificationRequest(BaseModel):

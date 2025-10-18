@@ -18,6 +18,7 @@ _MAX_PASSWORD_LENGTH = 20
 _PASSWORD_TOO_LONG_DETAIL = "Пароль слишком длинный. Максимальная длина — 72 байта."
 _MIN_PIN_LENGTH = 4
 _MAX_PIN_LENGTH = 8
+_SUPPORTED_LANGUAGES = {"ru", "en"}
 
 
 def _ensure_password_fits_backend(password: str) -> None:
@@ -82,6 +83,8 @@ def _verify_pin(pin: str, pin_hash: str) -> bool:
         return bcrypt.checkpw(pin.encode("utf-8"), pin_hash.encode("utf-8"))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="Не удалось проверить PIN-код") from exc
+
+
 def _normalize_gender(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -122,6 +125,23 @@ def _normalize_theme(value: Optional[str]) -> str:
     return "dark" if normalized in dark_markers else "light"
 
 
+def _normalize_language(value: Optional[str]) -> str:
+    if value is None:
+        return "ru"
+
+    normalized = value.strip().lower()
+    if not normalized:
+        return "ru"
+
+    if normalized in _SUPPORTED_LANGUAGES:
+        return normalized
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Неподдерживаемый код языка: {value}. Допустимые значения: {', '.join(sorted(_SUPPORTED_LANGUAGES))}",
+    )
+
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + datetime.timedelta(days=1)
@@ -145,6 +165,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         password_hash=hashed_password,
         gender=_normalize_gender(user.gender),
         theme_preference=_normalize_theme(user.theme_preference),
+        language_preference=_normalize_language(user.language_preference),
         pin_hash=pin_hash,
     )
     db.add(new_user)
@@ -211,6 +232,8 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
         user.gender = _normalize_gender(updates.gender)
     if updates.theme_preference is not None:
         user.theme_preference = _normalize_theme(updates.theme_preference)
+    if updates.language_preference is not None:
+        user.language_preference = _normalize_language(updates.language_preference)
     if updates.pin_code is not None:
         normalized_pin = _normalize_pin(updates.pin_code)
         user.pin_hash = _hash_pin(normalized_pin) if normalized_pin else None
