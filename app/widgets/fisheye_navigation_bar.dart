@@ -32,7 +32,7 @@ class FisheyeNavigationBar extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(26),
+      borderRadius: BorderRadius.circular(34),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
         child: DecoratedBox(
@@ -59,9 +59,9 @@ class FisheyeNavigationBar extends StatelessWidget {
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               child: SizedBox(
-                height: 56,
+                height: 48,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -109,14 +109,14 @@ class _FisheyeItem extends StatelessWidget {
     final bool isNeighbor = distance == 1;
 
     final double targetScale = isSelected
-        ? 1.1
+        ? 1.08
         : isNeighbor
-            ? 1.04
+            ? 1.02
             : 0.96;
     final double targetYOffset = isSelected
-        ? -6
+        ? -4
         : isNeighbor
-            ? -3
+            ? -2
             : 0;
 
     return Expanded(
@@ -147,10 +147,10 @@ class _FisheyeItem extends StatelessWidget {
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 320),
             curve: Curves.easeOutCubic,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
+            margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 18 : 0,
-              vertical: 8,
+              horizontal: isSelected ? 16 : 0,
+              vertical: 6,
             ),
             decoration: BoxDecoration(
               color: isSelected
@@ -214,14 +214,14 @@ class _SelectedNavContent extends StatelessWidget {
       children: [
         Icon(
           item.selectedIcon,
-          size: 22,
+          size: 20,
           color: colorScheme.onPrimary,
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 6),
         Text(
           item.label,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 10.5,
             fontWeight: FontWeight.w600,
             color: colorScheme.onPrimary,
             letterSpacing: 0.2,
@@ -260,14 +260,14 @@ class _UnselectedNavContent extends StatelessWidget {
       children: [
         Icon(
           item.icon,
-          size: 22,
+          size: 20,
           color: iconColor,
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Text(
           item.label,
           style: TextStyle(
-            fontSize: 11,
+            fontSize: 9.5,
             fontWeight: FontWeight.w600,
             color: textColor,
             letterSpacing: 0.1,
