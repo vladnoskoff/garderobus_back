@@ -45,9 +45,6 @@ class FisheyeNavigationBar extends StatelessWidget {
                 colorScheme.surfaceVariant.withOpacity(isDark ? 0.42 : 0.72),
               ],
             ),
-            border: Border.all(
-              color: colorScheme.outlineVariant.withOpacity(isDark ? 0.28 : 0.24),
-            ),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(isDark ? 0.32 : 0.14),
@@ -59,9 +56,9 @@ class FisheyeNavigationBar extends StatelessWidget {
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: SizedBox(
-                height: 42,
+                height: 44,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -114,9 +111,9 @@ class _FisheyeItem extends StatelessWidget {
             ? 1.015
             : 0.97;
     final double targetYOffset = isSelected
-        ? -1.2
+        ? 0.6
         : isNeighbor
-            ? -0.6
+            ? 0.3
             : 0;
 
     return Expanded(
@@ -150,7 +147,7 @@ class _FisheyeItem extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: EdgeInsets.symmetric(
               horizontal: isSelected ? 14 : 0,
-              vertical: 5,
+              vertical: 6,
             ),
             decoration: BoxDecoration(
               color: isSelected
