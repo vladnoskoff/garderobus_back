@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -33,7 +32,7 @@ class FisheyeNavigationBar extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(26),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
         child: DecoratedBox(
@@ -42,78 +41,41 @@ class FisheyeNavigationBar extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                colorScheme.surface.withOpacity(isDark ? 0.76 : 0.92),
-                colorScheme.surfaceVariant.withOpacity(isDark ? 0.6 : 0.78),
+                colorScheme.surface.withOpacity(isDark ? 0.6 : 0.88),
+                colorScheme.surfaceVariant.withOpacity(isDark ? 0.42 : 0.72),
               ],
             ),
             border: Border.all(
-              color: colorScheme.outlineVariant.withOpacity(isDark ? 0.35 : 0.28),
+              color: colorScheme.outlineVariant.withOpacity(isDark ? 0.28 : 0.24),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.45 : 0.18),
-                blurRadius: 30,
-                offset: const Offset(0, 18),
+                color: Colors.black.withOpacity(isDark ? 0.32 : 0.14),
+                blurRadius: 24,
+                offset: const Offset(0, 14),
               ),
             ],
           ),
           child: SafeArea(
             top: false,
-            child: SizedBox(
-              height: 72,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final double itemExtent = constraints.maxWidth / items.length;
-                  final double alignmentStep = items.length == 1
-                      ? 0
-                      : 2 / (items.length - 1);
-
-                  return Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      AnimatedAlign(
-                        duration: const Duration(milliseconds: 420),
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment(
-                          -1 + alignmentStep * currentIndex,
-                          0,
-                        ),
-                        child: Container(
-                          width: math.max(itemExtent * 0.74, 72),
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: colorScheme.primary.withOpacity(isDark ? 0.22 : 0.16),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(
-                              color: colorScheme.primary.withOpacity(isDark ? 0.32 : 0.24),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: colorScheme.primary.withOpacity(isDark ? 0.3 : 0.18),
-                                blurRadius: 22,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                        ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: SizedBox(
+                height: 56,
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int index = 0; index < items.length; index++)
+                      _FisheyeItem(
+                        item: items[index],
+                        index: index,
+                        currentIndex: currentIndex,
+                        onTap: () => onItemSelected(index),
+                        colorScheme: colorScheme,
+                        isDark: isDark,
                       ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          for (int index = 0; index < items.length; index++)
-                            _FisheyeItem(
-                              item: items[index],
-                              index: index,
-                              currentIndex: currentIndex,
-                              onTap: () => onItemSelected(index),
-                              colorScheme: colorScheme,
-                            ),
-                        ],
-                      ),
-                    ],
-                  );
-                },
+                  ],
+                ),
               ),
             ),
           ),
@@ -129,6 +91,7 @@ class _FisheyeItem extends StatelessWidget {
   final int currentIndex;
   final VoidCallback onTap;
   final ColorScheme colorScheme;
+  final bool isDark;
 
   const _FisheyeItem({
     required this.item,
@@ -136,6 +99,7 @@ class _FisheyeItem extends StatelessWidget {
     required this.currentIndex,
     required this.onTap,
     required this.colorScheme,
+    required this.isDark,
   });
 
   @override
@@ -145,14 +109,14 @@ class _FisheyeItem extends StatelessWidget {
     final bool isNeighbor = distance == 1;
 
     final double targetScale = isSelected
-        ? 1.22
+        ? 1.1
         : isNeighbor
-            ? 1.08
+            ? 1.04
             : 0.96;
     final double targetYOffset = isSelected
-        ? -10
+        ? -6
         : isNeighbor
-            ? -4
+            ? -3
             : 0;
 
     return Expanded(
@@ -161,8 +125,8 @@ class _FisheyeItem extends StatelessWidget {
         onTap: onTap,
         child: TweenAnimationBuilder<double>(
           tween: Tween(begin: 1, end: targetScale),
-          duration: const Duration(milliseconds: 320),
-          curve: Curves.easeOutBack,
+          duration: const Duration(milliseconds: 280),
+          curve: Curves.easeOutCubic,
           builder: (context, scale, child) {
             return TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: targetYOffset),
@@ -180,37 +144,136 @@ class _FisheyeItem extends StatelessWidget {
               child: child,
             );
           },
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isSelected ? item.selectedIcon : item.icon,
-                size: 24,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 320),
+            curve: Curves.easeOutCubic,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: isSelected ? 18 : 0,
+              vertical: 8,
+            ),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? colorScheme.primary.withOpacity(isDark ? 0.28 : 0.18)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
                 color: isSelected
-                    ? colorScheme.onPrimary
-                    : colorScheme.onSurfaceVariant,
+                    ? colorScheme.primary.withOpacity(isDark ? 0.4 : 0.28)
+                    : Colors.transparent,
               ),
-              const SizedBox(height: 4),
-              AnimatedOpacity(
-                opacity: isSelected ? 1 : (isNeighbor ? 0.75 : 0),
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOut,
-                child: AnimatedDefaultTextStyle(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOut,
-                  style: TextStyle(
-                    fontSize: isSelected ? 12 : 10,
-                    fontWeight: FontWeight.w600,
-                    color: colorScheme.onPrimary,
-                    letterSpacing: 0.2,
-                  ),
-                  child: Text(item.label),
-                ),
-              ),
-            ],
+            ),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOut,
+              switchOutCurve: Curves.easeIn,
+              layoutBuilder: (currentChild, previousChildren) {
+                return Stack(
+                  alignment: Alignment.center,
+                  children: <Widget>[
+                    ...previousChildren,
+                    if (currentChild != null) currentChild,
+                  ],
+                );
+              },
+              child: isSelected
+                  ? _SelectedNavContent(
+                      key: const ValueKey('selected'),
+                      item: item,
+                      colorScheme: colorScheme,
+                    )
+                  : _UnselectedNavContent(
+                      key: const ValueKey('unselected'),
+                      item: item,
+                      isNeighbor: isNeighbor,
+                      colorScheme: colorScheme,
+                    ),
+            ),
           ),
         ),
       ),
+    );
+  }
+}
+
+class _SelectedNavContent extends StatelessWidget {
+  final FisheyeNavigationBarItem item;
+  final ColorScheme colorScheme;
+
+  const _SelectedNavContent({
+    super.key,
+    required this.item,
+    required this.colorScheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          item.selectedIcon,
+          size: 22,
+          color: colorScheme.onPrimary,
+        ),
+        const SizedBox(width: 8),
+        Text(
+          item.label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: colorScheme.onPrimary,
+            letterSpacing: 0.2,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _UnselectedNavContent extends StatelessWidget {
+  final FisheyeNavigationBarItem item;
+  final bool isNeighbor;
+  final ColorScheme colorScheme;
+
+  const _UnselectedNavContent({
+    super.key,
+    required this.item,
+    required this.isNeighbor,
+    required this.colorScheme,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color iconColor = Color.lerp(
+          colorScheme.onSurfaceVariant.withOpacity(0.6),
+          colorScheme.onSurface.withOpacity(0.9),
+          isNeighbor ? 0.7 : 0,
+        ) ??
+        colorScheme.onSurfaceVariant;
+
+    final Color textColor = iconColor.withOpacity(isNeighbor ? 0.95 : 0.78);
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          item.icon,
+          size: 22,
+          color: iconColor,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          item.label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: textColor,
+            letterSpacing: 0.1,
+          ),
+        ),
+      ],
     );
   }
 }
