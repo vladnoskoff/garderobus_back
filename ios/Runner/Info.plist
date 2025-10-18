@@ -53,5 +53,9 @@
 	<string>Для сохранения обработанных изображений гардероба требуется разрешение на добавление фото.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID используется для быстрого входа в приложение вместо PIN-кода.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Микрофон используется для голосового помощника и распознавания речи.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Распознавание речи помогает управлять гардеробом голосом.</string>
 </dict>
 </plist>
