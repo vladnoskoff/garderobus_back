@@ -1,15 +1,151 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
-import '../services/theme_controller.dart';
-import 'settings/home_settings/home_screen_settings.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../services/api_service.dart';
+import '../services/clothes.dart';
+import '../services/theme_controller.dart';
+import 'garderob/clothes_detail_screen.dart';
+import 'settings/home_settings/home_screen_settings.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
   _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _MannequinItemChip extends StatelessWidget {
+  const _MannequinItemChip({
+    required this.name,
+    this.category,
+    this.onTap,
+  });
+
+  final String name;
+  final String? category;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: colorScheme.secondaryContainer.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              style: theme.textTheme.labelMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+              ),
+            ),
+            if (category != null && category!.isNotEmpty)
+              Text(
+                category!,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  fontSize: 10,
+                  color: colorScheme.onSecondaryContainer.withOpacity(0.7),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MannequinRefreshButton extends StatelessWidget {
+  const _MannequinRefreshButton({
+    required this.onPressed,
+    required this.isLoading,
+  });
+
+  final VoidCallback onPressed;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final foregroundColor = colorScheme.onSecondaryContainer;
+
+    return Tooltip(
+      message: 'Обновить манекен',
+      child: Material(
+        color: foregroundColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: isLoading ? null : onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: isLoading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
+                    ),
+                  )
+                : Icon(
+                    Icons.autorenew,
+                    color: foregroundColor,
+                    size: 20,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MannequinImageViewer extends StatelessWidget {
+  const _MannequinImageViewer({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Просмотр манекена',
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          child: Hero(
+            tag: imageUrl,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white54,
+                size: 48,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -348,7 +484,7 @@ class _HomeScreenState extends State<HomeScreen> {
         const [];
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
@@ -363,33 +499,43 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
+          AspectRatio(
+            aspectRatio: 3 / 4,
             child: ClipRRect(
               borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: Container(
+              child: Material(
                 color: colorScheme.surfaceVariant,
-                alignment: Alignment.center,
-                child: imageUrl != null && imageUrl.isNotEmpty
-                    ? Image.network(
-                        imageUrl,
-                        fit: BoxFit.contain,
-                        alignment: Alignment.center,
-                        errorBuilder: (_, __, ___) => Icon(
-                          Icons.broken_image_outlined,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 40,
-                        ),
-                      )
-                    : Icon(
-                        Icons.image_not_supported_outlined,
-                        color: colorScheme.onSurfaceVariant,
-                        size: 40,
-                      ),
+                child: InkWell(
+                  onTap: imageUrl != null && imageUrl.isNotEmpty
+                      ? () => _openMannequinImage(context, imageUrl)
+                      : null,
+                  child: Center(
+                    child: imageUrl != null && imageUrl.isNotEmpty
+                        ? Hero(
+                            tag: imageUrl,
+                            child: Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.center,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.broken_image_outlined,
+                                color: colorScheme.onSurfaceVariant,
+                                size: 40,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.image_not_supported_outlined,
+                            color: colorScheme.onSurfaceVariant,
+                            size: 40,
+                          ),
+                  ),
+                ),
               ),
             ),
           ),
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -398,36 +544,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: theme.textTheme.titleMedium,
                 ),
                 if (items.isNotEmpty) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                    spacing: 6,
+                    runSpacing: 6,
                     children: items.take(4).map((item) {
                       final name = item['name']?.toString() ?? 'Вещь';
                       final category = item['category']?.toString();
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: colorScheme.secondaryContainer.withOpacity(0.6),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              name,
-                              style: theme.textTheme.labelLarge,
-                            ),
-                            if (category != null && category.isNotEmpty)
-                              Text(
-                                category,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colorScheme.onSecondaryContainer.withOpacity(0.7),
-                                ),
-                            ),
-                          ],
-                        ),
+                      return _MannequinItemChip(
+                        name: name,
+                        category: category,
+                        onTap: () => _handleMannequinItemTap(context, item),
                       );
                     }).toList(),
                   ),
@@ -442,6 +569,57 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _handleMannequinItemTap(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
+    final rawId = item['id'];
+    final clothesId = rawId is int
+        ? rawId
+        : rawId is String
+            ? int.tryParse(rawId)
+            : int.tryParse(rawId?.toString() ?? '');
+
+    if (clothesId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось определить вещь для просмотра.')),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final Clothes clothes = await ApiService.getClothesById(clothesId);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ClothesDetailScreen(clothes: clothes),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть вещь: $error')),
+      );
+    }
+  }
+
+  void _openMannequinImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _MannequinImageViewer(imageUrl: imageUrl),
       ),
     );
   }
@@ -655,48 +833,54 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(20),
                         ),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Stack(
                           children: [
-                            Text(
-                              weatherComment ?? 'Подождите, загружаем рекомендации...',
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                color: colorScheme.onSecondaryContainer,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: FilledButton.icon(
-                                onPressed: isMannequinsLoading ? null : _generateMannequin,
-                                icon: const Icon(Icons.autorenew),
-                                label: const Text('Создать манекен'),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            if (isMannequinsLoading)
-                              const Center(child: CircularProgressIndicator())
-                            else if (mannequins.isEmpty)
-                              Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 24),
-                                child: Text(
-                                  mannequinsError ??
-                                      'Нажмите «Создать манекен», чтобы ИИ подобрал образ для текущей погоды и гардероба.',
-                                  textAlign: TextAlign.center,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: colorScheme.onSecondaryContainer,
+                            Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 56, top: 4),
+                                    child: Text(
+                                      weatherComment ??
+                                          'Подождите, загружаем рекомендации...',
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSecondaryContainer,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              )
-                            else
-                              SizedBox(
-                                height: 320,
-                                child: _buildMannequinCard(
-                                  context,
-                                  mannequins.first,
-                                ),
+                                  const SizedBox(height: 18),
+                                  if (isMannequinsLoading)
+                                    const Center(child: CircularProgressIndicator())
+                                  else if (mannequins.isEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 24),
+                                      child: Text(
+                                        mannequinsError ??
+                                            'Нажмите «Создать манекен», чтобы ИИ подобрал образ для текущей погоды и гардероба.',
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: colorScheme.onSecondaryContainer,
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    _buildMannequinCard(
+                                      context,
+                                      mannequins.first,
+                                    ),
+                                ],
                               ),
+                            ),
+                            Positioned(
+                              top: 12,
+                              right: 12,
+                              child: _MannequinRefreshButton(
+                                onPressed: _generateMannequin,
+                                isLoading: isMannequinsLoading,
+                              ),
+                            ),
                           ],
                         ),
                       ),

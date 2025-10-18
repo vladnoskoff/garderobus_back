@@ -281,6 +281,20 @@ class ApiService {
     }
   }
 
+  static Future<Clothes> getClothesById(int clothesId) async {
+    final response = await http.get(Uri.parse('$baseUrl/clothes/$clothesId'));
+
+    if (response.statusCode != 200) {
+      throw Exception('Вещь не найдена (код ${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(utf8.decode(response.bodyBytes));
+    if (decoded is Map<String, dynamic>) {
+      return Clothes.fromJson(decoded);
+    }
+    throw Exception('Некорректный ответ сервера при загрузке вещи');
+  }
+
 
   // Добавление одежды пользователя
   static Future<void> addClothes({
