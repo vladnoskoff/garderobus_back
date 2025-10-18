@@ -32,7 +32,7 @@ class FisheyeNavigationBar extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(34),
+      borderRadius: BorderRadius.circular(30),
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
         child: DecoratedBox(
@@ -59,9 +59,9 @@ class FisheyeNavigationBar extends StatelessWidget {
           child: SafeArea(
             top: false,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
               child: SizedBox(
-                height: 48,
+                height: 42,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -149,8 +149,8 @@ class _FisheyeItem extends StatelessWidget {
             curve: Curves.easeOutCubic,
             margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 16 : 0,
-              vertical: 6,
+              horizontal: isSelected ? 14 : 0,
+              vertical: 4,
             ),
             decoration: BoxDecoration(
               color: isSelected
@@ -214,14 +214,14 @@ class _SelectedNavContent extends StatelessWidget {
       children: [
         Icon(
           item.selectedIcon,
-          size: 20,
+          size: 18,
           color: colorScheme.onPrimary,
         ),
-        const SizedBox(width: 6),
+        const SizedBox(width: 5),
         Text(
           item.label,
           style: TextStyle(
-            fontSize: 10.5,
+            fontSize: 9.5,
             fontWeight: FontWeight.w600,
             color: colorScheme.onPrimary,
             letterSpacing: 0.2,
@@ -260,14 +260,14 @@ class _UnselectedNavContent extends StatelessWidget {
       children: [
         Icon(
           item.icon,
-          size: 20,
+          size: 18,
           color: iconColor,
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 2),
         Text(
           item.label,
           style: TextStyle(
-            fontSize: 9.5,
+            fontSize: 8.5,
             fontWeight: FontWeight.w600,
             color: textColor,
             letterSpacing: 0.1,
