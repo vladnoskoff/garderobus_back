@@ -264,7 +264,7 @@ class _MainNavigationState extends State<MainNavigation> {
     return Scaffold(
       body: _pages[_currentIndex],
       bottomNavigationBar: Padding(
-        padding: const EdgeInsets.only(left: 20, right: 20, bottom: 8),
+        padding: const EdgeInsets.only(left: 26, right: 26, bottom: 4),
         child: FisheyeNavigationBar(
           currentIndex: _currentIndex,
           onItemSelected: (index) {
