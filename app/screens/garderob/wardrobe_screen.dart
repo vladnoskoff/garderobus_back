@@ -617,7 +617,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Гардеробус'),
+        title: const Text('Гардероб 26'),
         centerTitle: true,
         actions: [
           IconButton(

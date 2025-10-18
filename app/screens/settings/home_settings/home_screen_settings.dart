@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../../services/api_service.dart';
+import '../../../widgets/rounded_back_button.dart';
 import 'Location_Picker_Screen.dart';
 
 class HomeScreenSettings extends StatefulWidget {
@@ -436,7 +437,11 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Дом'), centerTitle: true),
+      appBar: AppBar(
+        leading: const RoundedBackButton(),
+        title: const Text('Дом'),
+        centerTitle: true,
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: SingleChildScrollView(

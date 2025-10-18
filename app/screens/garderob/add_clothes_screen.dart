@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
+import '../../widgets/rounded_back_button.dart';
 
 enum _PhotoPermissionAction {
   keepLimited,
@@ -484,7 +485,10 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
     return Scaffold(
-      appBar: AppBar(title: Text('Добавить одежду')),
+      appBar: AppBar(
+        leading: const RoundedBackButton(),
+        title: const Text('Добавить одежду'),
+      ),
       body: Stack(
         children: [
           Padding(

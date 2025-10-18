@@ -109,7 +109,15 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               children: [
                 Image.asset("assets/logo.png", height: 150),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+                Text(
+                  'Гардероб 26',
+                  style: theme.textTheme.displaySmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 12),
                 Text(
                   "Добро пожаловать!",
                   style: theme.textTheme.headlineMedium?.copyWith(
