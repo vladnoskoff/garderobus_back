@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../services/api_service.dart';
 
 class OutfitHistoryScreen extends StatefulWidget {
@@ -16,6 +17,7 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
   bool _isLoading = true;
   String? _error;
   List<Map<String, dynamic>> _history = [];
+  Map<int, String> _locationNames = {};
 
   @override
   void initState() {
@@ -46,6 +48,25 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
           _isLoading = false;
         });
         return;
+      }
+
+      final locationNames = <int, String>{};
+      try {
+        final rawLocations = await ApiService.getWardrobeLocations(userId);
+        for (final location in rawLocations) {
+          if (location is Map) {
+            final idValue = location['id'];
+            final nameValue = location['name'];
+            final parsedId = idValue is int
+                ? idValue
+                : int.tryParse(idValue?.toString() ?? '');
+            if (parsedId != null && nameValue != null) {
+              locationNames[parsedId] = nameValue.toString();
+            }
+          }
+        }
+      } catch (_) {
+        // Игнорируем ошибку получения локаций, чтобы не блокировать историю
       }
 
       final outfitHistory = await ApiService.getOutfitHistory(
@@ -103,6 +124,7 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
       setState(() {
         _history = combined;
         _isLoading = false;
+        _locationNames = locationNames;
       });
     } catch (e) {
       if (!mounted) return;
@@ -146,7 +168,12 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
     return null;
   }
 
-  Widget _buildHistoryList() {
+  Widget _buildHistoryList(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final secondaryTextColor =
+        theme.textTheme.bodySmall?.color ?? colorScheme.onSurfaceVariant;
+
     if (_history.isEmpty) {
       return const Center(
         child: Text(
@@ -180,14 +207,9 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
           final weather = (rawData['weather'] is Map)
               ? Map<String, dynamic>.from(rawData['weather'] as Map)
               : null;
-          final locationName = rawData['location_name'] ?? rawData['locationName'];
+          final locationName =
+              rawData['location_name'] ?? rawData['locationName'];
           String? locationDisplay = locationName?.toString();
-          if (locationDisplay == null && entryType == 'mannequin') {
-            final locationId = rawData['location_id'] ?? rawData['locationId'];
-            if (locationId != null) {
-              locationDisplay = 'Локация #$locationId';
-            }
-          }
           final items = <Map<String, dynamic>>[];
           if (rawData['items'] is List) {
             for (final element in rawData['items'] as List) {
@@ -208,6 +230,32 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
             createdAtText,
           );
           final rating = entryType == 'outfit' ? rawData['rating'] : null;
+          final locationIdValue =
+              rawData['location_id'] ?? rawData['locationId'];
+          final parsedLocationId = locationIdValue is int
+              ? locationIdValue
+              : int.tryParse(locationIdValue?.toString() ?? '');
+          locationDisplay ??= parsedLocationId != null
+              ? _locationNames[parsedLocationId]
+              : null;
+          locationDisplay ??= parsedLocationId != null
+              ? 'Локация #$parsedLocationId'
+              : null;
+
+          final titleStyle = theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ) ??
+              const TextStyle(fontSize: 18, fontWeight: FontWeight.w600);
+          final dateStyle = theme.textTheme.bodySmall?.copyWith(
+                color: secondaryTextColor,
+              ) ??
+              TextStyle(fontSize: 12, color: secondaryTextColor);
+          final bodyStyle = theme.textTheme.bodyMedium;
+          final captionStyle = theme.textTheme.bodySmall?.copyWith(
+                color: secondaryTextColor,
+              ) ??
+              TextStyle(fontSize: 12, color: secondaryTextColor);
+          final ratingTextStyle = theme.textTheme.bodyMedium;
 
           return Card(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -222,17 +270,17 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                       Expanded(
                         child: Text(
                           title.toString(),
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                          style: titleStyle,
                         ),
                       ),
                       Text(
                         createdAtText,
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                        style: dateStyle,
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  _buildEntryBadge(entryType),
+                  _buildEntryBadge(entryType, theme),
                   const SizedBox(height: 12),
                   if (imageUrl != null)
                     ClipRRect(
@@ -244,27 +292,36 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                         fit: BoxFit.cover,
                         errorBuilder: (_, __, ___) => Container(
                           height: 180,
-                          color: Colors.black12,
+                          color: colorScheme.surfaceVariant.withOpacity(
+                            theme.brightness == Brightness.dark ? 0.5 : 1,
+                          ),
                           alignment: Alignment.center,
-                          child: const Text('Не удалось загрузить изображение'),
+                          child: Text(
+                            'Не удалось загрузить изображение',
+                            style: captionStyle,
+                          ),
                         ),
                       ),
                     ),
                   if (imageUrl != null) const SizedBox(height: 12),
                   Text(
                     description.toString(),
-                    style: const TextStyle(fontSize: 14),
+                    style: bodyStyle,
                   ),
                   if (weather != null) ...[
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Icon(Icons.wb_sunny, size: 18, color: Colors.orangeAccent),
+                        Icon(
+                          Icons.wb_sunny,
+                          size: 18,
+                          color: colorScheme.tertiary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '${weather['temperature']}°C — ${weather['condition']}',
-                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                            style: captionStyle,
                           ),
                         ),
                       ],
@@ -274,12 +331,16 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Icon(Icons.location_on, size: 18, color: Colors.teal),
+                        Icon(
+                          Icons.location_on,
+                          size: 18,
+                          color: colorScheme.primary,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             locationDisplay,
-                            style: const TextStyle(fontSize: 12, color: Colors.black54),
+                            style: captionStyle,
                           ),
                         ),
                       ],
@@ -289,23 +350,33 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 18),
+                        Icon(
+                          Icons.star,
+                          color: colorScheme.secondary,
+                          size: 18,
+                        ),
                         const SizedBox(width: 4),
-                        Text(rating.toString()),
+                        Text(
+                          rating.toString(),
+                          style: ratingTextStyle,
+                        ),
                       ],
                     ),
                   ],
                   if (items.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Состав наряда',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      style: theme.textTheme.titleSmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                     ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: items.map(_buildClothingChip).toList(),
+                      children:
+                          items.map((item) => _buildClothingChip(item, theme)).toList(),
                     ),
                   ],
                 ],
@@ -321,6 +392,11 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final selectedLocationName = widget.locationId != null
+        ? _locationNames[widget.locationId!]
+        : null;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('История нарядов'),
@@ -345,15 +421,19 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                         padding: const EdgeInsets.all(12),
                         margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF62DEFA),
+                          color: theme.colorScheme.secondaryContainer,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Text(
-                          'Показаны рекомендации для выбранной локации.',
-                          style: TextStyle(fontSize: 13),
+                        child: Text(
+                          selectedLocationName != null
+                              ? 'Показаны рекомендации для локации «$selectedLocationName».'
+                              : 'Показаны рекомендации для выбранной локации.',
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                                color: theme.colorScheme.onSecondaryContainer,
+                              ),
                         ),
                       ),
-                    Expanded(child: _buildHistoryList()),
+                    Expanded(child: _buildHistoryList(context)),
                   ],
                 ),
     );
@@ -408,14 +488,15 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
     return 'Описание отсутствует';
   }
 
-  Widget _buildEntryBadge(String entryType) {
+  Widget _buildEntryBadge(String entryType, ThemeData theme) {
     final bool isMannequin = entryType == 'mannequin';
+    final colorScheme = theme.colorScheme;
     final Color backgroundColor = isMannequin
-        ? const Color(0xFFE6F4EA)
-        : const Color(0xFFE5F3FF);
+        ? colorScheme.secondaryContainer
+        : colorScheme.primaryContainer;
     final Color textColor = isMannequin
-        ? const Color(0xFF1B5E20)
-        : const Color(0xFF0D47A1);
+        ? colorScheme.onSecondaryContainer
+        : colorScheme.onPrimaryContainer;
     final String label = isMannequin ? 'AI манекен' : 'Рекомендация';
 
     return Container(
@@ -435,7 +516,7 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
     );
   }
 
-  Widget _buildClothingChip(Map<String, dynamic> item) {
+  Widget _buildClothingChip(Map<String, dynamic> item, ThemeData theme) {
     final category = item['category'];
     final name = item['name'];
     final color = item['color'];
@@ -444,11 +525,24 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
       if (color != null && color.toString().trim().isNotEmpty) color,
       if (season != null && season.toString().trim().isNotEmpty) season,
     ].join(' • ');
+    final colorScheme = theme.colorScheme;
+    final backgroundColor = theme.brightness == Brightness.dark
+        ? colorScheme.surfaceVariant.withOpacity(0.5)
+        : colorScheme.surfaceVariant;
+    final titleStyle = theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+        );
+    final categoryStyle = theme.textTheme.bodySmall?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        );
+    final subtitleStyle = theme.textTheme.labelSmall?.copyWith(
+          color: colorScheme.onSurfaceVariant.withOpacity(0.8),
+        );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F5F7),
+        color: backgroundColor,
         borderRadius: BorderRadius.circular(12),
       ),
       width: 160,
@@ -458,14 +552,16 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
         children: [
           Text(
             name?.toString() ?? category?.toString() ?? 'Без названия',
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            style: titleStyle ??
+                const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
           ),
           if (category != null)
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 category.toString(),
-                style: const TextStyle(fontSize: 11, color: Colors.black54),
+                style: categoryStyle ??
+                    const TextStyle(fontSize: 11, color: Colors.black54),
               ),
             ),
           if (subtitle.isNotEmpty)
@@ -473,7 +569,8 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
               padding: const EdgeInsets.only(top: 4),
               child: Text(
                 subtitle,
-                style: const TextStyle(fontSize: 10, color: Colors.black45),
+                style: subtitleStyle ??
+                    const TextStyle(fontSize: 10, color: Colors.black45),
               ),
             ),
         ],
