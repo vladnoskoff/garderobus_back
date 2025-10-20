@@ -141,9 +141,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             context,
             accentColor: colorScheme.primary,
             children: [
-              _buildNumberedTile(
+              _buildSettingsTile(
                 context,
-                index: 1,
                 label: l10n.settingsAccountFullName,
                 icon: Icons.badge_outlined,
                 subtitle: _valueOrPlaceholder(_fullName, l10n),
@@ -159,9 +158,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : null,
               ),
               _buildDivider(colorScheme),
-              _buildNumberedTile(
+              _buildSettingsTile(
                 context,
-                index: 2,
                 label: l10n.settingsAccountEmail,
                 icon: Icons.email_outlined,
                 subtitle: _valueOrPlaceholder(_email, l10n),
@@ -177,9 +175,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : null,
               ),
               _buildDivider(colorScheme),
-              _buildNumberedTile(
+              _buildSettingsTile(
                 context,
-                index: 3,
                 label: l10n.settingsAccountPhone,
                 icon: Icons.phone_outlined,
                 subtitle: _valueOrPlaceholder(_phone, l10n),
@@ -195,9 +192,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : null,
               ),
               _buildDivider(colorScheme),
-              _buildNumberedTile(
+              _buildSettingsTile(
                 context,
-                index: 4,
                 label: l10n.settingsAccountGender,
                 icon: Icons.wc_outlined,
                 subtitle: _isLoadingAccount
@@ -214,18 +210,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
             context,
             accentColor: colorScheme.secondary,
             children: [
-              _buildNumberedTile(
+              _buildSettingsTile(
                 context,
-                index: 1,
                 label: l10n.settingsSecurityPassword,
                 icon: Icons.lock_outline,
                 subtitle: '••••••',
                 onTap: _userId != null ? () => _showPasswordDialog() : null,
               ),
               _buildDivider(colorScheme),
-              _buildNumberedTile(
+              _buildSettingsTile(
                 context,
-                index: 2,
                 label: l10n.settingsSecurityPin,
                 icon: Icons.shield_outlined,
                 subtitle: _isLoadingAccount
@@ -238,7 +232,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildDivider(colorScheme),
               _buildToggleTile(
                 context,
-                index: 3,
                 label: l10n.settingsSecurityPhotoPermissions,
                 icon: Icons.photo_outlined,
                 value: _photoPermissionsVisible,
@@ -248,7 +241,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildDivider(colorScheme),
               _buildToggleTile(
                 context,
-                index: 4,
                 label: l10n.settingsSecurityCameraPermissions,
                 icon: Icons.photo_camera_outlined,
                 value: _cameraPermissionsVisible,
@@ -263,25 +255,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildQuickActions(
             context,
             currentLanguage: currentLanguage,
+            isDarkTheme: _isDarkTheme,
             colorScheme: colorScheme,
             l10n: l10n,
-          ),
-          const SizedBox(height: 28),
-          _buildSectionHeader(l10n.settingsThemeSection, theme),
-          const SizedBox(height: 12),
-          _buildGradientSection(
-            context,
-            accentColor: colorScheme.primary,
-            children: [
-              _buildToggleTile(
-                context,
-                index: 1,
-                label: l10n.settingsThemeDark,
-                icon: Icons.dark_mode_outlined,
-                value: _isDarkTheme,
-                onChanged: _onThemeChanged,
-              ),
-            ],
           ),
           const SizedBox(height: 36),
           Align(
@@ -334,9 +310,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildNumberedTile(
+  Widget _buildSettingsTile(
     BuildContext context, {
-    required int index,
     required String label,
     required IconData icon,
     String? subtitle,
@@ -352,8 +327,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            _buildNumberBadge(colorScheme, index),
-            const SizedBox(width: 16),
             Icon(icon, color: colorScheme.primary),
             const SizedBox(width: 12),
             Expanded(
@@ -410,7 +383,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildToggleTile(
     BuildContext context, {
-    required int index,
     required String label,
     required IconData icon,
     required bool value,
@@ -423,8 +395,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Row(
         children: [
-          _buildNumberBadge(colorScheme, index),
-          const SizedBox(width: 16),
           Icon(icon, color: colorScheme.primary),
           const SizedBox(width: 12),
           Expanded(
@@ -445,26 +415,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildNumberBadge(ColorScheme colorScheme, int index) {
-    return Container(
-      height: 40,
-      width: 40,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        color: colorScheme.primaryContainer.withOpacity(0.7),
-      ),
-      child: Center(
-        child: Text(
-          index.toString().padLeft(2, '0'),
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: colorScheme.onPrimaryContainer,
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildDivider(ColorScheme colorScheme) {
     return Divider(
       color: colorScheme.outlineVariant.withOpacity(0.6),
@@ -476,6 +426,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildQuickActions(
     BuildContext context, {
     required String currentLanguage,
+    required bool isDarkTheme,
     required ColorScheme colorScheme,
     required AppLocalizations l10n,
   }) {
@@ -501,6 +452,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           color: colorScheme.tertiaryContainer,
           onTap: () => _openLanguage(context),
         ),
+        _QuickActionButton(
+          icon: isDarkTheme ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+          label:
+              '${l10n.settingsThemeSection}\n${isDarkTheme ? l10n.settingsThemeDark : l10n.settingsThemeLight}',
+          color: colorScheme.primaryContainer,
+          onTap: () => _openThemeSelector(context),
+        ),
       ],
     );
   }
@@ -524,6 +482,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
       context,
       MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
     );
+  }
+
+  Future<void> _openThemeSelector(BuildContext context) async {
+    final l10n = context.l10n;
+    bool tempValue = _isDarkTheme;
+
+    final selectedThemeIsDark = await showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.settingsThemeSection,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.palette_outlined,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          l10n.settingsThemeDark,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                      Switch.adaptive(
+                        value: tempValue,
+                        activeColor: Theme.of(context).colorScheme.primary,
+                        onChanged: (value) {
+                          setState(() {
+                            tempValue = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: Text(l10n.settingsCancel),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(sheetContext, tempValue),
+                        child: Text(l10n.settingsSave),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (selectedThemeIsDark != null && selectedThemeIsDark != _isDarkTheme) {
+      _onThemeChanged(selectedThemeIsDark);
+    }
   }
 
   Widget buildExitButton(BuildContext context) {
