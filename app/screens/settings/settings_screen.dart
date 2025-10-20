@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -20,8 +19,6 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
-  bool _photoPermissionsVisible = true;
-  bool _cameraPermissionsVisible = true;
   ThemeMode _themeMode = ThemeMode.system;
   bool _didInitializeTheme = false;
   bool _isLoadingAccount = true;
@@ -229,24 +226,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         : l10n.settingsPinNotSet,
                 onTap: _userId != null ? () => _showPinSheet() : null,
               ),
-              _buildDivider(colorScheme),
-              _buildToggleTile(
-                context,
-                label: l10n.settingsSecurityPhotoPermissions,
-                icon: Icons.photo_outlined,
-                value: _photoPermissionsVisible,
-                onChanged: (value) =>
-                    setState(() => _photoPermissionsVisible = value),
-              ),
-              _buildDivider(colorScheme),
-              _buildToggleTile(
-                context,
-                label: l10n.settingsSecurityCameraPermissions,
-                icon: Icons.photo_camera_outlined,
-                value: _cameraPermissionsVisible,
-                onChanged: (value) =>
-                    setState(() => _cameraPermissionsVisible = value),
-              ),
             ],
           ),
           const SizedBox(height: 28),
@@ -326,6 +305,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Icon(icon, color: colorScheme.primary),
             const SizedBox(width: 12),
@@ -334,39 +314,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (subtitle == null)
-                    Text(
-                      label,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )
-                  else
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: Text(
-                            subtitle,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: theme.colorScheme.onSurfaceVariant,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.right,
-                          ),
-                        ),
-                      ],
+                  Text(
+                    label,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -377,40 +341,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildToggleTile(
-    BuildContext context, {
-    required String label,
-    required IconData icon,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Row(
-        children: [
-          Icon(icon, color: colorScheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            activeColor: colorScheme.primary,
-            onChanged: onChanged,
-          ),
-        ],
       ),
     );
   }
@@ -432,35 +362,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) {
     final themeIcon = _themeIconFor(themeMode);
     final themeLabel = _describeThemeMode(l10n, themeMode);
-    return Wrap(
-      spacing: 14,
-      runSpacing: 14,
-      children: [
-        _QuickActionButton(
-          icon: Icons.home_outlined,
-          label: l10n.settingsHome,
-          color: colorScheme.primaryContainer,
-          onTap: () => _openHomeSettings(context),
-        ),
-        _QuickActionButton(
-          icon: Icons.place_outlined,
-          label: l10n.settingsPlaces,
-          color: colorScheme.secondaryContainer,
-          onTap: () => _openPlaces(context),
-        ),
-        _QuickActionButton(
-          icon: Icons.language_outlined,
-          label: '${l10n.settingsLanguage}\n$currentLanguage',
-          color: colorScheme.tertiaryContainer,
-          onTap: () => _openLanguage(context),
-        ),
-        _QuickActionButton(
-          icon: themeIcon,
-          label: '${l10n.settingsThemeSection}\n$themeLabel',
-          color: colorScheme.primaryContainer,
-          onTap: () => _openThemeSelector(context),
-        ),
-      ],
+    return Align(
+      alignment: Alignment.center,
+      child: Wrap(
+        alignment: WrapAlignment.center,
+        runAlignment: WrapAlignment.center,
+        spacing: 14,
+        runSpacing: 14,
+        children: [
+          _QuickActionButton(
+            icon: Icons.home_outlined,
+            label: l10n.settingsHome,
+            color: colorScheme.primaryContainer,
+            onTap: () => _openHomeSettings(context),
+          ),
+          _QuickActionButton(
+            icon: Icons.place_outlined,
+            label: l10n.settingsPlaces,
+            color: colorScheme.secondaryContainer,
+            onTap: () => _openPlaces(context),
+          ),
+          _QuickActionButton(
+            icon: Icons.language_outlined,
+            label: '${l10n.settingsLanguage}\n$currentLanguage',
+            color: colorScheme.tertiaryContainer,
+            onTap: () => _openLanguage(context),
+          ),
+          _QuickActionButton(
+            icon: themeIcon,
+            label: '${l10n.settingsThemeSection}\n$themeLabel',
+            color: colorScheme.primaryContainer,
+            onTap: () => _openThemeSelector(context),
+          ),
+        ],
+      ),
     );
   }
 

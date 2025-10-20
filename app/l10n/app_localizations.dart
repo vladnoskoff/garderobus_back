@@ -27,12 +27,7 @@ class AppLocalizations {
       'settings_account_gender': 'Пол',
       'settings_security_password': 'Пароль и его смена',
       'settings_security_pin': 'PIN-код',
-      'settings_security_photo_permissions':
-          'Отображение разрешений на приложения Фото',
-      'settings_security_camera_permissions':
-          'Отображение разрешений на приложения Камера',
       'settings_theme_section': 'Выбор темы',
-      'settings_theme_slider_hint': 'Выберите оформление приложения',
       'settings_theme_light': 'Светлая тема',
       'settings_theme_dark': 'Тёмная тема',
       'settings_theme_system': 'Системная',
@@ -101,12 +96,7 @@ class AppLocalizations {
       'settings_account_gender': 'Gender',
       'settings_security_password': 'Password & updates',
       'settings_security_pin': 'PIN code',
-      'settings_security_photo_permissions':
-          'Display permissions for Photos app',
-      'settings_security_camera_permissions':
-          'Display permissions for Camera app',
       'settings_theme_section': 'Theme selection',
-      'settings_theme_slider_hint': 'Choose the app appearance',
       'settings_theme_light': 'Light theme',
       'settings_theme_dark': 'Dark theme',
       'settings_theme_system': 'System default',
@@ -189,12 +179,7 @@ class AppLocalizations {
   String get settingsAccountGender => getString('settings_account_gender');
   String get settingsSecurityPassword => getString('settings_security_password');
   String get settingsSecurityPin => getString('settings_security_pin');
-  String get settingsSecurityPhotoPermissions =>
-      getString('settings_security_photo_permissions');
-  String get settingsSecurityCameraPermissions =>
-      getString('settings_security_camera_permissions');
   String get settingsThemeSection => getString('settings_theme_section');
-  String get settingsThemeSliderHint => getString('settings_theme_slider_hint');
   String get settingsThemeLight => getString('settings_theme_light');
   String get settingsThemeDark => getString('settings_theme_dark');
   String get settingsThemeSystem => getString('settings_theme_system');
