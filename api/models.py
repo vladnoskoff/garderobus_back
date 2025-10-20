@@ -24,6 +24,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, index=True)
     email = Column(String, unique=True, index=True)
+    phone = Column(String(32), nullable=True)
     password_hash = Column(String)
     pin_hash = Column(String, nullable=True)
     openai_api_key = Column(String, nullable=True)
