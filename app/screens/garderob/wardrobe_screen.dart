@@ -442,51 +442,80 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       if (_selectedSeasonFilter != null) _selectedSeasonFilter,
     ].length;
 
+    final baseSurface = colorScheme.surfaceVariant.withOpacity(
+      brightness == Brightness.dark ? 0.32 : 0.7,
+    );
+    final buttonPadding = const EdgeInsets.symmetric(vertical: 12);
+
     return Container(
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            colorScheme.primaryContainer.withOpacity(brightness == Brightness.dark ? 0.4 : 0.85),
-            colorScheme.surfaceVariant.withOpacity(brightness == Brightness.dark ? 0.3 : 0.75),
+            colorScheme.primaryContainer.withOpacity(brightness == Brightness.dark ? 0.35 : 0.75),
+            baseSurface,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.18)),
       ),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Icon(
                 Icons.checkroom_outlined,
                 color: colorScheme.onPrimaryContainer,
+                size: 22,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
-                child: Text(
-                  totalCount > 0
-                      ? 'Всего вещей: $totalCount'
-                      : 'Добавьте первую вещь в гардероб',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Гардероб',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      totalCount > 0
+                          ? 'Всего вещей: $totalCount'
+                          : 'Добавьте первую вещь в гардероб',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer.withOpacity(0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: _openHistory,
+                icon: const Icon(Icons.history),
+                tooltip: 'История нарядов',
+                style: IconButton.styleFrom(
+                  foregroundColor: colorScheme.onPrimaryContainer,
+                  backgroundColor: colorScheme.onPrimaryContainer.withOpacity(0.12),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           DropdownButtonFormField<int?>(
             value: selectedLocationId,
             decoration: InputDecoration(
               labelText: 'Локация гардероба',
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               filled: true,
-              fillColor: colorScheme.surface.withOpacity(brightness == Brightness.dark ? 0.35 : 0.9),
+              fillColor: colorScheme.surface.withOpacity(brightness == Brightness.dark ? 0.33 : 0.92),
             ),
             items: [
               const DropdownMenuItem<int?>(
@@ -497,22 +526,26 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
             ],
             onChanged: isLocationsLoading ? null : (value) => _onLocationChanged(value),
           ),
-          const SizedBox(height: 16),
-          if (isLocationsLoading) const LinearProgressIndicator(minHeight: 2),
-          if (isLocationsLoading) const SizedBox(height: 16),
+          if (isLocationsLoading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: FilledButton.icon(
                   onPressed: navigateToAddClothes,
+                  style: FilledButton.styleFrom(padding: buttonPadding),
                   icon: const Icon(Icons.add),
                   label: const Text('Добавить вещь'),
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(
                 child: FilledButton.tonalIcon(
                   onPressed: _openFilterSheet,
+                  style: FilledButton.styleFrom(padding: buttonPadding),
                   icon: const Icon(Icons.tune_rounded),
                   label: Text(
                     activeFiltersCount > 0
@@ -522,15 +555,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _openHistory,
-            icon: const Icon(Icons.history),
-            label: const Text('История нарядов'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
           ),
         ],
       ),
@@ -626,22 +650,14 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final brightness = theme.brightness;
-    final temperatureText = _temperatureRangeText(item);
-    final materialText = item.material?.trim();
-    final careText = item.careInstructions?.trim();
-    final description = item.promptDescription?.trim();
+    final category = item.category.trim();
+    final season = item.season.trim();
 
     final chips = <Widget>[
-      _buildMetadataChip(Icons.category_outlined, item.category),
-      _buildMetadataChip(Icons.style_outlined, item.season),
-      if (item.color.trim().isNotEmpty)
-        _buildMetadataChip(Icons.palette_outlined, item.color.trim()),
-      if (temperatureText != null)
-        _buildMetadataChip(Icons.thermostat, temperatureText),
-      if (materialText != null && materialText.isNotEmpty)
-        _buildMetadataChip(Icons.texture, materialText),
-      if (careText != null && careText.isNotEmpty)
-        _buildMetadataChip(Icons.local_laundry_service_outlined, careText),
+      if (category.isNotEmpty)
+        _buildMetadataChip(Icons.category_outlined, category),
+      if (season.isNotEmpty)
+        _buildMetadataChip(Icons.style_outlined, season),
     ];
 
     return InkWell(
@@ -664,12 +680,13 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
+            AspectRatio(
+              aspectRatio: 3 / 4,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   Container(
-                    color: colorScheme.surfaceVariant.withOpacity(0.35),
+                    color: colorScheme.surfaceVariant.withOpacity(0.25),
                     child: item.imageUrl != null && item.imageUrl!.isNotEmpty
                         ? Image.network(
                             item.imageUrl!,
@@ -707,7 +724,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -719,21 +736,12 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: chips,
-                  ),
-                  if (description != null && description.isNotEmpty) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      description,
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+                  if (chips.isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: chips,
                     ),
                   ],
                 ],
@@ -749,7 +757,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
         color: colorScheme.secondaryContainer.withOpacity(
           theme.brightness == Brightness.dark ? 0.45 : 0.75,
@@ -759,8 +767,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: colorScheme.onSecondaryContainer),
-          const SizedBox(width: 6),
+          Icon(icon, size: 15, color: colorScheme.onSecondaryContainer),
+          const SizedBox(width: 5),
           Text(
             label,
             style: theme.textTheme.labelSmall?.copyWith(
@@ -907,7 +915,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                                   : 2,
                           crossAxisSpacing: 20,
                           mainAxisSpacing: 20,
-                          childAspectRatio: 0.68,
+                          childAspectRatio: 0.65,
                         ),
                       ),
                     ),
