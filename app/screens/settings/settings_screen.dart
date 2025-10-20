@@ -52,113 +52,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
         centerTitle: true,
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         children: [
-          _buildSectionTitle(l10n.settingsAccount, theme),
-          _buildCard(
+          _buildSectionHeader(l10n.settingsAccount, theme),
+          const SizedBox(height: 12),
+          _buildGradientSection(
             context,
+            accentColor: colorScheme.primary,
             children: [
-              _buildNavigationTile(
+              _buildNumberedTile(
                 context,
+                index: 1,
+                label: l10n.settingsAccountFullName,
                 icon: Icons.badge_outlined,
-                title: l10n.settingsAccountFullName,
                 onTap: () => _openAccount(context),
               ),
-              const Divider(height: 1),
-              _buildNavigationTile(
+              _buildDivider(colorScheme),
+              _buildNumberedTile(
                 context,
+                index: 2,
+                label: l10n.settingsAccountEmail,
                 icon: Icons.email_outlined,
-                title: l10n.settingsAccountEmail,
                 onTap: () => _openAccount(context),
               ),
-              const Divider(height: 1),
-              _buildNavigationTile(
+              _buildDivider(colorScheme),
+              _buildNumberedTile(
                 context,
+                index: 3,
+                label: l10n.settingsAccountPhone,
                 icon: Icons.phone_outlined,
-                title: l10n.settingsAccountPhone,
                 onTap: () => _openAccount(context),
               ),
-              const Divider(height: 1),
-              _buildNavigationTile(
+              _buildDivider(colorScheme),
+              _buildNumberedTile(
                 context,
+                index: 4,
+                label: l10n.settingsAccountGender,
                 icon: Icons.wc_outlined,
-                title: l10n.settingsAccountGender,
                 onTap: () => _openAccount(context),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          _buildSectionTitle(l10n.settingsSecurityPrivacy, theme),
-          _buildCard(
+          const SizedBox(height: 28),
+          _buildSectionHeader(l10n.settingsSecurityPrivacy, theme),
+          const SizedBox(height: 12),
+          _buildGradientSection(
             context,
+            accentColor: colorScheme.secondary,
             children: [
-              _buildNavigationTile(
+              _buildNumberedTile(
                 context,
+                index: 1,
+                label: l10n.settingsSecurityPassword,
                 icon: Icons.lock_outline,
-                title: l10n.settingsSecurityPassword,
                 onTap: () => _openAccount(context),
               ),
-              const Divider(height: 1),
-              _buildNavigationTile(
+              _buildDivider(colorScheme),
+              _buildNumberedTile(
                 context,
+                index: 2,
+                label: l10n.settingsSecurityPin,
                 icon: Icons.shield_outlined,
-                title: l10n.settingsSecurityPin,
                 onTap: () => _openPin(context),
               ),
-              const Divider(height: 1),
-              _buildSwitchTile(
+              _buildDivider(colorScheme),
+              _buildToggleTile(
                 context,
+                index: 3,
+                label: l10n.settingsSecurityPhotoPermissions,
                 icon: Icons.photo_outlined,
-                title: l10n.settingsSecurityPhotoPermissions,
                 value: _photoPermissionsVisible,
-                onChanged: (value) {
-                  setState(() => _photoPermissionsVisible = value);
-                },
+                onChanged: (value) =>
+                    setState(() => _photoPermissionsVisible = value),
               ),
-              const Divider(height: 1),
-              _buildSwitchTile(
+              _buildDivider(colorScheme),
+              _buildToggleTile(
                 context,
+                index: 4,
+                label: l10n.settingsSecurityCameraPermissions,
                 icon: Icons.photo_camera_outlined,
-                title: l10n.settingsSecurityCameraPermissions,
                 value: _cameraPermissionsVisible,
-                onChanged: (value) {
-                  setState(() => _cameraPermissionsVisible = value);
-                },
+                onChanged: (value) =>
+                    setState(() => _cameraPermissionsVisible = value),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-          _buildSectionTitle(l10n.settingsGeneralSection, theme),
-          _buildCard(
+          const SizedBox(height: 28),
+          _buildSectionHeader(l10n.settingsGeneralSection, theme),
+          const SizedBox(height: 12),
+          _buildQuickActions(
             context,
-            children: [
-              _buildNavigationTile(
-                context,
-                icon: Icons.home_outlined,
-                title: l10n.settingsHome,
-                onTap: () => _openHomeSettings(context),
-              ),
-              const Divider(height: 1),
-              _buildNavigationTile(
-                context,
-                icon: Icons.place_outlined,
-                title: l10n.settingsPlaces,
-                onTap: () => _openPlaces(context),
-              ),
-              const Divider(height: 1),
-              _buildNavigationTile(
-                context,
-                icon: Icons.language_outlined,
-                title: l10n.settingsLanguage,
-                subtitle: '${l10n.languageCurrentLabel}: $currentLanguage',
-                onTap: () => _openLanguage(context),
-              ),
-            ],
+            currentLanguage: currentLanguage,
+            colorScheme: colorScheme,
+            l10n: l10n,
           ),
-          const SizedBox(height: 24),
-          _buildSectionTitle(l10n.settingsThemeSection, theme),
+          const SizedBox(height: 28),
+          _buildSectionHeader(l10n.settingsThemeSection, theme),
+          const SizedBox(height: 12),
           _buildThemeSelectorCard(colorScheme, l10n),
-          const SizedBox(height: 32),
+          const SizedBox(height: 36),
           Align(
             alignment: Alignment.center,
             child: buildExitButton(context),
@@ -169,77 +161,193 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title, ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Text(
-        title,
-        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+  Widget _buildSectionHeader(String title, ThemeData theme) {
+    return Text(
+      title,
+      style: theme.textTheme.titleLarge?.copyWith(
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.2,
       ),
     );
   }
 
-  Widget _buildCard(
+  Widget _buildGradientSection(
     BuildContext context, {
+    required Color accentColor,
     required List<Widget> children,
   }) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      clipBehavior: Clip.antiAlias,
-      child: Column(children: children),
+    final colorScheme = Theme.of(context).colorScheme;
+    final baseColor = colorScheme.surfaceVariant;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [
+            baseColor.withOpacity(0.7),
+            baseColor,
+            accentColor.withOpacity(0.22),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: children,
+        ),
+      ),
     );
   }
 
-  Widget _buildNavigationTile(
+  Widget _buildNumberedTile(
     BuildContext context, {
+    required int index,
+    required String label,
     required IconData icon,
-    required String title,
     String? subtitle,
     VoidCallback? onTap,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return ListTile(
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
       onTap: onTap,
-      leading: CircleAvatar(
-        backgroundColor: colorScheme.secondaryContainer,
-        foregroundColor: colorScheme.onSecondaryContainer,
-        child: Icon(icon),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            _buildNumberBadge(colorScheme, index),
+            const SizedBox(width: 16),
+            Icon(icon, color: colorScheme.primary),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      subtitle,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (onTap != null)
+              Icon(
+                Icons.chevron_right_rounded,
+                color: colorScheme.onSurfaceVariant,
+              ),
+          ],
+        ),
       ),
-      title: Text(
-        title,
-        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-      ),
-      subtitle: subtitle != null ? Text(subtitle) : null,
-      trailing: const Icon(Icons.chevron_right_rounded),
     );
   }
 
-  Widget _buildSwitchTile(
+  Widget _buildToggleTile(
     BuildContext context, {
+    required int index,
+    required String label,
     required IconData icon,
-    required String title,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    return SwitchListTile.adaptive(
-      value: value,
-      onChanged: onChanged,
-      activeColor: colorScheme.primary,
-      secondary: CircleAvatar(
-        backgroundColor: colorScheme.secondaryContainer,
-        foregroundColor: colorScheme.onSecondaryContainer,
-        child: Icon(icon),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
+        children: [
+          _buildNumberBadge(colorScheme, index),
+          const SizedBox(width: 16),
+          Icon(icon, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              label,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            activeColor: colorScheme.primary,
+            onChanged: onChanged,
+          ),
+        ],
       ),
-      title: Text(
-        title,
-        style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+    );
+  }
+
+  Widget _buildNumberBadge(ColorScheme colorScheme, int index) {
+    return Container(
+      height: 40,
+      width: 40,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: colorScheme.primaryContainer.withOpacity(0.7),
       ),
+      child: Center(
+        child: Text(
+          index.toString().padLeft(2, '0'),
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: colorScheme.onPrimaryContainer,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDivider(ColorScheme colorScheme) {
+    return Divider(
+      color: colorScheme.outlineVariant.withOpacity(0.6),
+      height: 4,
+      thickness: 1,
+    );
+  }
+
+  Widget _buildQuickActions(
+    BuildContext context, {
+    required String currentLanguage,
+    required ColorScheme colorScheme,
+    required AppLocalizations l10n,
+  }) {
+    return Wrap(
+      spacing: 14,
+      runSpacing: 14,
+      children: [
+        _QuickActionButton(
+          icon: Icons.home_outlined,
+          label: l10n.settingsHome,
+          color: colorScheme.primaryContainer,
+          onTap: () => _openHomeSettings(context),
+        ),
+        _QuickActionButton(
+          icon: Icons.place_outlined,
+          label: l10n.settingsPlaces,
+          color: colorScheme.secondaryContainer,
+          onTap: () => _openPlaces(context),
+        ),
+        _QuickActionButton(
+          icon: Icons.language_outlined,
+          label: '${l10n.settingsLanguage}\n$currentLanguage',
+          color: colorScheme.tertiaryContainer,
+          onTap: () => _openLanguage(context),
+        ),
+      ],
     );
   }
 
@@ -247,17 +355,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ColorScheme colorScheme,
     AppLocalizations l10n,
   ) {
-    return Card(
-      elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.4)),
+        color: colorScheme.surface,
+        boxShadow: [
+          BoxShadow(
+            color: colorScheme.shadow.withOpacity(0.06),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              l10n.settingsThemeSliderHint,
-              style: Theme.of(context).textTheme.bodyMedium,
+            Row(
+              children: [
+                Icon(Icons.palette_outlined, color: colorScheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l10n.settingsThemeSliderHint,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             SliderTheme(
@@ -291,6 +417,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   label: l10n.settingsThemeLight,
                   isActive: _themeValue < 0.5,
                   colorScheme: colorScheme,
+                ),
+                Icon(
+                  Icons.swap_horiz,
+                  color: colorScheme.primary,
                 ),
                 _buildThemeLabel(
                   label: l10n.settingsThemeDark,
@@ -415,6 +545,64 @@ class _SettingsScreenState extends State<SettingsScreen> {
               fontSize: 20,
               fontWeight: FontWeight.w600,
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _QuickActionButton extends StatelessWidget {
+  const _QuickActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textTheme = theme.textTheme;
+    final backgroundColor = color.withOpacity(0.85);
+    final brightness = ThemeData.estimateBrightnessForColor(backgroundColor);
+    final foregroundColor =
+        brightness == Brightness.dark ? Colors.white : Colors.black87;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: onTap,
+        child: Ink(
+          width: 150,
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 20),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            color: backgroundColor,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 28,
+                color: foregroundColor,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                label,
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: foregroundColor,
+                ),
+              ),
+            ],
           ),
         ),
       ),
