@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../l10n/l10n_extensions.dart';
+import '../../services/api_service.dart';
 import '../../services/language_controller.dart';
 import '../../services/theme_controller.dart';
 import '../auth/login_screen.dart';
-import 'account/account_screen.dart';
-import 'account/pin_setup_screen.dart';
 import 'home_settings/home_screen_settings.dart';
 import 'language/language_settings_screen.dart';
 import 'places/places_screen.dart';
@@ -22,8 +22,23 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _photoPermissionsVisible = true;
   bool _cameraPermissionsVisible = true;
-  double _themeValue = 0;
+  bool _isDarkTheme = false;
   bool _didInitializeTheme = false;
+  bool _isLoadingAccount = true;
+  bool _hasPin = false;
+  int? _userId;
+  String _fullName = '';
+  String _email = '';
+  String _phone = '';
+  String _gender = 'not_specified';
+
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAccountData();
+  }
 
   @override
   void didChangeDependencies() {
@@ -33,8 +48,74 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final themeNotifier = ThemeScope.of(context);
-    _themeValue = themeNotifier.themeMode == ThemeMode.dark ? 1 : 0;
+    _isDarkTheme = themeNotifier.themeMode == ThemeMode.dark;
     _didInitializeTheme = true;
+  }
+
+  Future<void> _loadAccountData() async {
+    setState(() {
+      _isLoadingAccount = true;
+    });
+
+    try {
+      final idString = await _storage.read(key: 'user_id');
+      final parsedId = idString != null ? int.tryParse(idString) : null;
+
+      if (parsedId == null) {
+        if (!mounted) return;
+        setState(() {
+          _userId = null;
+          _isLoadingAccount = false;
+        });
+        return;
+      }
+
+      final data = await ApiService.getUser(parsedId);
+      if (!mounted) return;
+
+      setState(() {
+        _userId = parsedId;
+        _fullName = (data['name'] ?? '') as String;
+        _email = (data['email'] ?? '') as String;
+        _phone = (data['phone'] ?? '')?.toString() ?? '';
+        _gender = (data['gender'] ?? 'not_specified') as String;
+        _hasPin = data['has_pin'] == true;
+        _isLoadingAccount = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingAccount = false;
+      });
+      final l10n = context.l10n;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.settingsAccountLoadFailed)),
+      );
+    }
+  }
+
+  Future<bool> _updateUserField(String field, String value, {bool silent = false}) async {
+    if (_userId == null) {
+      return false;
+    }
+
+    try {
+      await ApiService.updateUser(_userId!, field, value);
+      await _loadAccountData();
+      if (!silent && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.settingsUpdateSuccess)),
+        );
+      }
+      return true;
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.settingsUpdateFailed)),
+        );
+      }
+      return false;
+    }
   }
 
   @override
@@ -65,7 +146,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 index: 1,
                 label: l10n.settingsAccountFullName,
                 icon: Icons.badge_outlined,
-                onTap: () => _openAccount(context),
+                subtitle: _valueOrPlaceholder(_fullName, l10n),
+                onTap: _userId != null
+                    ? () => _showEditableFieldDialog(
+                          title: l10n.settingsAccountFullName,
+                          initialValue: _fullName,
+                          keyboardType: TextInputType.name,
+                          onSubmitted: (value) async {
+                            await _updateUserField('name', value);
+                          },
+                        )
+                    : null,
               ),
               _buildDivider(colorScheme),
               _buildNumberedTile(
@@ -73,7 +164,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 index: 2,
                 label: l10n.settingsAccountEmail,
                 icon: Icons.email_outlined,
-                onTap: () => _openAccount(context),
+                subtitle: _valueOrPlaceholder(_email, l10n),
+                onTap: _userId != null
+                    ? () => _showEditableFieldDialog(
+                          title: l10n.settingsAccountEmail,
+                          initialValue: _email,
+                          keyboardType: TextInputType.emailAddress,
+                          onSubmitted: (value) async {
+                            await _updateUserField('email', value);
+                          },
+                        )
+                    : null,
               ),
               _buildDivider(colorScheme),
               _buildNumberedTile(
@@ -81,7 +182,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 index: 3,
                 label: l10n.settingsAccountPhone,
                 icon: Icons.phone_outlined,
-                onTap: () => _openAccount(context),
+                subtitle: _valueOrPlaceholder(_phone, l10n),
+                onTap: _userId != null
+                    ? () => _showEditableFieldDialog(
+                          title: l10n.settingsAccountPhone,
+                          initialValue: _phone,
+                          keyboardType: TextInputType.phone,
+                          onSubmitted: (value) async {
+                            await _updateUserField('phone', value, silent: true);
+                          },
+                        )
+                    : null,
               ),
               _buildDivider(colorScheme),
               _buildNumberedTile(
@@ -89,7 +200,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 index: 4,
                 label: l10n.settingsAccountGender,
                 icon: Icons.wc_outlined,
-                onTap: () => _openAccount(context),
+                subtitle: _isLoadingAccount
+                    ? l10n.settingsValueLoading
+                    : l10n.settingsGenderLabel(_gender),
+                onTap: _userId != null ? () => _showGenderDialog() : null,
               ),
             ],
           ),
@@ -105,7 +219,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 index: 1,
                 label: l10n.settingsSecurityPassword,
                 icon: Icons.lock_outline,
-                onTap: () => _openAccount(context),
+                subtitle: '••••••',
+                onTap: _userId != null ? () => _showPasswordDialog() : null,
               ),
               _buildDivider(colorScheme),
               _buildNumberedTile(
@@ -113,7 +228,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 index: 2,
                 label: l10n.settingsSecurityPin,
                 icon: Icons.shield_outlined,
-                onTap: () => _openPin(context),
+                subtitle: _isLoadingAccount
+                    ? l10n.settingsValueLoading
+                    : _hasPin
+                        ? l10n.settingsPinSet
+                        : l10n.settingsPinNotSet,
+                onTap: _userId != null ? () => _showPinSheet() : null,
               ),
               _buildDivider(colorScheme),
               _buildToggleTile(
@@ -149,7 +269,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 28),
           _buildSectionHeader(l10n.settingsThemeSection, theme),
           const SizedBox(height: 12),
-          _buildThemeSelectorCard(colorScheme, l10n),
+          _buildGradientSection(
+            context,
+            accentColor: colorScheme.primary,
+            children: [
+              _buildToggleTile(
+                context,
+                index: 1,
+                label: l10n.settingsThemeDark,
+                icon: Icons.dark_mode_outlined,
+                value: _isDarkTheme,
+                onChanged: _onThemeChanged,
+              ),
+            ],
+          ),
           const SizedBox(height: 36),
           Align(
             alignment: Alignment.center,
@@ -226,20 +359,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    label,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 4),
+                  if (subtitle == null)
                     Text(
-                      subtitle,
-                      style: theme.textTheme.bodySmall,
+                      label,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    )
+                  else
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            subtitle,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
                 ],
               ),
             ),
@@ -351,118 +505,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildThemeSelectorCard(
-    ColorScheme colorScheme,
-    AppLocalizations l10n,
-  ) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.4)),
-        color: colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: colorScheme.shadow.withOpacity(0.06),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.palette_outlined, color: colorScheme.primary),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    l10n.settingsThemeSliderHint,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 6,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-              ),
-              child: Slider(
-                value: _themeValue,
-                min: 0,
-                max: 1,
-                divisions: 1,
-                activeColor: colorScheme.primary,
-                inactiveColor: colorScheme.surfaceVariant,
-                onChanged: (value) {
-                  setState(() => _themeValue = value);
-                },
-                onChangeEnd: (value) async {
-                  final notifier = ThemeScope.of(context);
-                  final mode = value < 0.5 ? ThemeMode.light : ThemeMode.dark;
-                  await notifier.setTheme(mode);
-                },
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildThemeLabel(
-                  label: l10n.settingsThemeLight,
-                  isActive: _themeValue < 0.5,
-                  colorScheme: colorScheme,
-                ),
-                Icon(
-                  Icons.swap_horiz,
-                  color: colorScheme.primary,
-                ),
-                _buildThemeLabel(
-                  label: l10n.settingsThemeDark,
-                  isActive: _themeValue >= 0.5,
-                  colorScheme: colorScheme,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildThemeLabel({
-    required String label,
-    required bool isActive,
-    required ColorScheme colorScheme,
-  }) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: isActive ? colorScheme.primaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-            ),
-      ),
-    );
-  }
-
-  void _openAccount(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const AccountScreen()),
-    );
-  }
-
   void _openHomeSettings(BuildContext context) {
     Navigator.push(
       context,
@@ -481,13 +523,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
-    );
-  }
-
-  void _openPin(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const PinSetupScreen()),
     );
   }
 
@@ -549,6 +584,449 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  String _valueOrPlaceholder(String value, AppLocalizations l10n) {
+    if (_isLoadingAccount) {
+      return l10n.settingsValueLoading;
+    }
+    return value.isEmpty ? l10n.settingsValueNotSet : value;
+  }
+
+  Future<void> _showEditableFieldDialog({
+    required String title,
+    required String initialValue,
+    required Future<void> Function(String) onSubmitted,
+    TextInputType keyboardType = TextInputType.text,
+  }) async {
+    final controller = TextEditingController(text: initialValue);
+    final l10n = context.l10n;
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('${l10n.settingsEditFieldPrefix} $title'),
+          content: TextField(
+            controller: controller,
+            keyboardType: keyboardType,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: title,
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.settingsCancel),
+            ),
+            TextButton(
+              onPressed: () =>
+                  Navigator.pop(dialogContext, controller.text.trim()),
+              child: Text(l10n.settingsSave),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result != null && result.isNotEmpty) {
+      await onSubmitted(result);
+    }
+  }
+
+  Future<void> _showGenderDialog() async {
+    String tempGender = _gender;
+    final l10n = context.l10n;
+
+    final selected = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(l10n.settingsSelectGender),
+          content: StatefulBuilder(
+            builder: (context, updateSheetState) {
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  RadioListTile<String>(
+                    value: 'male',
+                    groupValue: tempGender,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      updateSheetState(() {
+                        tempGender = value;
+                      });
+                    },
+                    title: Text(l10n.settingsGenderMale),
+                  ),
+                  RadioListTile<String>(
+                    value: 'female',
+                    groupValue: tempGender,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      updateSheetState(() {
+                        tempGender = value;
+                      });
+                    },
+                    title: Text(l10n.settingsGenderFemale),
+                  ),
+                  RadioListTile<String>(
+                    value: 'not_specified',
+                    groupValue: tempGender,
+                    onChanged: (value) {
+                      if (value == null) return;
+                      updateSheetState(() {
+                        tempGender = value;
+                      });
+                    },
+                    title: Text(l10n.settingsGenderUnspecified),
+                  ),
+                ],
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text(l10n.settingsCancel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, tempGender),
+              child: Text(l10n.settingsSave),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (selected != null && selected != _gender) {
+      setState(() {
+        _gender = selected;
+      });
+      await _updateUserField('gender', selected, silent: true);
+    }
+  }
+
+  Future<void> _showPasswordDialog() async {
+    final newPasswordController = TextEditingController();
+    final confirmPasswordController = TextEditingController();
+    final l10n = context.l10n;
+    String? errorMessage;
+
+    final shouldUpdate = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(l10n.settingsPasswordChangeTitle),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: newPasswordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPasswordNew,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmPasswordController,
+                    obscureText: true,
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPasswordConfirm,
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        errorMessage!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext, false),
+                  child: Text(l10n.settingsCancel),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final newPassword = newPasswordController.text.trim();
+                    final confirmPassword =
+                        confirmPasswordController.text.trim();
+                    if (newPassword.isEmpty || confirmPassword.isEmpty) {
+                      setState(() {
+                        errorMessage = l10n.settingsPasswordEmpty;
+                      });
+                      return;
+                    }
+                    if (newPassword != confirmPassword) {
+                      setState(() {
+                        errorMessage = l10n.settingsPasswordMismatch;
+                      });
+                      return;
+                    }
+                    Navigator.pop(dialogContext, true);
+                  },
+                  child: Text(l10n.settingsSave),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    if (shouldUpdate == true) {
+      final success = await _updateUserField(
+        'password',
+        newPasswordController.text.trim(),
+        silent: true,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            success
+                ? l10n.settingsPasswordUpdated
+                : l10n.settingsPasswordError,
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showPinSheet() async {
+    if (_userId == null) {
+      return;
+    }
+
+    final l10n = context.l10n;
+    final newPinController = TextEditingController();
+    final confirmPinController = TextEditingController();
+    String? error;
+    String? successMessage;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
+          child: StatefulBuilder(
+            builder: (context, sheetSetState) {
+              Future<void> savePin() async {
+                final newPin = newPinController.text.trim();
+                final confirmPin = confirmPinController.text.trim();
+
+                if (newPin.length < 4 || newPin.length > 8) {
+                  sheetSetState(() {
+                    error = l10n.settingsPinLengthError;
+                    successMessage = null;
+                  });
+                  return;
+                }
+                if (!RegExp(r'^[0-9]+$').hasMatch(newPin)) {
+                  sheetSetState(() {
+                    error = l10n.settingsPinDigitsError;
+                    successMessage = null;
+                  });
+                  return;
+                }
+                if (newPin != confirmPin) {
+                  sheetSetState(() {
+                    error = l10n.settingsPinMismatchError;
+                    successMessage = null;
+                  });
+                  return;
+                }
+
+                try {
+                  await ApiService.setPinCode(_userId!, newPin);
+                  if (!mounted) return;
+                  sheetSetState(() {
+                    error = null;
+                    successMessage = l10n.settingsPinSaved;
+                  });
+                  newPinController.clear();
+                  confirmPinController.clear();
+                  setState(() {
+                    _hasPin = true;
+                  });
+                  await _loadAccountData();
+                  sheetSetState(() {});
+                } catch (_) {
+                  sheetSetState(() {
+                    error = l10n.settingsPinSaveError;
+                    successMessage = null;
+                  });
+                }
+              }
+
+              Future<void> removePin() async {
+                final confirm = await showDialog<bool>(
+                  context: sheetContext,
+                  builder: (dialogContext) {
+                    return AlertDialog(
+                      title: Text(l10n.settingsPinRemoveConfirmTitle),
+                      content: Text(l10n.settingsPinRemoveConfirmMessage),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, false),
+                          child: Text(l10n.settingsCancel),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(dialogContext, true),
+                          child: Text(l10n.settingsPinRemoveAction),
+                        ),
+                      ],
+                    );
+                  },
+                );
+
+                if (confirm != true) {
+                  return;
+                }
+
+                try {
+                  await ApiService.clearPinCode(_userId!);
+                  if (!mounted) return;
+                  sheetSetState(() {
+                    error = null;
+                    successMessage = l10n.settingsPinRemoved;
+                  });
+                  setState(() {
+                    _hasPin = false;
+                  });
+                  await _loadAccountData();
+                  sheetSetState(() {});
+                } catch (_) {
+                  sheetSetState(() {
+                    error = l10n.settingsPinRemoveError;
+                    successMessage = null;
+                  });
+                }
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        l10n.settingsPinManageTitle,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: newPinController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 8,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPinNew,
+                      counterText: '',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: confirmPinController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 8,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    decoration: InputDecoration(
+                      labelText: l10n.settingsPinConfirm,
+                      counterText: '',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ],
+                  if (successMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      successMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: savePin,
+                          child: Text(l10n.settingsPinSaveAction),
+                        ),
+                      ),
+                      if (_hasPin) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: removePin,
+                            child: Text(l10n.settingsPinRemoveAction),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _onThemeChanged(bool value) async {
+    setState(() {
+      _isDarkTheme = value;
+    });
+    final notifier = ThemeScope.of(context);
+    await notifier.setTheme(value ? ThemeMode.dark : ThemeMode.light);
   }
 }
 
