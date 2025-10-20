@@ -422,12 +422,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 
   Future<void> _openClothesDetails(Clothes item) async {
-    final deleted = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ClothesDetailScreen(clothes: item),
-      ),
-    );
+    final deleted = await showClothesDetailSheet(context, item);
     if (deleted == true) {
       await fetchClothes();
     }

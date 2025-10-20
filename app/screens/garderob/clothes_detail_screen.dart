@@ -2,20 +2,29 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
-import '../../widgets/rounded_back_button.dart';
 
-class ClothesDetailScreen extends StatefulWidget {
-  final Clothes clothes;
-
-  const ClothesDetailScreen({Key? key, required this.clothes}) : super(key: key);
-
-  @override
-  State<ClothesDetailScreen> createState() => _ClothesDetailScreenState();
+Future<bool?> showClothesDetailSheet(BuildContext context, Clothes clothes) {
+  return showModalBottomSheet<bool>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) => _ClothesDetailSheet(clothes: clothes),
+  );
 }
 
-class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
+class _ClothesDetailSheet extends StatefulWidget {
+  const _ClothesDetailSheet({required this.clothes});
+
+  final Clothes clothes;
+
+  @override
+  State<_ClothesDetailSheet> createState() => _ClothesDetailSheetState();
+}
+
+class _ClothesDetailSheetState extends State<_ClothesDetailSheet> {
   late Clothes _clothes;
   late final PageController _pageController;
+  final ScrollController _scrollController = ScrollController();
   int _currentPage = 0;
   bool _isProcessing = false;
 
@@ -28,11 +37,14 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
 
   @override
   void dispose() {
+    _scrollController.dispose();
     _pageController.dispose();
     super.dispose();
   }
 
   Future<void> _confirmDelete() async {
+    if (_isProcessing) return;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -56,20 +68,22 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
       try {
         await ApiService.deleteClothes(_clothes.id);
         if (!mounted) return;
-        Navigator.pop(context, true);
-      } catch (e) {
+        Navigator.of(context).pop(true);
+      } catch (error) {
         if (!mounted) return;
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Не удалось удалить вещь: $e')),
+          SnackBar(content: Text('Не удалось удалить вещь: $error')),
         );
       }
     }
   }
 
   Future<void> _editDetails() async {
-    final descriptionController = TextEditingController(text: _clothes.promptDescription ?? '');
-    final careController = TextEditingController(text: _clothes.careInstructions ?? '');
+    final descriptionController =
+        TextEditingController(text: _clothes.promptDescription?.trim() ?? '');
+    final careController = TextEditingController(text: _clothes.careInstructions?.trim() ?? '');
+
     final result = await showDialog<Map<String, String>?>(
       context: context,
       builder: (ctx) {
@@ -121,9 +135,7 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
     descriptionController.dispose();
     careController.dispose();
 
-    if (result == null) {
-      return;
-    }
+    if (result == null) return;
 
     final newDescription = result['description'] ?? '';
     final newCare = result['care'] ?? '';
@@ -144,19 +156,17 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
       if (!mounted) return;
       setState(() {
         _clothes = updated;
+        _isProcessing = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Информация обновлена')),
       );
-    } catch (e) {
+    } catch (error) {
       if (!mounted) return;
+      setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Не удалось обновить данные: $e')),
+        SnackBar(content: Text('Не удалось обновить данные: $error')),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isProcessing = false);
-      }
     }
   }
 
@@ -164,27 +174,27 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
     final gallery = _clothes.imageGallery;
     if (gallery.isEmpty) {
       return Container(
-        height: 320,
+        height: 260,
         decoration: BoxDecoration(
           color: colorScheme.surfaceVariant,
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(22),
         ),
         alignment: Alignment.center,
         child: Icon(
           Icons.image_not_supported,
-          size: 56,
+          size: 52,
           color: colorScheme.onSurfaceVariant,
         ),
       );
     }
 
     return SizedBox(
-      height: 360,
+      height: 280,
       child: Stack(
         alignment: Alignment.bottomCenter,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(22),
             child: PageView.builder(
               controller: _pageController,
               onPageChanged: (index) {
@@ -193,12 +203,13 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
               itemCount: gallery.length,
               itemBuilder: (context, index) {
                 final url = gallery[index];
-                return Container(
-                  color: colorScheme.surfaceVariant,
-                  alignment: Alignment.center,
+                return DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceVariant.withOpacity(0.6),
+                  ),
                   child: Image.network(
                     url,
-                    fit: BoxFit.contain,
+                    fit: BoxFit.cover,
                     alignment: Alignment.center,
                     errorBuilder: (context, error, stackTrace) => Icon(
                       Icons.broken_image_outlined,
@@ -212,26 +223,76 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
           ),
           if (gallery.length > 1)
             Positioned(
-              bottom: 12,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(gallery.length, (index) {
-                  final bool isActive = index == _currentPage;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: isActive ? 16 : 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      color: isActive
-                          ? colorScheme.primary
-                          : colorScheme.onSurfaceVariant.withOpacity(0.4),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  );
-                }),
+              bottom: 14,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: colorScheme.surface.withOpacity(0.85),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(gallery.length, (index) {
+                      final isActive = index == _currentPage;
+                      return AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: isActive ? 16 : 8,
+                        height: 8,
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        decoration: BoxDecoration(
+                          color: isActive
+                              ? colorScheme.primary
+                              : colorScheme.onSurfaceVariant.withOpacity(0.3),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoChip({
+    required IconData icon,
+    required String label,
+    bool highlight = false,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(18),
+        gradient: highlight
+            ? LinearGradient(
+                colors: [
+                  colorScheme.primary.withOpacity(0.18),
+                  colorScheme.secondaryContainer.withOpacity(0.22),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              )
+            : null,
+        color: highlight ? null : colorScheme.surfaceVariant.withOpacity(0.6),
+        border: Border.all(
+          color: colorScheme.outlineVariant.withOpacity(0.25),
+          width: 1.2,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: colorScheme.primary),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
@@ -248,6 +309,7 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
     final material = _clothes.material?.trim();
     final temperatureMin = _clothes.temperatureMin;
     final temperatureMax = _clothes.temperatureMax;
+
     String? temperatureRange;
     if (temperatureMin != null || temperatureMax != null) {
       if (temperatureMin != null && temperatureMax != null) {
@@ -265,88 +327,164 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
         '${created.day.toString().padLeft(2, '0')}.${created.month.toString().padLeft(2, '0')}.${created.year} '
         '${created.hour.toString().padLeft(2, '0')}:${created.minute.toString().padLeft(2, '0')}';
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const RoundedBackButton(),
-        title: const Text('Гардероб 26'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: _isProcessing ? null : _editDetails,
-            tooltip: 'Редактировать',
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.red),
-            onPressed: _isProcessing ? null : _confirmDelete,
-          ),
-        ],
-      ),
-      body: Stack(
+    return FractionallySizedBox(
+      heightFactor: 0.94,
+      child: Stack(
         children: [
-          ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _buildGallery(colorScheme),
-              const SizedBox(height: 16),
-              Text(
-                _clothes.name,
-                style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _InfoChip(icon: Icons.checkroom, label: _clothes.category),
-                  _InfoChip(icon: Icons.calendar_month_outlined, label: _clothes.season),
-                  if (temperatureRange != null)
-                    _InfoChip(icon: Icons.device_thermostat, label: temperatureRange),
-                  if (material != null && material.isNotEmpty)
-                    _InfoChip(icon: Icons.texture, label: material),
-                ],
-              ),
-              if (description != null && description.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'Описание',
-                  style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            child: Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    colorScheme.surface,
+                    colorScheme.surfaceVariant.withOpacity(0.45),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  description,
-                  style: textTheme.bodyMedium,
-                ),
-              ],
-              if (careText != null && careText.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(
-                  'Рекомендации по уходу',
-                  style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  careText,
-                  style: textTheme.bodyMedium,
-                ),
-              ],
-              const SizedBox(height: 16),
-              Text(
-                'Цвет: ${_clothes.color}',
-                style: textTheme.bodyMedium,
               ),
-              const SizedBox(height: 8),
-              Text(
-                'Добавлено: $createdText',
-                style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+              child: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 16, bottom: 8),
+                      child: Container(
+                        width: 48,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: colorScheme.outlineVariant.withOpacity(0.6),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _clothes.name,
+                              style: textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Редактировать',
+                            icon: const Icon(Icons.edit_outlined),
+                            onPressed: _isProcessing ? null : _editDetails,
+                          ),
+                          IconButton(
+                            tooltip: 'Удалить',
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: _isProcessing ? null : _confirmDelete,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                          color: colorScheme.surface,
+                        ),
+                        child: CustomScrollView(
+                          controller: _scrollController,
+                          slivers: [
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                              sliver: SliverToBoxAdapter(
+                                child: _buildGallery(colorScheme),
+                              ),
+                            ),
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+                              sliver: SliverToBoxAdapter(
+                                child: Wrap(
+                                  spacing: 12,
+                                  runSpacing: 12,
+                                  children: [
+                                    _buildInfoChip(
+                                      icon: Icons.checkroom_outlined,
+                                      label: _clothes.category,
+                                      highlight: true,
+                                    ),
+                                    _buildInfoChip(
+                                      icon: Icons.calendar_month_outlined,
+                                      label: _clothes.season,
+                                    ),
+                                    if (temperatureRange != null)
+                                      _buildInfoChip(
+                                        icon: Icons.device_thermostat,
+                                        label: temperatureRange,
+                                      ),
+                                    if (material != null && material.isNotEmpty)
+                                      _buildInfoChip(
+                                        icon: Icons.texture,
+                                        label: material,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            if (description != null && description.isNotEmpty)
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                                sliver: SliverToBoxAdapter(
+                                  child: _DetailSection(
+                                    title: 'Описание',
+                                    body: description,
+                                  ),
+                                ),
+                              ),
+                            if (careText != null && careText.isNotEmpty)
+                              SliverPadding(
+                                padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                                sliver: SliverToBoxAdapter(
+                                  child: _DetailSection(
+                                    title: 'Рекомендации по уходу',
+                                    body: careText,
+                                  ),
+                                ),
+                              ),
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(24, 28, 24, 40),
+                              sliver: SliverToBoxAdapter(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    _DetailRow(
+                                      icon: Icons.palette_outlined,
+                                      label: 'Цвет',
+                                      value: _clothes.color,
+                                    ),
+                                    const SizedBox(height: 12),
+                                    _DetailRow(
+                                      icon: Icons.schedule_outlined,
+                                      label: 'Добавлено',
+                                      value: createdText,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
+            ),
           ),
           if (_isProcessing)
             const Positioned(
               top: 0,
               left: 0,
               right: 0,
-              child: LinearProgressIndicator(),
+              child: LinearProgressIndicator(minHeight: 2),
             ),
         ],
       ),
@@ -354,33 +492,91 @@ class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
   }
 }
 
-class _InfoChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
+class _DetailSection extends StatelessWidget {
+  const _DetailSection({required this.title, required this.body});
 
-  const _InfoChip({required this.icon, required this.label});
+  final String title;
+  final String body;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(24),
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.secondaryContainer.withOpacity(0.24),
+            colorScheme.surfaceVariant.withOpacity(0.4),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            body,
+            style: theme.textTheme.bodyMedium,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: colorScheme.surfaceVariant.withOpacity(0.35),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.3)),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: colorScheme.onSurfaceVariant),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: textTheme.bodySmall?.copyWith(
-              color: colorScheme.onSurface,
-              fontSize: 14,
+          Icon(icon, color: colorScheme.primary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: theme.textTheme.titleMedium,
+                ),
+              ],
             ),
           ),
         ],

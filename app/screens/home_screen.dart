@@ -610,11 +610,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final Clothes clothes = await ApiService.getClothesById(clothesId);
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ClothesDetailScreen(clothes: clothes),
-        ),
-      );
+      await showClothesDetailSheet(context, clothes);
     } catch (error) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
