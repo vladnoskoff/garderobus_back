@@ -19,6 +19,22 @@ class AppLocalizations {
       'settings_places': 'Места',
       'settings_language': 'Язык',
       'settings_logout': 'Выход',
+      'settings_general_section': 'Дом и места',
+      'settings_security_privacy': 'Безопасность и конфиденциальность',
+      'settings_account_full_name': 'ФИО',
+      'settings_account_email': 'Почта',
+      'settings_account_phone': 'Телефон',
+      'settings_account_gender': 'Пол',
+      'settings_security_password': 'Пароль и его смена',
+      'settings_security_pin': 'PIN-код',
+      'settings_security_photo_permissions':
+          'Отображение разрешений на приложения Фото',
+      'settings_security_camera_permissions':
+          'Отображение разрешений на приложения Камера',
+      'settings_theme_section': 'Выбор темы',
+      'settings_theme_slider_hint': 'Выберите оформление приложения',
+      'settings_theme_light': 'Светлая тема',
+      'settings_theme_dark': 'Тёмная тема',
       'language_screen_title': 'Язык интерфейса',
       'language_select_prompt': 'Выберите язык приложения',
       'language_russian': 'Русский',
@@ -40,6 +56,22 @@ class AppLocalizations {
       'settings_places': 'Places',
       'settings_language': 'Language',
       'settings_logout': 'Log out',
+      'settings_general_section': 'Home & places',
+      'settings_security_privacy': 'Security & Privacy',
+      'settings_account_full_name': 'Full name',
+      'settings_account_email': 'Email',
+      'settings_account_phone': 'Phone',
+      'settings_account_gender': 'Gender',
+      'settings_security_password': 'Password & updates',
+      'settings_security_pin': 'PIN code',
+      'settings_security_photo_permissions':
+          'Display permissions for Photos app',
+      'settings_security_camera_permissions':
+          'Display permissions for Camera app',
+      'settings_theme_section': 'Theme selection',
+      'settings_theme_slider_hint': 'Choose the app appearance',
+      'settings_theme_light': 'Light theme',
+      'settings_theme_dark': 'Dark theme',
       'language_screen_title': 'Interface language',
       'language_select_prompt': 'Choose the app language',
       'language_russian': 'Russian',
@@ -75,6 +107,22 @@ class AppLocalizations {
   String get settingsPlaces => getString('settings_places');
   String get settingsLanguage => getString('settings_language');
   String get settingsLogout => getString('settings_logout');
+  String get settingsGeneralSection => getString('settings_general_section');
+  String get settingsSecurityPrivacy => getString('settings_security_privacy');
+  String get settingsAccountFullName => getString('settings_account_full_name');
+  String get settingsAccountEmail => getString('settings_account_email');
+  String get settingsAccountPhone => getString('settings_account_phone');
+  String get settingsAccountGender => getString('settings_account_gender');
+  String get settingsSecurityPassword => getString('settings_security_password');
+  String get settingsSecurityPin => getString('settings_security_pin');
+  String get settingsSecurityPhotoPermissions =>
+      getString('settings_security_photo_permissions');
+  String get settingsSecurityCameraPermissions =>
+      getString('settings_security_camera_permissions');
+  String get settingsThemeSection => getString('settings_theme_section');
+  String get settingsThemeSliderHint => getString('settings_theme_slider_hint');
+  String get settingsThemeLight => getString('settings_theme_light');
+  String get settingsThemeDark => getString('settings_theme_dark');
   String get languageScreenTitle => getString('language_screen_title');
   String get languageSelectPrompt => getString('language_select_prompt');
   String get languageApply => getString('language_apply');
