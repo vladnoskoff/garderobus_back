@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -483,183 +484,332 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
+    final paddingBottom = MediaQuery.of(context).padding.bottom;
+
+    final locationItems = _locations
+        .whereType<Map<String, dynamic>>()
+        .map((loc) {
+          final parsedId = _parseLocationId(loc['id']);
+          if (parsedId == null) {
+            return null;
+          }
+          final name = loc['name']?.toString().trim();
+          return DropdownMenuItem<int?>(
+            value: parsedId,
+            child: Text(name?.isNotEmpty == true ? name! : 'Локация #$parsedId'),
+          );
+        })
+        .whereType<DropdownMenuItem<int?>>()
+        .toList();
+
     return Scaffold(
       appBar: AppBar(
         leading: const RoundedBackButton(),
+        centerTitle: true,
         title: const Text('Добавить одежду'),
       ),
-      body: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Form(
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final targetWidth = math.min(constraints.maxWidth, 820.0);
+            final horizontalPadding = math.max(20.0, (constraints.maxWidth - targetWidth) / 2);
+
+            return Form(
               key: _formKey,
-              child: ListView(
-                children: [
-                  DropdownButtonFormField<bool>(
-                    value: _useAiAutoFill,
-                    decoration: const InputDecoration(
-                      labelText: 'Заполнение данных',
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: false,
-                        child: Text('Заполнить самостоятельно'),
-                      ),
-                      DropdownMenuItem(
-                        value: true,
-                        child: Text('Использовать заполнение ИИ'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      setState(() {
-                        _useAiAutoFill = value ?? false;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 16),
-                  if (_isLocationsLoading)
-                    const LinearProgressIndicator()
-                  else if (_locations.isNotEmpty)
-                    DropdownButtonFormField<int?>(
-                      value: _selectedLocationId,
-                      decoration: const InputDecoration(
-                        labelText: 'Локация гардероба',
-                      ),
-                      items: [
-                        const DropdownMenuItem<int?>(
-                          value: null,
-                          child: Text('Без привязки'),
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  24,
+                  horizontalPadding,
+                  24 + paddingBottom,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            colorScheme.primaryContainer
+                                .withOpacity(theme.brightness == Brightness.dark ? 0.35 : 0.85),
+                            colorScheme.surfaceVariant
+                                .withOpacity(theme.brightness == Brightness.dark ? 0.3 : 0.7),
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
-                        ..._locations
-                            .whereType<Map<String, dynamic>>()
-                            .map((loc) {
-                          final parsedId = _parseLocationId(loc['id']);
-                          if (parsedId == null) {
-                            return null;
-                          }
-                          final name = loc['name']?.toString() ?? 'Без названия';
-                          return DropdownMenuItem<int?>(
-                            value: parsedId,
-                            child: Text(name),
-                          );
-                        }).whereType<DropdownMenuItem<int?>>(),
-                      ],
-                      onChanged: (value) {
-                        setState(() {
-                          _selectedLocationId = value;
-                        });
-                        if (value == null) {
-                          _storage.delete(key: 'selected_location_id');
-                        } else {
-                          _storage.write(
-                            key: 'selected_location_id',
-                            value: value.toString(),
-                          );
-                        }
-                      },
+                        borderRadius: BorderRadius.circular(28),
+                        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.08),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.add_photo_alternate_outlined,
+                                  color: colorScheme.onPrimaryContainer),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Заполните карточку вещи и добавьте фото',
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+                          DropdownButtonFormField<bool>(
+                            value: _useAiAutoFill,
+                            decoration: InputDecoration(
+                              labelText: 'Заполнение данных',
+                              border:
+                                  OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+                              filled: true,
+                              fillColor: colorScheme.surface.withOpacity(
+                                theme.brightness == Brightness.dark ? 0.35 : 0.9,
+                              ),
+                            ),
+                            items: const [
+                              DropdownMenuItem(
+                                value: false,
+                                child: Text('Заполнить самостоятельно'),
+                              ),
+                              DropdownMenuItem(
+                                value: true,
+                                child: Text('Использовать заполнение ИИ'),
+                              ),
+                            ],
+                            onChanged: (value) {
+                              setState(() {
+                                _useAiAutoFill = value ?? false;
+                              });
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          if (_isLocationsLoading)
+                            const LinearProgressIndicator()
+                          else if (_locations.isNotEmpty)
+                            DropdownButtonFormField<int?>(
+                              value: _selectedLocationId,
+                              decoration: InputDecoration(
+                                labelText: 'Локация гардероба',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                                filled: true,
+                                fillColor: colorScheme.surface.withOpacity(
+                                  theme.brightness == Brightness.dark ? 0.35 : 0.9,
+                                ),
+                              ),
+                              items: [
+                                const DropdownMenuItem<int?>(
+                                  value: null,
+                                  child: Text('Без привязки'),
+                                ),
+                                ...locationItems,
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedLocationId = value;
+                                });
+                                if (value == null) {
+                                  _storage.delete(key: 'selected_location_id');
+                                } else {
+                                  _storage.write(
+                                    key: 'selected_location_id',
+                                    value: value.toString(),
+                                  );
+                                }
+                              },
+                            ),
+                          if (_locations.isEmpty && !_isLocationsLoading)
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: colorScheme.surface.withOpacity(
+                                  theme.brightness == Brightness.dark ? 0.25 : 0.85,
+                                ),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Text(
+                                'Добавьте локации гардероба в настройках, чтобы привязывать вещи.',
+                                style: theme.textTheme.bodyMedium,
+                              ),
+                            ),
+                          const SizedBox(height: 20),
+                          if (_useAiAutoFill)
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: colorScheme.secondaryContainer.withOpacity(
+                                  theme.brightness == Brightness.dark ? 0.35 : 0.7,
+                                ),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Text(
+                                'Загрузите фото, а мы попробуем определить название, категорию и цвет автоматически.',
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: colorScheme.onSecondaryContainer,
+                                ),
+                              ),
+                            ),
+                          if (!_useAiAutoFill) ...[
+                            TextFormField(
+                              controller: _nameController,
+                              decoration: InputDecoration(
+                                labelText: 'Название',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Введите название';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _categoryController,
+                              decoration: InputDecoration(
+                                labelText: 'Категория',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Введите категорию';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            DropdownButtonFormField<String>(
+                              value: season.isNotEmpty ? season : null,
+                              decoration: InputDecoration(
+                                labelText: 'Сезон',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                              items: const ['Весна', 'Лето', 'Осень', 'Зима']
+                                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                                  .toList(),
+                              onChanged: (value) {
+                                setState(() {
+                                  season = value ?? '';
+                                });
+                              },
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Выберите сезон';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _colorController,
+                              decoration: InputDecoration(
+                                labelText: 'Цвет',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'Введите цвет';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 14),
+                            TextFormField(
+                              controller: _materialController,
+                              decoration: InputDecoration(
+                                labelText: 'Материал (необязательно)',
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
+                          ],
+                          Text(
+                            'Фотографии',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          _buildImagesPreview(colorScheme),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            alignment: WrapAlignment.center,
+                            children: [
+                              FilledButton.tonalIcon(
+                                onPressed: _isLoading ? null : _addImageFromCamera,
+                                icon: const Icon(Icons.camera_alt_outlined),
+                                label: const Text('Камера'),
+                              ),
+                              FilledButton.tonalIcon(
+                                onPressed: _isLoading ? null : _addImagesFromGallery,
+                                icon: const Icon(Icons.image_outlined),
+                                label: const Text('Галерея'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Первое фото станет главным. При необходимости переставьте порядок.',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                          FilledButton(
+                            onPressed: _isLoading ? null : submit,
+                            style: FilledButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: _isLoading
+                                ? SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        colorScheme.onPrimary,
+                                      ),
+                                    ),
+                                  )
+                                : const Text('Добавить'),
+                          ),
+                        ],
+                      ),
                     ),
-                  const SizedBox(height: 16),
-                  if (!_useAiAutoFill) ...[
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: const InputDecoration(labelText: 'Название'),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Введите название';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: _categoryController,
-                      decoration: const InputDecoration(labelText: 'Категория'),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Введите категорию';
-                        }
-                        return null;
-                      },
-                    ),
-                    DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Сезон'),
-                      value: season.isNotEmpty ? season : null,
-                      items: ['Лето', 'Осень', 'Зима', 'Весна']
-                          .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                          .toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          season = value ?? '';
-                        });
-                      },
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Выберите сезон';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: _colorController,
-                      decoration: const InputDecoration(labelText: 'Цвет'),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'Введите цвет';
-                        }
-                        return null;
-                      },
-                    ),
-                    TextFormField(
-                      controller: _materialController,
-                      decoration:
-                          const InputDecoration(labelText: 'Материал (необязательно)'),
-                    ),
-                    const SizedBox(height: 16),
                   ],
-                  Text(
-                    'Фотографии',
-                    style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildImagesPreview(colorScheme),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 12,
-                    runSpacing: 8,
-                    alignment: WrapAlignment.center,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _addImageFromCamera,
-                        icon: const Icon(Icons.camera_alt),
-                        label: const Text('Камера'),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _addImagesFromGallery,
-                        icon: const Icon(Icons.image),
-                        label: const Text('Галерея'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Первое фото станет главным. При необходимости переставьте порядок.',
-                    style: textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: _isLoading ? null : submit,
-                    child: _isLoading
-                        ? CircularProgressIndicator(color: Colors.white)
-                        : Text('Добавить'),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
