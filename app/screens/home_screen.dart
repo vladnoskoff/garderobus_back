@@ -653,7 +653,7 @@ class _HomeScreenState extends State<HomeScreen> {
           return Align(
             alignment: Alignment.topCenter,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 640),
                 child: Column(
@@ -666,10 +666,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       isLoading: isWeatherLoading,
                       pressureMm: pressureMm,
                     ),
-                    if (((weather?['forecast']) as List<dynamic>?)?.isNotEmpty ?? false) ...[
-                      const SizedBox(height: 20),
-                      _buildForecastSection(context),
-                    ],
                     const SizedBox(height: 20),
                     _buildMannequinSection(context),
                     const SizedBox(height: 32),
@@ -710,6 +706,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return _buildHomeCard(
       context,
       accentColor: colorScheme.primary,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       children: [
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -722,11 +719,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   Text(
                     'Дом и места',
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
                     'Выберите гардероб для погоды и рекомендаций.',
                     style: theme.textTheme.bodySmall?.copyWith(
@@ -741,10 +738,13 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () => showHomeSettingsSheet(context),
               icon: const Icon(Icons.tune),
               label: const Text('Управлять'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         if (isLocationsLoading)
           const LinearProgressIndicator()
         else if (wardrobeLocations.isNotEmpty)
@@ -761,7 +761,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Icons.keyboard_arrow_down_rounded,
                   color: colorScheme.primary,
                 ),
-                style: theme.textTheme.titleMedium,
+                style: theme.textTheme.titleSmall,
                 borderRadius: BorderRadius.circular(18),
                 items: locationItems,
                 onChanged: (value) => _handleLocationChange(value),
@@ -788,10 +788,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final humidity = weatherData?['humidity'];
     final wind = (weatherData?['wind_speed'] as num?)?.toDouble();
     final temperature = weatherData?['temperature'];
+    final hasDetails = !isLoading && weatherData != null;
 
     return _buildHomeCard(
       context,
       accentColor: colorScheme.primary,
+      onTap: hasDetails ? () => _showWeatherDetailsSheet(context, pressureMm) : null,
       children: [
         Row(
           children: [
@@ -803,9 +805,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 fontWeight: FontWeight.w700,
               ),
             ),
+            const Spacer(),
+            if (hasDetails)
+              Icon(
+                Icons.keyboard_arrow_up,
+                color: colorScheme.primary,
+              ),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         if (isLoading)
           const SizedBox(
             height: 140,
@@ -823,12 +831,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          temperature != null ? '$temperature°C' : '—',
+                          temperature != null ? '${_formatTemperature(temperature)}°C' : '—',
                           style: theme.textTheme.displaySmall?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         Wrap(
                           spacing: 20,
                           runSpacing: 12,
@@ -883,11 +891,20 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
               if (weatherComment != null) ...[
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
                 Text(
                   weatherComment!,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (hasDetails) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Нажмите, чтобы посмотреть подробный прогноз и погоду на неделю',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.7),
                   ),
                 ),
               ],
@@ -897,36 +914,210 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildForecastSection(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final forecastDays = (weather?['forecast'] as List<dynamic>? ?? const [])
+  Future<void> _showWeatherDetailsSheet(BuildContext context, int? pressureMm) async {
+    final weatherData = weather;
+    if (weatherData == null) {
+      return;
+    }
+
+    final humidity = weatherData['humidity'];
+    final wind = (weatherData['wind_speed'] as num?)?.toDouble();
+    final temperature = weatherData['temperature'];
+    final feelsLike = weatherData['feels_like'];
+    final description = weatherData['description']?.toString();
+    final forecastDays = (weatherData['forecast'] as List<dynamic>? ?? const [])
         .whereType<Map>()
         .map((day) => day.map((key, value) => MapEntry(key.toString(), value)))
+        .take(7)
         .toList(growable: false);
 
-    return _buildHomeCard(
-      context,
-      accentColor: colorScheme.secondary,
-      children: [
-        Row(
-          children: [
-            _buildCardIcon(colorScheme.secondary, Icons.calendar_month_outlined),
-            const SizedBox(width: 16),
-            Text(
-              'Прогноз на 3 дня',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final colorScheme = theme.colorScheme;
+        final brightness = theme.brightness;
+        final bottomPadding = MediaQuery.of(sheetContext).padding.bottom;
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.92,
+          minChildSize: 0.4,
+          builder: (context, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                gradient: LinearGradient(
+                  colors: [
+                    colorScheme.surfaceVariant.withOpacity(brightness == Brightness.dark ? 0.65 : 0.95),
+                    colorScheme.surface.withOpacity(brightness == Brightness.dark ? 0.92 : 1),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Column(
-          children:
-              forecastDays.map((day) => _buildForecastTile(context, day)).toList(growable: false),
-        ),
-      ],
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(24, 12, 24, 20 + bottomPadding),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildCardIcon(colorScheme.primary, Icons.cloud_outlined),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Прогноз погоды',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              if (description != null && description.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  description,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Закрыть',
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Expanded(
+                      child: ListView(
+                        controller: controller,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      temperature != null
+                                          ? '${_formatTemperature(temperature)}°C'
+                                          : '—',
+                                      style: theme.textTheme.displaySmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    if (feelsLike != null) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Ощущается как ${_formatTemperature(feelsLike)}°C',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 24),
+                              if (weatherIconUrl != null && weatherIconUrl!.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Image.network(
+                                    weatherIconUrl!,
+                                    width: 88,
+                                    height: 88,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.cloud,
+                                      size: 54,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  Icons.cloud,
+                                  size: 54,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 20,
+                            runSpacing: 12,
+                            children: [
+                              if (humidity != null)
+                                _buildWeatherMetric(
+                                  context,
+                                  label: 'Влажность',
+                                  value: '$humidity%',
+                                ),
+                              if (pressureMm != null)
+                                _buildWeatherMetric(
+                                  context,
+                                  label: 'Давление',
+                                  value: '$pressureMm мм рт. ст.',
+                                ),
+                              if (wind != null)
+                                _buildWeatherMetric(
+                                  context,
+                                  label: 'Ветер',
+                                  value: '${wind.toStringAsFixed(1)} м/с',
+                                ),
+                            ],
+                          ),
+                          if (weatherComment != null) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              weatherComment!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                          if (forecastDays.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            Text(
+                              'Прогноз на неделю',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            ...forecastDays.map((day) => _buildForecastTile(context, day)),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -936,19 +1127,34 @@ class _HomeScreenState extends State<HomeScreen> {
     final date = day['date']?.toString() ?? '';
     final temp = day['temp'];
     final iconCode = day['icon']?.toString();
+    final description = day['description']?.toString();
+    final formattedTemp = temp != null ? '${_formatTemperature(temp)}°C' : '—';
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: Text(
-              date,
-              style: theme.textTheme.bodyMedium,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  date,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (description != null && description.isNotEmpty)
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
             ),
           ),
           Text(
-            temp != null ? '$temp°C' : '—',
+            formattedTemp,
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
             ),
@@ -1058,6 +1264,22 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _formatTemperature(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is num) {
+      final isWhole = value % 1 == 0;
+      return isWhole ? value.toInt().toString() : value.toStringAsFixed(1);
+    }
+    final parsed = num.tryParse(value.toString());
+    if (parsed != null) {
+      final isWhole = parsed % 1 == 0;
+      return isWhole ? parsed.toInt().toString() : parsed.toStringAsFixed(1);
+    }
+    return value.toString();
+  }
+
   Widget _buildEmptyState(BuildContext context, String message) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -1082,29 +1304,52 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context, {
     required Color accentColor,
     required List<Widget> children,
+    VoidCallback? onTap,
+    EdgeInsetsGeometry? padding,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
     final baseColor = colorScheme.surfaceVariant;
+    final borderRadius = BorderRadius.circular(26);
+    final resolvedPadding = padding ?? const EdgeInsets.symmetric(horizontal: 18, vertical: 18);
+
+    final decoration = BoxDecoration(
+      borderRadius: borderRadius,
+      gradient: LinearGradient(
+        colors: [
+          baseColor.withOpacity(0.7),
+          baseColor,
+          accentColor.withOpacity(0.18),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    );
+
+    final content = Padding(
+      padding: resolvedPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: decoration,
+          child: InkWell(
+            borderRadius: borderRadius,
+            onTap: onTap,
+            child: content,
+          ),
+        ),
+      );
+    }
+
     return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: LinearGradient(
-          colors: [
-            baseColor.withOpacity(0.75),
-            baseColor,
-            accentColor.withOpacity(0.22),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: children,
-        ),
-      ),
+      decoration: decoration,
+      child: content,
     );
   }
 

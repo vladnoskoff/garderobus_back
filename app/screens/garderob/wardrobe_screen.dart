@@ -445,7 +445,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     final baseSurface = colorScheme.surfaceVariant.withOpacity(
       brightness == Brightness.dark ? 0.32 : 0.7,
     );
-    final buttonPadding = const EdgeInsets.symmetric(vertical: 12);
+    final buttonPadding = const EdgeInsets.symmetric(vertical: 10);
 
     return Container(
       decoration: BoxDecoration(
@@ -460,7 +460,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.18)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -507,7 +507,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           DropdownButtonFormField<int?>(
             value: selectedLocationId,
             decoration: InputDecoration(
@@ -530,7 +530,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
             const SizedBox(height: 12),
             const LinearProgressIndicator(minHeight: 2),
           ],
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
@@ -724,7 +724,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -732,12 +732,13 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                     item.name,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium?.copyWith(
+                    style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
+                      height: 1.2,
                     ),
                   ),
                   if (chips.isNotEmpty) ...[
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       runSpacing: 6,
