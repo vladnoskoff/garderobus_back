@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/clothes.dart';
-import '../services/theme_controller.dart';
 import '../widgets/rounded_back_button.dart';
 import 'garderob/clothes_detail_screen.dart';
 import 'settings/home_settings/home_screen_settings.dart';
@@ -629,8 +628,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final themeNotifier = ThemeScope.of(context);
-    final isDarkMode = themeNotifier.themeMode == ThemeMode.dark;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final pressureValue = weather?["pressure"];
@@ -639,29 +636,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Гардероб 26"),
-        actions: [
-          IconButton(
-            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
-            tooltip: isDarkMode ? 'Включить светлую тему' : 'Включить тёмную тему',
-            onPressed: () async {
-              try {
-                await themeNotifier.toggleTheme();
-                if (!mounted) return;
-                final message = themeNotifier.themeMode == ThemeMode.dark
-                    ? 'Тёмная тема включена'
-                    : 'Светлая тема включена';
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(message)),
-                );
-              } catch (error) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Не удалось сменить тему: $error')),
-                );
-              }
-            },
-          ),
-        ],
       ),
       body: weather == null
           ? Center(child: CircularProgressIndicator())

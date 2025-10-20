@@ -22,7 +22,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _photoPermissionsVisible = true;
   bool _cameraPermissionsVisible = true;
-  bool _isDarkTheme = false;
+  ThemeMode _themeMode = ThemeMode.system;
   bool _didInitializeTheme = false;
   bool _isLoadingAccount = true;
   bool _hasPin = false;
@@ -48,7 +48,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final themeNotifier = ThemeScope.of(context);
-    _isDarkTheme = themeNotifier.themeMode == ThemeMode.dark;
+    _themeMode = themeNotifier.themeMode;
     _didInitializeTheme = true;
   }
 
@@ -255,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _buildQuickActions(
             context,
             currentLanguage: currentLanguage,
-            isDarkTheme: _isDarkTheme,
+            themeMode: _themeMode,
             colorScheme: colorScheme,
             l10n: l10n,
           ),
@@ -426,10 +426,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildQuickActions(
     BuildContext context, {
     required String currentLanguage,
-    required bool isDarkTheme,
+    required ThemeMode themeMode,
     required ColorScheme colorScheme,
     required AppLocalizations l10n,
   }) {
+    final themeIcon = _themeIconFor(themeMode);
+    final themeLabel = _describeThemeMode(l10n, themeMode);
     return Wrap(
       spacing: 14,
       runSpacing: 14,
@@ -453,9 +455,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           onTap: () => _openLanguage(context),
         ),
         _QuickActionButton(
-          icon: isDarkTheme ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
-          label:
-              '${l10n.settingsThemeSection}\n${isDarkTheme ? l10n.settingsThemeDark : l10n.settingsThemeLight}',
+          icon: themeIcon,
+          label: '${l10n.settingsThemeSection}\n$themeLabel',
           color: colorScheme.primaryContainer,
           onTap: () => _openThemeSelector(context),
         ),
@@ -486,9 +487,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openThemeSelector(BuildContext context) async {
     final l10n = context.l10n;
-    bool tempValue = _isDarkTheme;
+    ThemeMode tempMode = _themeMode;
 
-    final selectedThemeIsDark = await showModalBottomSheet<bool>(
+    final selectedThemeMode = await showModalBottomSheet<ThemeMode>(
       context: context,
       backgroundColor: Theme.of(context).colorScheme.surface,
       shape: const RoundedRectangleBorder(
@@ -499,6 +500,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
           child: StatefulBuilder(
             builder: (context, setState) {
+              Widget buildOption({
+                required ThemeMode mode,
+                required IconData icon,
+                required String label,
+              }) {
+                final theme = Theme.of(context);
+                final colorScheme = theme.colorScheme;
+                final selected = tempMode == mode;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () {
+                    setState(() {
+                      tempMode = mode;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      color: selected
+                          ? colorScheme.primary.withOpacity(0.08)
+                          : colorScheme.surfaceVariant.withOpacity(0.2),
+                      border: Border.all(
+                        color: selected
+                            ? colorScheme.primary
+                            : colorScheme.outlineVariant.withOpacity(0.2),
+                        width: 1.4,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(icon, color: colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Radio<ThemeMode>(
+                          value: mode,
+                          groupValue: tempMode,
+                          activeColor: colorScheme.primary,
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                tempMode = value;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,31 +570,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                   ),
                   const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.palette_outlined,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          l10n.settingsThemeDark,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ),
-                      Switch.adaptive(
-                        value: tempValue,
-                        activeColor: Theme.of(context).colorScheme.primary,
-                        onChanged: (value) {
-                          setState(() {
-                            tempValue = value;
-                          });
-                        },
-                      ),
-                    ],
+                  buildOption(
+                    mode: ThemeMode.system,
+                    icon: Icons.brightness_auto,
+                    label: l10n.settingsThemeSystem,
+                  ),
+                  const SizedBox(height: 12),
+                  buildOption(
+                    mode: ThemeMode.light,
+                    icon: Icons.light_mode_outlined,
+                    label: l10n.settingsThemeLight,
+                  ),
+                  const SizedBox(height: 12),
+                  buildOption(
+                    mode: ThemeMode.dark,
+                    icon: Icons.dark_mode_outlined,
+                    label: l10n.settingsThemeDark,
                   ),
                   const SizedBox(height: 24),
                   Row(
@@ -546,7 +597,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                       const SizedBox(width: 12),
                       FilledButton(
-                        onPressed: () => Navigator.pop(sheetContext, tempValue),
+                        onPressed: () => Navigator.pop(sheetContext, tempMode),
                         child: Text(l10n.settingsSave),
                       ),
                     ],
@@ -559,9 +610,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
       },
     );
 
-    if (selectedThemeIsDark != null && selectedThemeIsDark != _isDarkTheme) {
-      _onThemeChanged(selectedThemeIsDark);
+    if (selectedThemeMode != null && selectedThemeMode != _themeMode) {
+      _onThemeChanged(selectedThemeMode);
     }
+  }
+
+  String _describeThemeMode(AppLocalizations l10n, ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.dark:
+        return l10n.settingsThemeDark;
+      case ThemeMode.light:
+        return l10n.settingsThemeLight;
+      case ThemeMode.system:
+      default:
+        return l10n.settingsThemeSystem;
+    }
+  }
+
+  IconData _themeIconFor(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.dark:
+        return Icons.dark_mode_outlined;
+      case ThemeMode.light:
+        return Icons.light_mode_outlined;
+      case ThemeMode.system:
+      default:
+        return Icons.brightness_auto;
+    }
+  }
+
+  Future<void> _onThemeChanged(ThemeMode mode) async {
+    setState(() {
+      _themeMode = mode;
+    });
+    final notifier = ThemeScope.of(context);
+    await notifier.setTheme(mode);
   }
 
   Widget buildExitButton(BuildContext context) {
@@ -1059,13 +1142,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _onThemeChanged(bool value) async {
-    setState(() {
-      _isDarkTheme = value;
-    });
-    final notifier = ThemeScope.of(context);
-    await notifier.setTheme(value ? ThemeMode.dark : ThemeMode.light);
-  }
 }
 
 class _QuickActionButton extends StatelessWidget {
