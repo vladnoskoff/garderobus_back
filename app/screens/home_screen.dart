@@ -80,8 +80,563 @@ class _MannequinRefreshButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final resolvedForeground = foregroundColor ?? colorScheme.onSecondaryContainer;
+    final resolvedBackground =
+        backgroundColor ?? resolvedForeground.withOpacity(0.1);
+
+    return Tooltip(
+      message: 'Обновить манекен',
+      child: Material(
+        color: resolvedBackground,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: isLoading ? null : onPressed,
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: isLoading
+                ? SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(resolvedForeground),
+                    ),
+                  )
+                : Icon(
+                    Icons.autorenew,
+                    color: resolvedForeground,
+                    size: 20,
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MannequinImageViewer extends StatelessWidget {
+  const _MannequinImageViewer({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        leading: const RoundedBackButton(),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Просмотр манекена',
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
+      body: Center(
+        child: InteractiveViewer(
+          child: Hero(
+            tag: imageUrl,
+            child: Image.network(
+              imageUrl,
+              fit: BoxFit.contain,
+              errorBuilder: (_, __, ___) => const Icon(
+                Icons.broken_image_outlined,
+                color: Colors.white54,
+                size: 48,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  Map<String, dynamic>? weather;
+  List<Map<String, dynamic>> mannequins = [];
+  String? weatherComment;
+  String? weatherIconUrl;
+  final storage = const FlutterSecureStorage();
+  int? userId;
+  List<dynamic> wardrobeLocations = [];
+  int? selectedLocationId;
+  bool isLocationsLoading = false;
+  bool isMannequinsLoading = false;
+  String? mannequinsError;
+  Timer? _weatherTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    loadUserId();
+    fetchWeather();
+    fetchMannequins();
+    _loadLocations();
+
+    _weatherTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (mounted) {
+        fetchWeather();
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _weatherTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> loadUserId() async {
+    final idString = await storage.read(key: 'user_id');
+    if (idString != null) {
+      setState(() {
+        userId = int.tryParse(idString);
+      });
+      fetchWeather();
+      fetchMannequins();
+      _loadLocations();
+      await checkInitialSettings();
+    }
+  }
+
+  Future<void> _loadLocations() async {
+    if (userId == null) return;
+    setState(() => isLocationsLoading = true);
+    try {
+      final locations = await ApiService.getWardrobeLocations(userId!);
+      final storedLocationIdString = await storage.read(key: 'selected_location_id');
+      final storedLocationId =
+          storedLocationIdString != null ? int.tryParse(storedLocationIdString) : null;
+      int? resolvedLocationId = storedLocationId;
+      if (resolvedLocationId != null &&
+          !locations.any((loc) =>
+              loc is Map<String, dynamic> && _parseLocationId(loc['id']) == resolvedLocationId)) {
+        resolvedLocationId = null;
+      }
+      resolvedLocationId ??= _deriveDefaultLocation(locations);
+      setState(() {
+        wardrobeLocations = locations;
+        selectedLocationId = resolvedLocationId;
+      });
+      await _persistSelectedLocation(resolvedLocationId);
+      fetchWeather();
+      fetchMannequins();
+    } catch (e) {
+      debugPrint('Ошибка загрузки локаций: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isLocationsLoading = false);
+      }
+    }
+  }
+
+  Future<void> _persistSelectedLocation(int? locationId) async {
+    if (locationId == null) {
+      await storage.delete(key: 'selected_location_id');
+    } else {
+      await storage.write(
+        key: 'selected_location_id',
+        value: locationId.toString(),
+      );
+    }
+  }
+
+  Future<void> _handleLocationChange(int? value) async {
+    setState(() {
+      selectedLocationId = value;
+    });
+    await _persistSelectedLocation(value);
+    fetchWeather();
+    fetchMannequins();
+  }
+
+  int? _locationIdForRequests() {
+    if (selectedLocationId == null) {
+      return null;
+    }
+    final selectedLocation = _findLocationById(selectedLocationId);
+    if (selectedLocation == null) {
+      return null;
+    }
+    if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
+      return null;
+    }
+    return selectedLocationId;
+  }
+
+  int? _parseLocationId(dynamic rawId) {
+    if (rawId is int) return rawId;
+    if (rawId is String) {
+      return int.tryParse(rawId);
+    }
+    if (rawId != null) {
+      return int.tryParse(rawId.toString());
+    }
+    return null;
+  }
+
+  int? _deriveDefaultLocation(List<dynamic> locations) {
+    for (final loc in locations.whereType<Map<String, dynamic>>()) {
+      final lat = loc['latitude'];
+      final lon = loc['longitude'];
+      if (lat != null && lon != null) {
+        return _parseLocationId(loc['id']);
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic>? _findLocationById(int? id) {
+    if (id == null) return null;
+    for (final loc in wardrobeLocations.whereType<Map<String, dynamic>>()) {
+      if (_parseLocationId(loc['id']) == id) {
+        return loc;
+      }
+    }
+    return null;
+  }
+
+  Future<void> checkInitialSettings() async {
+    if (userId == null) return;
+
+    try {
+      final user = await ApiService.getUser(userId!);
+
+      final weatherKey = user['weather_api_key'];
+      final location = user['location'];
+
+      final hasWeatherKey = weatherKey != null && weatherKey.toString().trim().isNotEmpty;
+      final hasLocation = location != null && location.toString().trim().isNotEmpty;
+
+      if (!hasWeatherKey || !hasLocation) {
+        String missingParts = '';
+        if (!hasWeatherKey) missingParts += '• API-ключ погоды\n';
+        if (!hasLocation) missingParts += '• Координаты\n';
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          showDialog(
+            context: context,
+            builder: (_) => AlertDialog(
+              title: const Text('Нужна настройка'),
+              content: Text(
+                'Пожалуйста, укажите следующие параметры:\n\n$missingParts\nчтобы приложение работало корректно.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
+                    );
+                  },
+                  child: const Text('Перейти в настройки'),
+                ),
+              ],
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      debugPrint('Ошибка проверки настроек: $e');
+    }
+  }
+
+  Future<void> fetchWeather() async {
+    if (userId == null) return;
+    try {
+      final locationIdForRequest = _locationIdForRequests();
+
+      final weatherData = await ApiService.getWeatherByUserId(
+        userId!,
+        locationId: locationIdForRequest,
+      );
+      if (!mounted) return;
+      setState(() {
+        weather = weatherData;
+        weatherIconUrl = "https://openweathermap.org/img/wn/${weatherData['icon']}@2x.png";
+        weatherComment = generateWeatherComment(weatherData);
+      });
+    } catch (e) {
+      debugPrint('Ошибка при получении погоды: $e');
+    }
+  }
+
+  Future<void> fetchMannequins() async {
+    if (userId == null) return;
+    try {
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = true;
+          mannequinsError = null;
+        });
+      }
+
+      final locationIdForRequest = _locationIdForRequests();
+
+      final mannequinResults = await ApiService.getMannequinHistory(
+        userId!,
+        locationId: locationIdForRequest,
+        limit: 1,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        mannequins = mannequinResults.take(1).toList();
+      });
+    } catch (e) {
+      debugPrint('Ошибка при получении манекенов: $e');
+      if (mounted) {
+        setState(() {
+          mannequins = [];
+          mannequinsError = 'Не удалось загрузить историю манекенов';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _generateMannequin() async {
+    if (userId == null) return;
+    try {
+      setState(() {
+        isMannequinsLoading = true;
+        mannequinsError = null;
+      });
+
+      final locationIdForRequest = _locationIdForRequests();
+      final mannequin = await ApiService.generateMannequin(
+        userId!,
+        locationId: locationIdForRequest,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        mannequins = [mannequin];
+      });
+    } catch (e) {
+      debugPrint('Ошибка при генерации манекена: $e');
+      if (!mounted) return;
+      setState(() {
+        mannequinsError = 'Не удалось создать манекен. Попробуйте снова.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = false;
+        });
+      }
+    }
+  }
+
+  String generateWeatherComment(Map<String, dynamic> weather) {
+    final temp = (weather['temperature'] as num?)?.toDouble();
+    final wind = (weather['wind_speed'] as num?)?.toDouble() ?? 0;
+    final condition = weather['condition']?.toString().toLowerCase() ?? '';
+
+    if (temp == null) {
+      return 'Следите за погодой и подбирайте одежду по ощущениям.';
+    }
+
+    String recommendation;
+    if (temp < -10) {
+      recommendation = 'Экстремальный холод — утепляйтесь по максимуму.';
+    } else if (temp < 0) {
+      recommendation =
+          'Очень холодно, одевайтесь теплее и добавьте аксессуары для защиты от мороза.';
+    } else if (temp < 10) {
+      recommendation = 'Прохладно — наденьте тёплый верхний слой.';
+    } else if (temp < 18) {
+      recommendation = 'Лёгкая прохлада, возьмите ветровку или кардиган.';
+    } else if (temp < 25) {
+      recommendation = 'Комфортно, можно выбрать лёгкий повседневный образ.';
+    } else {
+      recommendation = 'Жарко, выбирайте лёгкие ткани и дышащую одежду.';
+    }
+
+    if (condition.contains('дожд') || condition.contains('rain')) {
+      recommendation += ' Возьмите зонт или дождевик.';
+    } else if (condition.contains('снег') || condition.contains('snow')) {
+      recommendation += ' Не забудьте тёплую верхнюю одежду и обувь для снега.';
+    }
+
+    if (wind >= 8) {
+      recommendation += ' На улице ветрено — выбирайте закрытые верхние слои.';
+    }
+
+    return recommendation;
+  }
+
+  Widget _buildMannequinCard(
+    BuildContext context,
+    Map<String, dynamic> mannequin,
+  ) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final imageUrl = mannequin['image_url']?.toString() ??
+        mannequin['imageUrl']?.toString() ??
+        mannequin['url']?.toString();
+    final List<Map<String, dynamic>> items = (mannequin['items'] as List?)
+            ?.whereType<Map>()
+            .map((item) => item.map((key, value) => MapEntry(key.toString(), value)))
+            .toList(growable: false) ??
+        const [];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: theme.shadowColor.withOpacity(0.12),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AspectRatio(
+            aspectRatio: 3 / 4,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              child: Material(
+                color: colorScheme.surfaceVariant,
+                child: InkWell(
+                  onTap: imageUrl != null && imageUrl.isNotEmpty
+                      ? () => _openMannequinImage(context, imageUrl)
+                      : null,
+                  child: Center(
+                    child: imageUrl != null && imageUrl.isNotEmpty
+                        ? Hero(
+                            tag: imageUrl,
+                            child: Image.network(
+                              imageUrl,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.center,
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.broken_image_outlined,
+                                color: colorScheme.onSurfaceVariant,
+                                size: 40,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            Icons.image_not_supported_outlined,
+                            color: colorScheme.onSurfaceVariant,
+                            size: 40,
+                          ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Манекен',
+                  style: theme.textTheme.titleMedium,
+                ),
+                if (items.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: items.take(4).map((item) {
+                      final name = item['name']?.toString() ?? 'Вещь';
+                      final category = item['category']?.toString();
+                      return _MannequinItemChip(
+                        name: name,
+                        category: category,
+                        onTap: () => _handleMannequinItemTap(context, item),
+                      );
+                    }).toList(),
+                  ),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Состав образа уточняется...',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _handleMannequinItemTap(
+    BuildContext context,
+    Map<String, dynamic> item,
+  ) async {
+    final rawId = item['id'];
+    final clothesId = rawId is int
+        ? rawId
+        : rawId is String
+            ? int.tryParse(rawId)
+            : int.tryParse(rawId?.toString() ?? '');
+
+    if (clothesId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось определить вещь для просмотра.')),
+      );
+      return;
+    }
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      final Clothes clothes = await ApiService.getClothesById(clothesId);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ClothesDetailScreen(clothes: clothes),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть вещь: $error')),
+      );
+    }
+  }
+
+  void _openMannequinImage(BuildContext context, String imageUrl) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => _MannequinImageViewer(imageUrl: imageUrl),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final pressureValue = weather?["pressure"];
     final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
     final isWeatherLoading = weather == null;
@@ -90,6 +645,17 @@ class _MannequinRefreshButton extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Гардероб 26'),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.tune),
+            tooltip: 'Настройки',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
+              );
+            },
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -196,7 +762,7 @@ class _MannequinRefreshButton extends StatelessWidget {
         const SizedBox(height: 16),
         if (isLocationsLoading)
           const LinearProgressIndicator()
-        else
+        else if (wardrobeLocations.isNotEmpty)
           DecoratedBox(
             decoration: BoxDecoration(
               color: colorScheme.surface.withOpacity(0.9),
@@ -216,16 +782,11 @@ class _MannequinRefreshButton extends StatelessWidget {
                 onChanged: (value) => _handleLocationChange(value),
               ),
             ),
-          ),
-        if (!isLocationsLoading && wardrobeLocations.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Text(
-              'Добавьте адрес в настройках, чтобы выбрать конкретный гардероб.',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
+          )
+        else
+          _buildEmptyState(
+            context,
+            'Добавьте адрес в настройках, чтобы выбрать конкретный гардероб.',
           ),
       ],
     );
@@ -238,10 +799,10 @@ class _MannequinRefreshButton extends StatelessWidget {
   }) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-
-    final humidity = weather?['humidity'];
-    final wind = (weather?['wind_speed'] as num?)?.toDouble();
-    final temperature = weather?['temperature'];
+    final weatherData = weather;
+    final humidity = weatherData?['humidity'];
+    final wind = (weatherData?['wind_speed'] as num?)?.toDouble();
+    final temperature = weatherData?['temperature'];
 
     return _buildHomeCard(
       context,
@@ -377,9 +938,8 @@ class _MannequinRefreshButton extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Column(
-          children: forecastDays
-              .map((day) => _buildForecastTile(context, day))
-              .toList(growable: false),
+          children:
+              forecastDays.map((day) => _buildForecastTile(context, day)).toList(growable: false),
         ),
       ],
     );
@@ -577,5 +1137,4 @@ class _MannequinRefreshButton extends StatelessWidget {
       ),
     );
   }
-
 }
