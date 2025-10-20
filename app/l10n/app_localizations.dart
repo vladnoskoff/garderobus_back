@@ -31,6 +31,11 @@ class AppLocalizations {
       'settings_theme_light': 'Светлая тема',
       'settings_theme_dark': 'Тёмная тема',
       'settings_theme_system': 'Системная',
+      'settings_manage_action': 'Настроить',
+      'settings_home_manage_description':
+          'Просмотрите и обновите информацию о вашем доме.',
+      'settings_places_manage_description':
+          'Управляйте сохранёнными местами и адресами.',
       'settings_account_load_failed': 'Не удалось загрузить данные профиля',
       'settings_update_success': 'Данные обновлены',
       'settings_update_failed': 'Не удалось обновить данные',
@@ -100,6 +105,11 @@ class AppLocalizations {
       'settings_theme_light': 'Light theme',
       'settings_theme_dark': 'Dark theme',
       'settings_theme_system': 'System default',
+      'settings_manage_action': 'Manage',
+      'settings_home_manage_description':
+          'Review and update your home configuration.',
+      'settings_places_manage_description':
+          'Manage your saved places and addresses.',
       'settings_account_load_failed': 'Failed to load profile data',
       'settings_update_success': 'Details updated',
       'settings_update_failed': 'Failed to update details',
@@ -183,6 +193,11 @@ class AppLocalizations {
   String get settingsThemeLight => getString('settings_theme_light');
   String get settingsThemeDark => getString('settings_theme_dark');
   String get settingsThemeSystem => getString('settings_theme_system');
+  String get settingsManageAction => getString('settings_manage_action');
+  String get settingsHomeManageDescription =>
+      getString('settings_home_manage_description');
+  String get settingsPlacesManageDescription =>
+      getString('settings_places_manage_description');
   String get settingsAccountLoadFailed => getString('settings_account_load_failed');
   String get settingsUpdateSuccess => getString('settings_update_success');
   String get settingsUpdateFailed => getString('settings_update_failed');

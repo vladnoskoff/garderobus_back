@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../l10n/app_localizations.dart';
@@ -8,7 +9,6 @@ import '../../services/language_controller.dart';
 import '../../services/theme_controller.dart';
 import '../auth/login_screen.dart';
 import 'home_settings/home_screen_settings.dart';
-import 'language/language_settings_screen.dart';
 import 'places/places_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -74,7 +74,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _userId = parsedId;
         _fullName = (data['name'] ?? '') as String;
         _email = (data['email'] ?? '') as String;
-        _phone = (data['phone'] ?? '')?.toString() ?? '';
+        final phoneValue = data['phone'] ??
+            data['phone_number'] ??
+            data['phoneNumber'] ??
+            data['mobile'] ??
+            data['mobile_phone'];
+        _phone = phoneValue != null ? phoneValue.toString() : '';
         _gender = (data['gender'] ?? 'not_specified') as String;
         _hasPin = data['has_pin'] == true;
         _isLoadingAccount = false;
@@ -182,6 +187,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: l10n.settingsAccountPhone,
                           initialValue: _phone,
                           keyboardType: TextInputType.phone,
+                          inputFormatters: const [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'[0-9()+\s-]'),
+                            ),
+                          ],
                           onSubmitted: (value) async {
                             await _updateUserField('phone', value, silent: true);
                           },
@@ -374,49 +384,148 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icons.home_outlined,
             label: l10n.settingsHome,
             color: colorScheme.primaryContainer,
-            onTap: () => _openHomeSettings(context),
+            onTap: () {
+              _openHomeSettings(context);
+            },
           ),
           _QuickActionButton(
             icon: Icons.place_outlined,
             label: l10n.settingsPlaces,
             color: colorScheme.secondaryContainer,
-            onTap: () => _openPlaces(context),
+            onTap: () {
+              _openPlaces(context);
+            },
           ),
           _QuickActionButton(
             icon: Icons.language_outlined,
             label: '${l10n.settingsLanguage}\n$currentLanguage',
             color: colorScheme.tertiaryContainer,
-            onTap: () => _openLanguage(context),
+            onTap: () {
+              _openLanguageSelector(context);
+            },
           ),
           _QuickActionButton(
             icon: themeIcon,
             label: '${l10n.settingsThemeSection}\n$themeLabel',
             color: colorScheme.primaryContainer,
-            onTap: () => _openThemeSelector(context),
+            onTap: () {
+              _openThemeSelector(context);
+            },
           ),
         ],
       ),
     );
   }
 
-  void _openHomeSettings(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
+  Future<void> _openHomeSettings(BuildContext context) async {
+    final l10n = context.l10n;
+    await _showQuickActionSheet(
+      parentContext: context,
+      icon: Icons.home_outlined,
+      title: l10n.settingsHome,
+      description: l10n.settingsHomeManageDescription,
+      onManage: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
+        );
+      },
     );
   }
 
-  void _openPlaces(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const PlacesScreen()),
+  Future<void> _openPlaces(BuildContext context) async {
+    final l10n = context.l10n;
+    await _showQuickActionSheet(
+      parentContext: context,
+      icon: Icons.place_outlined,
+      title: l10n.settingsPlaces,
+      description: l10n.settingsPlacesManageDescription,
+      onManage: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PlacesScreen()),
+        );
+      },
     );
   }
 
-  void _openLanguage(BuildContext context) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => const LanguageSettingsScreen()),
+  Future<void> _showQuickActionSheet({
+    required BuildContext parentContext,
+    required IconData icon,
+    required String title,
+    required String description,
+    required VoidCallback onManage,
+  }) async {
+    final l10n = parentContext.l10n;
+    final theme = Theme.of(parentContext);
+    final colorScheme = theme.colorScheme;
+
+    await showModalBottomSheet<void>(
+      context: parentContext,
+      backgroundColor: colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: colorScheme.primary.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: Icon(icon, color: colorScheme.primary),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                description,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(sheetContext),
+                    child: Text(l10n.settingsCancel),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: () {
+                      Navigator.pop(sheetContext);
+                      onManage();
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded),
+                    label: Text(l10n.settingsManageAction),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -550,6 +659,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _openLanguageSelector(BuildContext context) async {
+    final languageNotifier = LanguageScope.of(context);
+    final l10n = context.l10n;
+    Locale tempLocale = languageNotifier.locale;
+
+    final selectedLocale = await showModalBottomSheet<Locale>(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetContext) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
+          child: StatefulBuilder(
+            builder: (context, setState) {
+              Widget buildOption(Locale locale) {
+                final theme = Theme.of(context);
+                final colorScheme = theme.colorScheme;
+                final selected = tempLocale == locale;
+                return InkWell(
+                  borderRadius: BorderRadius.circular(18),
+                  onTap: () {
+                    setState(() {
+                      tempLocale = locale;
+                    });
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      color: selected
+                          ? colorScheme.primary.withOpacity(0.08)
+                          : colorScheme.surfaceVariant.withOpacity(0.2),
+                      border: Border.all(
+                        color: selected
+                            ? colorScheme.primary
+                            : colorScheme.outlineVariant.withOpacity(0.2),
+                        width: 1.4,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.language_outlined, color: colorScheme.primary),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            l10n.languageName(locale.languageCode),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        Radio<Locale>(
+                          value: locale,
+                          groupValue: tempLocale,
+                          activeColor: colorScheme.primary,
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                tempLocale = value;
+                              });
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
+
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.settingsLanguage,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                  const SizedBox(height: 20),
+                  for (final locale in LanguageNotifier.supportedLocales) ...[
+                    buildOption(locale),
+                    if (locale != LanguageNotifier.supportedLocales.last)
+                      const SizedBox(height: 12),
+                  ],
+                  const SizedBox(height: 24),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(sheetContext),
+                        child: Text(l10n.settingsCancel),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton(
+                        onPressed: () => Navigator.pop(sheetContext, tempLocale),
+                        child: Text(l10n.settingsSave),
+                      ),
+                    ],
+                  ),
+                ],
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    if (selectedLocale != null && selectedLocale != languageNotifier.locale) {
+      try {
+        await languageNotifier.setLocale(selectedLocale);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.languageUpdated)),
+        );
+      } catch (_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.languageUpdateFailed)),
+        );
+        return;
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    }
+  }
+
   String _describeThemeMode(AppLocalizations l10n, ThemeMode mode) {
     switch (mode) {
       case ThemeMode.dark:
@@ -646,7 +885,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_isLoadingAccount) {
       return l10n.settingsValueLoading;
     }
-    return value.isEmpty ? l10n.settingsValueNotSet : value;
+    final sanitized = value.trim();
+    if (sanitized.isEmpty || sanitized.toLowerCase() == 'null') {
+      return l10n.settingsValueNotSet;
+    }
+    return sanitized;
   }
 
   Future<void> _showEditableFieldDialog({
@@ -654,6 +897,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String initialValue,
     required Future<void> Function(String) onSubmitted,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
   }) async {
     final controller = TextEditingController(text: initialValue);
     final l10n = context.l10n;
@@ -666,6 +910,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           content: TextField(
             controller: controller,
             keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
             autofocus: true,
             decoration: InputDecoration(
               labelText: title,
