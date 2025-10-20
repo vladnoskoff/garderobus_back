@@ -1,22 +1,41 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../../services/api_service.dart';
-import '../../../widgets/rounded_back_button.dart';
 import 'Location_Picker_Screen.dart';
 
-class HomeScreenSettings extends StatefulWidget {
-  const HomeScreenSettings({super.key});
-
-  @override
-  _HomeScreenSettingsState createState() => _HomeScreenSettingsState();
+Future<void> showHomeSettingsSheet(BuildContext context) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) {
+      return FractionallySizedBox(
+        heightFactor: 0.92,
+        child: HomeSettingsSheet(sheetContext: sheetContext),
+      );
+    },
+  );
 }
 
-class _HomeScreenSettingsState extends State<HomeScreenSettings> {
+class HomeSettingsSheet extends StatefulWidget {
+  const HomeSettingsSheet({required this.sheetContext, super.key});
+
+  final BuildContext sheetContext;
+
+  @override
+  State<HomeSettingsSheet> createState() => _HomeSettingsSheetState();
+}
+
+class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
   String location = 'Нет координат';
   String openAiKey = 'Нет ключа';
   String weatherKey = 'Нет ключа';
-  String serialNumber = '0000001'; // Пока просто UI
+  String serialNumber = '0000001';
   int? userId;
   List<Map<String, dynamic>> locations = [];
   int? selectedWardrobeLocationId;
@@ -43,13 +62,14 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
 
     try {
       final userData = await ApiService.getUser(parsedId);
+      if (!mounted) return;
       setState(() {
         location = userData['location'] ?? location;
         openAiKey = userData['openai_api_key'] ?? openAiKey;
         weatherKey = userData['weather_api_key'] ?? weatherKey;
       });
     } catch (e) {
-      print("❌ Ошибка загрузки данных пользователя: $e");
+      debugPrint('Ошибка загрузки данных пользователя: $e');
     }
 
     await _loadLocations(parsedId);
@@ -109,12 +129,14 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
         resolvedId = null;
       }
 
-      setState(() {
-        locations = mapped;
-        selectedWardrobeLocationId = resolvedId;
-      });
+      if (mounted) {
+        setState(() {
+          locations = mapped;
+          selectedWardrobeLocationId = resolvedId;
+        });
+      }
     } catch (e) {
-      print('Ошибка загрузки локаций: $e');
+      debugPrint('Ошибка загрузки локаций: $e');
     } finally {
       if (mounted) {
         setState(() => isLocationsLoading = false);
@@ -137,7 +159,8 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
       await ApiService.updateApiKeys(userId!, openAiKey, weatherKey);
       _showSnack('API-ключи обновлены');
     } catch (e) {
-      print('❌ Ошибка обновления API-ключей: $e');
+      debugPrint('Ошибка обновления API-ключей: $e');
+      _showSnack('Не удалось обновить API-ключи');
     }
   }
 
@@ -147,13 +170,14 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
       await ApiService.updateLocation(userId!, newLoc);
       _showSnack('Координаты обновлены');
     } catch (e) {
-      print("❌ Ошибка при сохранении координат: $e");
+      debugPrint('Ошибка при сохранении координат: $e');
+      _showSnack('Не удалось сохранить координаты');
     }
   }
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(widget.sheetContext).showSnackBar(
       SnackBar(content: Text(message)),
     );
   }
@@ -166,7 +190,7 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
     final controller = TextEditingController(text: locationData['name']?.toString() ?? '');
     final newName = await showDialog<String?>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Переименовать место'),
         content: TextField(
           controller: controller,
@@ -176,11 +200,11 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Отмена')),
           TextButton(
             onPressed: () {
               final value = controller.text.trim();
-              Navigator.pop(context, value.isEmpty ? null : value);
+              Navigator.pop(dialogContext, value.isEmpty ? null : value);
             },
             child: const Text('Сохранить'),
           ),
@@ -344,7 +368,7 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
         title: Text('Изменить $title'),
         content: TextField(
           controller: controller,
-          decoration: InputDecoration(border: OutlineInputBorder(), labelText: title),
+          decoration: InputDecoration(border: const OutlineInputBorder(), labelText: title),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
@@ -354,7 +378,7 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
                 onEdit(controller.text);
               }
               Navigator.pop(context);
-              if (title.contains("API")) updateKeys(); // обновить API
+              if (title.contains('API')) updateKeys();
             },
             child: const Text('Сохранить'),
           ),
@@ -368,7 +392,7 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
     return '${key.substring(0, start)}...${key.substring(key.length - end)}';
   }
 
-  Widget buildOption(IconData icon, String title, String value, Function() onTap) {
+  Widget buildOption(IconData icon, String title, String value, VoidCallback onTap) {
     final isApiKey = title.contains('API');
     final displayedValue = isApiKey ? shortenKey(value) : value;
     final theme = Theme.of(context);
@@ -436,53 +460,96 @@ class _HomeScreenSettingsState extends State<HomeScreenSettings> {
       }).whereType<DropdownMenuItem<int?>>(),
     ];
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: const RoundedBackButton(),
-        title: const Text('Дом'),
-        centerTitle: true,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (isLocationsLoading) const LinearProgressIndicator(),
-              DropdownButtonFormField<int?>(
-                value: selectedWardrobeLocationId,
-                decoration: const InputDecoration(
-                  labelText: 'Выбранное место',
-                  border: OutlineInputBorder(),
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.center,
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colorScheme.outlineVariant.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(2),
                 ),
-                items: dropdownItems,
-                onChanged: (value) => _onLocationSelected(value),
               ),
-              const SizedBox(height: 16),
-              if (selectedWardrobeLocationId == null)
-                _buildPersonalLocationCard(colorScheme)
-              else
-                _buildSelectedLocationCard(colorScheme),
-              const SizedBox(height: 24),
-              Text('API-ключи', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 12),
-              buildOption(CupertinoIcons.lock, 'OpenAI API', openAiKey, () {
-                showEditDialog('OpenAI API', openAiKey, (value) {
-                  setState(() => openAiKey = value);
-                });
-              }),
-              buildOption(CupertinoIcons.cloud, 'OpenWeather API', weatherKey, () {
-                showEditDialog('OpenWeather API', weatherKey, (value) {
-                  setState(() => weatherKey = value);
-                });
-              }),
-              buildOption(CupertinoIcons.wifi, 'SN', serialNumber, () {
-                showEditDialog('SN', serialNumber, (value) {
-                  setState(() => serialNumber = value);
-                });
-              }),
-            ],
-          ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Дом',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: isLocationsLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          DropdownButtonFormField<int?>(
+                            value: selectedWardrobeLocationId,
+                            decoration: const InputDecoration(
+                              labelText: 'Выбранное место',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: dropdownItems,
+                            onChanged: (value) => _onLocationSelected(value),
+                          ),
+                          const SizedBox(height: 16),
+                          if (selectedWardrobeLocationId == null)
+                            _buildPersonalLocationCard(colorScheme)
+                          else
+                            _buildSelectedLocationCard(colorScheme),
+                          const SizedBox(height: 24),
+                          Text('API-ключи', style: Theme.of(context).textTheme.titleMedium),
+                          const SizedBox(height: 12),
+                          buildOption(CupertinoIcons.lock, 'OpenAI API', openAiKey, () {
+                            showEditDialog('OpenAI API', openAiKey, (value) {
+                              setState(() => openAiKey = value);
+                            });
+                          }),
+                          buildOption(CupertinoIcons.cloud, 'OpenWeather API', weatherKey, () {
+                            showEditDialog('OpenWeather API', weatherKey, (value) {
+                              setState(() => weatherKey = value);
+                            });
+                          }),
+                          buildOption(CupertinoIcons.wifi, 'SN', serialNumber, () {
+                            showEditDialog('SN', serialNumber, (value) {
+                              setState(() => serialNumber = value);
+                            });
+                          }),
+                        ],
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => Navigator.of(context).maybePop(),
+              child: const Text('Готово'),
+            ),
+          ],
         ),
       ),
     );

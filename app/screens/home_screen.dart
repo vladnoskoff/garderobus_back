@@ -332,10 +332,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 TextButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
-                    );
+                    Future.microtask(() => showHomeSettingsSheet(context));
                   },
                   child: const Text('Перейти в настройки'),
                 ),
@@ -650,9 +647,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.tune),
             tooltip: 'Настройки',
             onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
-              );
+              showHomeSettingsSheet(context);
             },
           ),
         ],
@@ -747,13 +742,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 12),
             FilledButton.tonalIcon(
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const HomeScreenSettings(),
-                  ),
-                );
-              },
+              onPressed: () => showHomeSettingsSheet(context),
               icon: const Icon(Icons.tune),
               label: const Text('Управлять'),
             ),

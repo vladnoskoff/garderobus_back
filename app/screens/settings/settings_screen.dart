@@ -418,115 +418,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openHomeSettings(BuildContext context) async {
-    final l10n = context.l10n;
-    await _showQuickActionSheet(
-      parentContext: context,
-      icon: Icons.home_outlined,
-      title: l10n.settingsHome,
-      description: l10n.settingsHomeManageDescription,
-      onManage: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
-        );
-      },
-    );
+    await showHomeSettingsSheet(context);
   }
 
   Future<void> _openPlaces(BuildContext context) async {
-    final l10n = context.l10n;
-    await _showQuickActionSheet(
-      parentContext: context,
-      icon: Icons.place_outlined,
-      title: l10n.settingsPlaces,
-      description: l10n.settingsPlacesManageDescription,
-      onManage: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PlacesScreen()),
-        );
-      },
-    );
-  }
-
-  Future<void> _showQuickActionSheet({
-    required BuildContext parentContext,
-    required IconData icon,
-    required String title,
-    required String description,
-    required VoidCallback onManage,
-  }) async {
-    final l10n = parentContext.l10n;
-    final theme = Theme.of(parentContext);
-    final colorScheme = theme.colorScheme;
-
-    await showModalBottomSheet<void>(
-      context: parentContext,
-      backgroundColor: colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) {
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 24, 24, 36),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: colorScheme.primary.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Icon(icon, color: colorScheme.primary),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Text(
-                description,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(sheetContext),
-                    child: Text(l10n.settingsCancel),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: () {
-                      Navigator.pop(sheetContext);
-                      onManage();
-                    },
-                    icon: const Icon(Icons.open_in_new_rounded),
-                    label: Text(l10n.settingsManageAction),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
+    await showPlacesSettingsSheet(context);
   }
 
   Future<void> _openThemeSelector(BuildContext context) async {
