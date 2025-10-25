@@ -249,3 +249,68 @@ button.link {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+.full-height-center {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #ede9fe, #e0f2fe);
+  padding: 32px;
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 10px;
+  background-color: rgba(220, 38, 38, 0.1);
+  color: #b91c1c;
+  font-size: 14px;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+.sidebar button.link {
+  align-self: flex-start;
+  color: #f9fafb;
+  font-weight: 500;
+}
+
+.sidebar button.link:hover {
+  text-decoration: underline;
+}
+
+.table td.actions {
+  width: 120px;
+}
+
+@media (max-width: 960px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .sidebar nav {
+    flex-direction: row;
+  }
+
+  .content {
+    padding: 24px;
+  }
+}
+
+.alert.success {
+  background-color: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.alert.hidden {
+  display: none;
+}
