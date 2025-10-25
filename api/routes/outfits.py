@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from database import get_db, get_read_db
 import models
@@ -6,7 +7,9 @@ import random
 from routes.weather import get_weather_by_coordinates  # Импорт функции погоды
 import schemas
 from typing import Any, Dict, List, Optional
-from .location_utils import resolve_location_and_coordinates
+import settings
+from cache import cache, invalidate_outfit_history_for_user
+from .location_utils import ensure_location_for_user, resolve_location_and_coordinates
 
 router = APIRouter(prefix="/outfits", tags=["Outfits"])
 
@@ -91,6 +94,8 @@ def get_outfit(
     db.commit()
     db.refresh(outfit)
 
+    invalidate_outfit_history_for_user(user_id)
+
     return {
         "outfit_id": outfit.id,
         "temperature": temperature,
@@ -117,6 +122,19 @@ def get_outfit_history(
     db: Session = Depends(get_read_db),
 ):
     """Получение истории ранее собранных нарядов пользователя."""
+
+    if location_id is not None:
+        ensure_location_for_user(db, user_id, location_id)
+
+    cache_key = cache.make_key(
+        "outfit_history",
+        user_id,
+        f"location:{location_id}" if location_id is not None else "location:all",
+    )
+
+    cached = cache.get_json(cache_key, resource="outfit_history")
+    if cached is not None:
+        return cached
 
     outfits = (
         db.query(models.Outfit)
@@ -263,6 +281,13 @@ def get_outfit_history(
                 else None,
             }
         )
+
+    cache.set_json(
+        cache_key,
+        jsonable_encoder(history),
+        ttl=settings.CACHE_TTL_OUTFITS,
+        resource="outfit_history",
+    )
 
     return history
     

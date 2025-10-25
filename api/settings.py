@@ -71,3 +71,31 @@ ENABLE_SOCKS_PROXY = os.getenv("ENABLE_SOCKS_PROXY", "true").lower() == "true"
 APP_NAME = os.getenv("APP_NAME", "Smart Closet")
 ESP_DISPLAY_IP = os.getenv("ESP_DISPLAY_IP", "http://192.168.1.100")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+# Cache configuration
+CACHE_URL = os.getenv("CACHE_URL", "redis://localhost:6379/0")
+CACHE_BACKEND = os.getenv("CACHE_BACKEND", "redis")
+CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+CACHE_DEFAULT_TTL = int(os.getenv("CACHE_DEFAULT_TTL", "300"))
+CACHE_TTL_CLOTHES = int(
+    os.getenv("CACHE_TTL_CLOTHES", str(CACHE_DEFAULT_TTL))
+)
+CACHE_TTL_LOCATIONS = int(
+    os.getenv("CACHE_TTL_LOCATIONS", str(CACHE_DEFAULT_TTL))
+)
+CACHE_TTL_OUTFITS = int(
+    os.getenv("CACHE_TTL_OUTFITS", str(CACHE_DEFAULT_TTL))
+)
+CACHE_TTL_WEATHER = int(os.getenv("CACHE_TTL_WEATHER", "900"))
+CACHE_SOCKET_TIMEOUT = float(os.getenv("CACHE_SOCKET_TIMEOUT", "1.5"))
+CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "garderobus")
+CACHE_INVALIDATION_BATCH_SIZE = int(
+    os.getenv("CACHE_INVALIDATION_BATCH_SIZE", "50")
+)
+
+# Static content caching / CDN hints
+STATIC_CACHE_CONTROL = os.getenv(
+    "STATIC_CACHE_CONTROL", "public, max-age=604800, immutable"
+)
+CDN_CACHE_CONTROL = os.getenv("CDN_CACHE_CONTROL", STATIC_CACHE_CONTROL)
+STATIC_ENABLE_ETAG = os.getenv("STATIC_ENABLE_ETAG", "true").lower() == "true"

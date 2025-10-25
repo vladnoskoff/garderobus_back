@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +17,11 @@ import schemas
 import settings
 from openai_client import get_openai_client
 from .location_utils import ensure_location_for_user
+from cache import (
+    cache,
+    invalidate_clothes_for_user,
+    invalidate_outfit_history_for_user,
+)
 
 client = get_openai_client()
 router = APIRouter(prefix="/clothes", tags=["Clothes"])
@@ -147,10 +153,25 @@ def get_user_clothes(
     db: Session = Depends(get_read_db),
 ):
     query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+    location_segment = "location:all"
     if location_id is not None:
         ensure_location_for_user(db, user_id, location_id)
         query = query.filter(models.Clothes.location_id == location_id)
-    return query.all()
+        location_segment = f"location:{location_id}"
+
+    key = cache.make_key("clothes", user_id, location_segment)
+    cached = cache.get_json(key, resource="clothes")
+    if cached is not None:
+        return cached
+
+    clothes_items = query.all()
+    cache.set_json(
+        key,
+        jsonable_encoder(clothes_items),
+        ttl=settings.CACHE_TTL_CLOTHES,
+        resource="clothes",
+    )
+    return clothes_items
 
 
 def _build_ai_messages(
@@ -487,6 +508,8 @@ async def add_clothes(
         raise
 
     db.refresh(new_clothes)
+    invalidate_clothes_for_user(new_clothes.user_id)
+    invalidate_outfit_history_for_user(new_clothes.user_id)
     return new_clothes
 
 
@@ -588,6 +611,8 @@ def update_clothes(
 
     db.commit()
     db.refresh(clothes)
+    invalidate_clothes_for_user(clothes.user_id)
+    invalidate_outfit_history_for_user(clothes.user_id)
     return clothes
 
 
@@ -617,4 +642,6 @@ def delete_clothes(clothes_id: int, db: Session = Depends(get_db)):
     shutil.rmtree(gallery_dir, ignore_errors=True)
     db.delete(clothes)
     db.commit()
+    invalidate_clothes_for_user(clothes.user_id)
+    invalidate_outfit_history_for_user(clothes.user_id)
     return {"message": "Одежда удалена"}

@@ -1,5 +1,4 @@
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Response
 
 import models
 from database import engine
@@ -15,8 +14,11 @@ from routes import (
     locations,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 import settings
+from cache import cache
+from static_files import CDNStaticFiles
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -33,12 +35,22 @@ app.add_middleware(
 
 app.mount(
     "/clothes_images",
-    StaticFiles(directory=str(settings.CLOTHES_IMAGE_DIR)),
+    CDNStaticFiles(
+        directory=str(settings.CLOTHES_IMAGE_DIR),
+        cache_control=settings.STATIC_CACHE_CONTROL,
+        cdn_cache_control=settings.CDN_CACHE_CONTROL,
+        enable_etag=settings.STATIC_ENABLE_ETAG,
+    ),
     name="clothes_images",
 )
 app.mount(
     "/mannequins",
-    StaticFiles(directory=str(settings.MANNEQUIN_IMAGE_DIR)),
+    CDNStaticFiles(
+        directory=str(settings.MANNEQUIN_IMAGE_DIR),
+        cache_control=settings.STATIC_CACHE_CONTROL,
+        cdn_cache_control=settings.CDN_CACHE_CONTROL,
+        enable_etag=settings.STATIC_ENABLE_ETAG,
+    ),
     name="mannequins",
 )
 
@@ -57,6 +69,11 @@ def read_root():
     return {"message": "Smart Closet API is running!"}
 
 
+@app.get("/metrics", tags=["monitoring"], summary="Prometheus metrics endpoint")
+def metrics() -> Response:
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.get("/healthz", tags=["health"], summary="Service health probe")
 def healthcheck() -> dict[str, str]:
     """Simple endpoint used by load balancers and orchestrators."""
@@ -69,3 +86,4 @@ def shutdown_event() -> None:
     """Dispose of the SQLAlchemy engine so connections close gracefully."""
 
     engine.dispose()
+    cache.close()
