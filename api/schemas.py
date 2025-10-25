@@ -1,6 +1,24 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from datetime import datetime
+
+
+class TaskSubmissionResponse(BaseModel):
+    task_id: str
+    status_url: Optional[str] = None
+
+
+class TaskErrorPayload(BaseModel):
+    status_code: int
+    detail: str
+
+
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[TaskErrorPayload] = None
+    retries: int = 0
 
 
 class UserCreate(BaseModel):
