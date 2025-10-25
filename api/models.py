@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     Float,
     Boolean,
+    Index,
 )
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -52,9 +53,16 @@ class User(Base):
 
 class Clothes(Base):
     __tablename__ = "clothes"
+    __table_args__ = (
+        Index("ix_clothes_user_location", "user_id", "location_id"),
+        Index("ix_clothes_user_category", "user_id", "category"),
+        Index("ix_clothes_user_created_at", "user_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name = Column(String, nullable=False)
     category = Column(String, nullable=False)
     season = Column(String, nullable=False)
@@ -68,6 +76,7 @@ class Clothes(Base):
         Integer,
         ForeignKey("wardrobe_locations.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     metadata_entry = relationship(
         "ClothesMetadata",
@@ -197,9 +206,14 @@ class Weather(Base):
 
 class Outfit(Base):
     __tablename__ = "outfits"
+    __table_args__ = (
+        Index("ix_outfits_user_created_at", "user_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     weather_id = Column(Integer, ForeignKey("weather.id", ondelete="CASCADE"))
     clothing_ids = Column(JSON, nullable=False)
     image_url = Column(String, nullable=True)
@@ -209,10 +223,18 @@ class Outfit(Base):
 
 class WearHistory(Base):
     __tablename__ = "wear_history"
+    __table_args__ = (
+        Index("ix_wear_history_user_clothing", "user_id", "clothing_id"),
+        Index("ix_wear_history_clothing_worn_at", "clothing_id", "worn_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    clothing_id = Column(Integer, ForeignKey("clothes.id", ondelete="CASCADE"))
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    clothing_id = Column(
+        Integer, ForeignKey("clothes.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     worn_at = Column(TIMESTAMP, default=func.now())
 
 
