@@ -15,6 +15,7 @@ from database import engine
 from logging_config import configure_logging
 from observability import configure_observability
 from routes import (
+    admin,
     ai_recommendation,
     clothes,
     esp_display,
@@ -64,6 +65,7 @@ app.mount(
     name="mannequins",
 )
 
+app.include_router(admin.router)
 app.include_router(users.router)
 app.include_router(clothes.router)
 app.include_router(outfits.router)
