@@ -99,3 +99,16 @@ STATIC_CACHE_CONTROL = os.getenv(
 )
 CDN_CACHE_CONTROL = os.getenv("CDN_CACHE_CONTROL", STATIC_CACHE_CONTROL)
 STATIC_ENABLE_ETAG = os.getenv("STATIC_ENABLE_ETAG", "true").lower() == "true"
+
+# Celery / task queue configuration
+CELERY_BROKER_URL = os.getenv(
+    "CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//"
+)
+CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "rpc://")
+CELERY_DEFAULT_QUEUE = os.getenv("CELERY_DEFAULT_QUEUE", "garderobus-tasks")
+CELERY_RESULT_EXPIRES = int(os.getenv("CELERY_RESULT_EXPIRES", "3600"))
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "120"))
+CELERY_TASK_HARD_TIME_LIMIT = int(os.getenv("CELERY_TASK_HARD_TIME_LIMIT", "180"))
+CELERY_WORKER_PREFETCH_MULTIPLIER = int(
+    os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
+)
