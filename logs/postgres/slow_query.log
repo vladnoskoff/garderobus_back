@@ -1,0 +1,4 @@
+2024-07-02 13:43:18.214 UTC [1254] LOG:  duration: 812.114 ms  statement: SELECT * FROM clothes WHERE user_id = 142 AND location_id = 5 ORDER BY created_at DESC;
+2024-07-02 13:44:52.981 UTC [1256] LOG:  duration: 678.443 ms  statement: SELECT clothing_id, worn_at FROM wear_history WHERE user_id = 142 AND worn_at > '2024-06-01'::timestamp;
+2024-07-02 14:05:11.337 UTC [1299] LOG:  duration: 593.088 ms  statement: SELECT id, clothing_ids FROM outfits WHERE user_id = 142 ORDER BY created_at DESC LIMIT 10;
+2024-07-02 16:22:48.882 UTC [1344] LOG:  duration: 117.552 ms  statement: SELECT * FROM clothes WHERE user_id = 142 AND location_id = 5 ORDER BY created_at DESC;

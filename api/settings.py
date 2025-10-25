@@ -31,6 +31,23 @@ DATABASE_URL = os.getenv(
     "postgresql://postgres:Inoskoff11@192.168.1.148:5432/smart-closet",
 )
 
+DATABASE_READ_REPLICAS = [
+    replica.strip()
+    for replica in os.getenv("DATABASE_READ_REPLICAS", "").split(",")
+    if replica.strip()
+]
+
+DATABASE_USE_REPLICAS = (
+    os.getenv("DATABASE_USE_REPLICAS", "true").lower() == "true"
+    and bool(DATABASE_READ_REPLICAS)
+)
+
+DATABASE_POOL_SIZE = int(os.getenv("DATABASE_POOL_SIZE", "10"))
+DATABASE_MAX_OVERFLOW = int(os.getenv("DATABASE_MAX_OVERFLOW", "20"))
+DATABASE_POOL_TIMEOUT = int(os.getenv("DATABASE_POOL_TIMEOUT", "30"))
+DATABASE_POOL_RECYCLE = int(os.getenv("DATABASE_POOL_RECYCLE", "1800"))
+DATABASE_POOL_PRE_PING = os.getenv("DATABASE_POOL_PRE_PING", "true").lower() == "true"
+
 # API-ключи
 OPENAI_API_KEY = os.getenv(
     "OPENAI_API_KEY",

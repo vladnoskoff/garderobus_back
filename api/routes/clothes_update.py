@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Q
 from sqlalchemy.orm import Session
 from datetime import datetime
 import models
-from database import get_db
+from database import get_db, get_read_db
 import shutil
 import os
 import base64
@@ -28,7 +28,7 @@ uploadcare = Uploadcare(public_key=settings.UPLOADCARE_PUBLIC_KEY, secret_key=se
 def get_user_clothes(
     user_id: int,
     location_id: Optional[int] = Query(default=None, description="Фильтр по локации гардероба"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
 ):
     query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
     if location_id is not None:
@@ -109,11 +109,11 @@ async def add_clothes(
 
 
 @router.get("/", response_model=list[schemas.ClothesResponse])
-def get_all_clothes(db: Session = Depends(get_db)):
+def get_all_clothes(db: Session = Depends(get_read_db)):
     return db.query(models.Clothes).all()
 
 @router.get("/{clothes_id}", response_model=schemas.ClothesResponse)
-def get_clothes(clothes_id: int, db: Session = Depends(get_db)):
+def get_clothes(clothes_id: int, db: Session = Depends(get_read_db)):
     clothes = db.query(models.Clothes).filter(models.Clothes.id == clothes_id).first()
     if not clothes:
         raise HTTPException(status_code=404, detail="Одежда не найдена")

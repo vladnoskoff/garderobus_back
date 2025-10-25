@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from database import get_db
+from database import get_db, get_read_db
 import models
 import random
 from routes.weather import get_weather_by_coordinates  # Импорт функции погоды
@@ -114,7 +114,7 @@ def get_outfit_history(
         default=None,
         description="Фильтрация истории по конкретной локации гардероба",
     ),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
 ):
     """Получение истории ранее собранных нарядов пользователя."""
 

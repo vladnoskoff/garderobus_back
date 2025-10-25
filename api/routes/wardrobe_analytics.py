@@ -3,12 +3,12 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from datetime import datetime, timedelta
 import models
-from database import get_db
+from database import get_read_db
 
 router = APIRouter(prefix="/analytics", tags=["Wardrobe Analytics"])
 
 @router.get("/most_worn/{user_id}")
-def most_worn_clothes(user_id: int, db: Session = Depends(get_db)):
+def most_worn_clothes(user_id: int, db: Session = Depends(get_read_db)):
     """Возвращает список самых часто используемых вещей"""
     result = db.query(
         models.Clothes.id, models.Clothes.name, func.count(models.WearHistory.id).label("count")
@@ -17,7 +17,7 @@ def most_worn_clothes(user_id: int, db: Session = Depends(get_db)):
     return [{"id": r[0], "name": r[1], "count": r[2]} for r in result]
 
 @router.get("/least_worn/{user_id}")
-def least_worn_clothes(user_id: int, db: Session = Depends(get_db)):
+def least_worn_clothes(user_id: int, db: Session = Depends(get_read_db)):
     """Возвращает список вещей, которые не использовались больше 30 дней"""
     threshold_date = datetime.utcnow() - timedelta(days=30)
 
