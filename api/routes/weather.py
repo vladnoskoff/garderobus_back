@@ -1,14 +1,28 @@
+import hashlib
 import requests
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
 from fastapi.responses import JSONResponse
+import settings
+from cache import cache
 from .location_utils import resolve_location_and_coordinates
 
 router = APIRouter(prefix="/weather", tags=["Weather"])
+
+def _weather_cache_key(lat: float, lon: float, api_key: str) -> str:
+    hashed_key = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
+    return cache.make_key(
+        "weather",
+        f"api:{hashed_key}",
+        f"lat:{lat:.4f}",
+        f"lon:{lon:.4f}",
+    )
+
 
 @router.get("/coordinates")
 def get_weather_by_coordinates(
@@ -19,6 +33,11 @@ def get_weather_by_coordinates(
 ):
     if not api_key:
         raise HTTPException(status_code=400, detail="API-ключ погоды не передан")
+
+    cache_key = _weather_cache_key(lat, lon, api_key)
+    cached = cache.get_json(cache_key, resource="weather")
+    if cached is not None:
+        return cached
 
     base_url = "http://api.openweathermap.org/data/2.5"
 
@@ -74,7 +93,7 @@ def get_weather_by_coordinates(
         if len(added_dates) >= 3:
             break
 
-    return {
+    payload = {
         "id": weather_model.id,
         "temperature": temperature,
         "humidity": humidity,
@@ -84,6 +103,15 @@ def get_weather_by_coordinates(
         "icon": icon,
         "forecast": forecast
     }
+
+    cache.set_json(
+        cache_key,
+        jsonable_encoder(payload),
+        ttl=settings.CACHE_TTL_WEATHER,
+        resource="weather",
+    )
+
+    return payload
 
 @router.get("/user/{user_id}")
 def get_weather_for_user(
@@ -97,7 +125,30 @@ def get_weather_for_user(
 
     _, lat, lon = resolve_location_and_coordinates(db, user, location_id)
 
-    return get_weather_by_coordinates(lat=lat, lon=lon, db=db, api_key=user.weather_api_key)
+    user_key = cache.make_key(
+        "weather",
+        f"user:{user_id}",
+        f"location:{location_id}" if location_id is not None else "location:all",
+    )
+    cached = cache.get_json(user_key, resource="weather")
+    if cached is not None:
+        return cached
+
+    payload = get_weather_by_coordinates(
+        lat=lat,
+        lon=lon,
+        db=db,
+        api_key=user.weather_api_key,
+    )
+
+    cache.set_json(
+        user_key,
+        jsonable_encoder(payload),
+        ttl=settings.CACHE_TTL_WEATHER,
+        resource="weather",
+    )
+
+    return payload
 
 
 # @router.get("/{city}")

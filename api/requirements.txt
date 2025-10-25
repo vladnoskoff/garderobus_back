@@ -12,3 +12,5 @@ python-dotenv
 pyuploadcare
 httpx
 httpx-socks
+redis
+prometheus-client

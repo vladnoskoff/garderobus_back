@@ -1,11 +1,18 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
 import models
 import schemas
 from database import get_db
+import settings
+from cache import (
+    cache,
+    invalidate_locations_for_user,
+    invalidate_outfit_history_for_user,
+)
 from .location_utils import ensure_location_for_user
 
 
@@ -18,12 +25,26 @@ def list_locations(user_id: int, db: Session = Depends(get_db)):
     if not user_exists:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    return (
+    cache_key = cache.make_key("locations", user_id)
+    cached = cache.get_json(cache_key, resource="locations")
+    if cached is not None:
+        return cached
+
+    locations = (
         db.query(models.WardrobeLocation)
         .filter(models.WardrobeLocation.user_id == user_id)
         .order_by(models.WardrobeLocation.created_at.asc())
         .all()
     )
+
+    cache.set_json(
+        cache_key,
+        jsonable_encoder(locations),
+        ttl=settings.CACHE_TTL_LOCATIONS,
+        resource="locations",
+    )
+
+    return locations
 
 
 @router.post("/{user_id}", response_model=schemas.WardrobeLocationResponse, status_code=201)
@@ -49,6 +70,8 @@ def create_location(
     db.add(location)
     db.commit()
     db.refresh(location)
+    invalidate_locations_for_user(user_id)
+    invalidate_outfit_history_for_user(user_id)
     return location
 
 
@@ -82,6 +105,8 @@ def update_location(
 
     db.commit()
     db.refresh(location)
+    invalidate_locations_for_user(user_id)
+    invalidate_outfit_history_for_user(user_id)
     return location
 
 
@@ -91,4 +116,6 @@ def delete_location(user_id: int, location_id: int, db: Session = Depends(get_db
 
     db.delete(location)
     db.commit()
+    invalidate_locations_for_user(user_id)
+    invalidate_outfit_history_for_user(user_id)
     return {"message": "Локация удалена"}
