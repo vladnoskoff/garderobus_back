@@ -72,6 +72,11 @@ SessionLocal = sessionmaker(
 
 Base = declarative_base()
 
+# Backwards compatibility for modules importing ``engine`` directly.
+# Older code expected ``database.engine`` to reference the primary write
+# engine.  Expose an alias so existing imports keep working.
+engine = WRITE_ENGINE
+
 
 @contextmanager
 def db_session(*, read_only: bool = False) -> Iterator[Session]:

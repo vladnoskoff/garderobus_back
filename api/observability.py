@@ -1,6 +1,7 @@
 """Utilities for wiring metrics, tracing and rate limiting."""
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Optional
 
@@ -33,7 +34,16 @@ def setup_metrics(app: FastAPI) -> None:
         logger.debug("Prometheus instrumentator already configured")
         return
 
-    _instrumentator = Instrumentator(should_group_status_codes=True, should_gzip=True)
+    instrumentator_kwargs = {"should_group_status_codes": True}
+    instrumentator_signature = inspect.signature(Instrumentator)
+    if "should_gzip" in instrumentator_signature.parameters:
+        instrumentator_kwargs["should_gzip"] = True
+    else:
+        logger.debug(
+            "prometheus-fastapi-instrumentator lacks should_gzip option; skipping"
+        )
+
+    _instrumentator = Instrumentator(**instrumentator_kwargs)
     _instrumentator.instrument(app)
     logger.info("Prometheus metrics instrumentation enabled")
 
