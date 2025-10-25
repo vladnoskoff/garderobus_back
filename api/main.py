@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Body, APIRouter
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 import models
@@ -55,3 +55,17 @@ app.include_router(locations.router)
 @app.get("/")
 def read_root():
     return {"message": "Smart Closet API is running!"}
+
+
+@app.get("/healthz", tags=["health"], summary="Service health probe")
+def healthcheck() -> dict[str, str]:
+    """Simple endpoint used by load balancers and orchestrators."""
+
+    return {"status": "ok"}
+
+
+@app.on_event("shutdown")
+def shutdown_event() -> None:
+    """Dispose of the SQLAlchemy engine so connections close gracefully."""
+
+    engine.dispose()

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: garderobus-api-config
+  namespace: garderobus
+  labels:
+    app: garderobus-api
+data:
+  APP_PORT: "8000"
+  CLOTHES_IMAGE_DIR: "clothes_images"
+  MANNEQUIN_IMAGE_DIR: "mannequins"
