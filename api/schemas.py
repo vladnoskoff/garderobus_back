@@ -199,6 +199,29 @@ class WardrobeLocationCreate(WardrobeLocationBase):
     pass
 
 
+class AdminUserUsageItem(BaseModel):
+    clothing_id: int
+    name: str
+    usage_count: int
+
+
+class AdminUserSummary(BaseModel):
+    id: int
+    name: str
+    email: str
+    phone: Optional[str] = None
+    total_clothes: int
+    total_clothes_images: int
+    total_mannequins: int
+    total_outfits: int
+    total_wear_events: int
+    wear_events_last_30_days: int
+    new_clothes_last_30_days: int
+    last_wear_at: Optional[datetime] = None
+    last_mannequin_at: Optional[datetime] = None
+    top_worn_items: List[AdminUserUsageItem] = Field(default_factory=list)
+
+
 class WardrobeLocationUpdate(BaseModel):
     name: Optional[str] = None
     latitude: Optional[float] = None
