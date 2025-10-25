@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import logging
+from uuid import uuid4
 
 from celery import states
-from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from celery.result import AsyncResult, EagerResult
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 import models
@@ -25,12 +26,53 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
+INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
+
 
 def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissionResponse:
     return schemas.TaskSubmissionResponse(
         task_id=task_id,
         status_url=request.url_for("get_ai_task_status", task_id=task_id),
     )
+
+
+def _build_task_status_response(
+    task_id: str, result: AsyncResult | EagerResult
+) -> schemas.TaskStatusResponse:
+    status = result.state.lower()
+    retries = getattr(result, "retries", 0)
+
+    response = schemas.TaskStatusResponse(
+        task_id=task_id,
+        status=status,
+        retries=retries,
+    )
+
+    if result.state == states.SUCCESS:
+        payload = result.result
+        if isinstance(payload, dict):
+            payload_status = payload.get("status")
+            if payload_status == "success":
+                response.status = "success"
+                response.result = payload.get("result")
+            elif payload_status == "error":
+                response.status = "error"
+                response.error = schemas.TaskErrorPayload(
+                    status_code=int(payload.get("status_code", 500)),
+                    detail=str(payload.get("detail", "")),
+                )
+            else:
+                response.result = payload
+        elif payload is not None:
+            response.result = {"value": payload}
+    elif result.state == states.FAILURE:
+        response.status = "failure"
+        response.error = schemas.TaskErrorPayload(
+            status_code=500,
+            detail=str(result.info),
+        )
+
+    return response
 
 
 @router.get(
@@ -73,16 +115,18 @@ def _enqueue_task(
 ) -> schemas.TaskSubmissionResponse:
     try:
         async_result = task.delay(**task_kwargs)
-    except (KombuOperationalError, CeleryError) as exc:
+    except (KombuOperationalError, CeleryError):
         task_name = getattr(task, "name", repr(task))
-        logger.exception("Failed to enqueue Celery task %s", task_name)
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Очередь фоновых задач недоступна. Повторите попытку позже "
-                "или свяжитесь с администратором."
-            ),
-        ) from exc
+        logger.warning(
+            "Failed to enqueue Celery task %s; executing inline due to queue error",
+            task_name,
+            exc_info=True,
+        )
+        inline_result = task.apply(args=[], kwargs=task_kwargs, throw=False)
+        task_id = inline_result.id or f"inline-{uuid4()}"
+        status_response = _build_task_status_response(task_id, inline_result)
+        INLINE_TASK_RESULTS[task_id] = status_response
+        return _submission_response(task_id, request)
 
     return _submission_response(async_result.id, request)
 
@@ -94,41 +138,12 @@ def _enqueue_task(
     name="get_ai_task_status",
 )
 async def get_task_status(task_id: str) -> schemas.TaskStatusResponse:
+    inline_response = INLINE_TASK_RESULTS.get(task_id)
+    if inline_response is not None:
+        return inline_response
+
     result = AsyncResult(task_id, app=celery_app)
-    status = result.state.lower()
-    retries = getattr(result, "retries", 0)
-
-    response = schemas.TaskStatusResponse(
-        task_id=task_id,
-        status=status,
-        retries=retries,
-    )
-
-    if result.state == states.SUCCESS:
-        payload = result.result
-        if isinstance(payload, dict):
-            payload_status = payload.get("status")
-            if payload_status == "success":
-                response.status = "success"
-                response.result = payload.get("result")
-            elif payload_status == "error":
-                response.status = "error"
-                response.error = schemas.TaskErrorPayload(
-                    status_code=int(payload.get("status_code", 500)),
-                    detail=str(payload.get("detail", "")),
-                )
-            else:
-                response.result = payload
-        elif payload is not None:
-            response.result = {"value": payload}
-    elif result.state == states.FAILURE:
-        response.status = "failure"
-        response.error = schemas.TaskErrorPayload(
-            status_code=500,
-            detail=str(result.info),
-        )
-
-    return response
+    return _build_task_status_response(task_id, result)
 
 
 @router.get(
