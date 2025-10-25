@@ -15,3 +15,11 @@ httpx-socks
 redis
 prometheus-client
 celery
+python-json-logger
+prometheus-fastapi-instrumentator
+slowapi
+pybreaker
+opentelemetry-sdk
+opentelemetry-exporter-jaeger
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-requests

@@ -10,9 +10,35 @@ cd deploy
 docker compose up --build
 ```
 
-* `docker-compose.yml` builds the API image, provisions a PostgreSQL database, and exposes the service via Nginx.
-* The API service is configured with two replicas (Swarm/Compose v2) and includes container health checks.
-* Nginx proxies traffic to the API containers and provides a lightweight `/healthz` endpoint for external monitoring.
+* `docker-compose.yml` builds the API image, provisions PostgreSQL, Redis cache, and exposes the service via Nginx.
+* The stack now includes observability components: Prometheus + Alertmanager (metrics/alerts), Grafana (dashboards), Jaeger (трассировки), и Elasticsearch + Kibana + Filebeat (централизованное логирование).
+* Nginx проксирует трафик к API и экспортирует метрики через `nginx-prometheus-exporter`.
+
+После запуска Compose стеков доступны следующие интерфейсы:
+
+| Сервис | URL | Назначение |
+|--------|-----|------------|
+| API | http://localhost:8080 | Пользовательские REST запросы |
+| Prometheus | http://localhost:9090 | Метрики и правила алертинга |
+| Alertmanager | http://localhost:9093 | Просмотр и маршрутизация алертов |
+| Grafana | http://localhost:3000 (логин: admin / admin) | Готовый дашборд `Garderobus Overview` |
+| Jaeger | http://localhost:16686 | Просмотр трассировок OpenTelemetry |
+| Kibana | http://localhost:5601 | Анализ структурированных логов |
+| Redis metrics | http://localhost:9121/metrics | Экспортер метрик Redis для Prometheus |
+
+> **Важно:** в `observability/alertmanager/alertmanager.yml` указан демонстрационный webhook. Замените URL на корпоративный Slack/Teams/почтовый шлюз перед использованием в проде.
+
+### Настройка метрик и алертов
+
+Prometheus собирает метрики с API (`/metrics`), Nginx (`/nginx_status`), Redis и cadvisor. В файле `observability/prometheus/alert_rules.yml` определены пороги по RPS, ошибкам, латентности и ресурсоёмкости контейнера API. Alertmanager маршрутизирует события в соответствии с указанным webhook.
+
+### Логи (EFK)
+
+API пишет структурированные JSON-логи в `/var/log/garderobus/api.log`. Filebeat читает их и отправляет в Elasticsearch, после чего они доступны в Kibana (индекс `garderobus-logs-*`).
+
+### Трассировки (Jaeger)
+
+При активном `TRACING_ENABLED=true` приложение публикует спаны через OpenTelemetry SDK в Jaeger (агент `jaeger:6831`). В интерфейсе Jaeger можно анализировать цепочки вызовов, задержки и ошибки внешних запросов.
 
 ## Kubernetes
 

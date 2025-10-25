@@ -1,16 +1,20 @@
 import hashlib
-import requests
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 import models, schemas
 from database import get_db
-from fastapi.responses import JSONResponse
 import settings
 from cache import cache
 from .location_utils import resolve_location_and_coordinates
+from services.http_client import (
+    CircuitOpenError,
+    HTTPRequestError,
+    RateLimitExceededError,
+    http_client,
+)
 
 router = APIRouter(prefix="/weather", tags=["Weather"])
 
@@ -49,15 +53,24 @@ def get_weather_by_coordinates(
         "lang": "ru"
     }
 
-    current_response = requests.get(f"{base_url}/weather", params=params)
-    if current_response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Ошибка при получении текущей погоды")
-    current_data = current_response.json()
+    try:
+        current_response = http_client.get(
+            f"{base_url}/weather", params=params, service_name="openweather"
+        )
+        current_response.raise_for_status()
+        current_data = current_response.json()
 
-    forecast_response = requests.get(f"{base_url}/forecast", params=params)
-    if forecast_response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Ошибка при получении прогноза")
-    forecast_data = forecast_response.json()
+        forecast_response = http_client.get(
+            f"{base_url}/forecast", params=params, service_name="openweather"
+        )
+        forecast_response.raise_for_status()
+        forecast_data = forecast_response.json()
+    except RateLimitExceededError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except (CircuitOpenError, HTTPRequestError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Ошибка при получении данных погоды") from exc
 
     # Сохраняем текущую погоду в БД
     temperature = float(current_data["main"]["temp"])
