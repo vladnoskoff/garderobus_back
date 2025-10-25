@@ -6,7 +6,6 @@ from database import get_db, get_read_db
 import shutil
 import os
 import base64
-import requests
 import settings
 import schemas
 from openai_client import get_openai_client

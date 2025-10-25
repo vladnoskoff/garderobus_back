@@ -1,0 +1,36 @@
+filebeat.inputs:
+  - type: filestream
+    id: garderobus-api
+    enabled: true
+    paths:
+      - /var/log/garderobus/*.log*
+    parsers:
+      - ndjson:
+          add_error_key: true
+    fields:
+      service: garderobus-api
+    fields_under_root: true
+
+processors:
+  - timestamp:
+      field: '@timestamp'
+      layouts:
+        - ISO8601
+      test:
+        - "2020-01-01T00:00:00Z"
+  - drop_fields:
+      fields: ["agent", "host"]
+      ignore_missing: true
+
+output.elasticsearch:
+  hosts: ["elasticsearch:9200"]
+  protocol: http
+  username: ""
+  password: ""
+
+setup.template.enabled: true
+setup.template.name: "garderobus-logs"
+setup.template.pattern: "garderobus-logs-*"
+setup.ilm.enabled: false
+setup.kibana:
+  host: "kibana:5601"

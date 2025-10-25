@@ -1,0 +1,54 @@
+groups:
+  - name: garderobus-observability
+    rules:
+      - alert: HighRequestRate
+        expr: sum(rate(http_requests_total[1m])) > 200
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Высокий RPS на API
+          description: "Количество запросов превысило 200 rps. Проверь нагрузку и авто-масштабирование."
+
+      - alert: ElevatedErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+          sum(rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Высокий процент ошибок 5xx
+          description: "Доля ошибок 5xx превышает 5% за последние 5 минут."
+
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 0.75
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Рост латентности API
+          description: "P95 латентности API превышает 750 мс."
+
+      - alert: HighContainerCPU
+        expr: sum(rate(container_cpu_usage_seconds_total{container_label_com_docker_compose_service="api"}[5m])) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Высокая нагрузка на CPU
+          description: "Контейнер API потребляет более 80% CPU в течение 10 минут."
+
+      - alert: HighContainerMemory
+        expr: |
+          sum(container_memory_usage_bytes{container_label_com_docker_compose_service="api"})
+            /
+          sum(container_spec_memory_limit_bytes{container_label_com_docker_compose_service="api"}) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Высокое потребление памяти
+          description: "Контейнер API использует более 80% доступной памяти."

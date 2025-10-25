@@ -72,6 +72,25 @@ APP_NAME = os.getenv("APP_NAME", "Smart Closet")
 ESP_DISPLAY_IP = os.getenv("ESP_DISPLAY_IP", "http://192.168.1.100")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
+# Logging and rate limiting
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_FILE = os.getenv("LOG_FILE", "/var/log/garderobus/api.log")
+LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "7"))
+API_RATE_LIMIT = os.getenv("API_RATE_LIMIT", "120/minute")
+
+# Distributed tracing / OpenTelemetry
+TRACING_ENABLED = os.getenv("TRACING_ENABLED", "true").lower() == "true"
+TRACING_SERVICE_NAME = os.getenv("TRACING_SERVICE_NAME", "garderobus-api")
+JAEGER_AGENT_HOST = os.getenv("JAEGER_AGENT_HOST", "jaeger")
+JAEGER_AGENT_PORT = int(os.getenv("JAEGER_AGENT_PORT", "6831"))
+
+# HTTP client resilience
+HTTP_CLIENT_TIMEOUT = float(os.getenv("HTTP_CLIENT_TIMEOUT", "5.0"))
+HTTP_CLIENT_CIRCUIT_MAX_FAILURES = int(os.getenv("HTTP_CLIENT_CIRCUIT_MAX_FAILURES", "5"))
+HTTP_CLIENT_CIRCUIT_RESET_TIMEOUT = int(os.getenv("HTTP_CLIENT_CIRCUIT_RESET_TIMEOUT", "60"))
+HTTP_CLIENT_RATE_LIMIT = int(os.getenv("HTTP_CLIENT_RATE_LIMIT", "60"))
+HTTP_CLIENT_RATE_PERIOD = float(os.getenv("HTTP_CLIENT_RATE_PERIOD", "60"))
+
 # Cache configuration
 CACHE_URL = os.getenv("CACHE_URL", "redis://localhost:6379/0")
 CACHE_BACKEND = os.getenv("CACHE_BACKEND", "redis")
