@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Optional
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/admin", tags=["Admin Panel"])
 
 
 def _get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_read_db),
 ) -> models.User:
     if credentials is None:
