@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Callable, Optional
+
+import logging
 
 from celery import states
 from celery.result import AsyncResult
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 
 import models
@@ -13,6 +15,12 @@ from celery_app import celery_app
 from database import get_db
 from tasks.ai import generate_mannequin_task, generate_recommendation_task
 from .location_utils import ensure_location_for_user
+
+from celery.exceptions import CeleryError
+from kombu.exceptions import OperationalError as KombuOperationalError
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
@@ -31,8 +39,11 @@ def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissi
     summary="Запуск генерации AI-рекомендаций",
 )
 async def enqueue_recommendation(user_id: int, request: Request) -> schemas.TaskSubmissionResponse:
-    task = generate_recommendation_task.delay(user_id=user_id)
-    return _submission_response(task.id, request)
+    return _enqueue_task(
+        generate_recommendation_task,
+        request=request,
+        task_kwargs={"user_id": user_id},
+    )
 
 
 @router.get(
@@ -47,8 +58,33 @@ async def enqueue_mannequin_generation(
         default=None, description="Выбор гардероба по локации"
     ),
 ) -> schemas.TaskSubmissionResponse:
-    task = generate_mannequin_task.delay(user_id=user_id, location_id=location_id)
-    return _submission_response(task.id, request)
+    return _enqueue_task(
+        generate_mannequin_task,
+        request=request,
+        task_kwargs={"user_id": user_id, "location_id": location_id},
+    )
+
+
+def _enqueue_task(
+    task: Callable[..., AsyncResult],
+    *,
+    request: Request,
+    task_kwargs: dict[str, Any],
+) -> schemas.TaskSubmissionResponse:
+    try:
+        async_result = task.delay(**task_kwargs)
+    except (KombuOperationalError, CeleryError) as exc:
+        task_name = getattr(task, "name", repr(task))
+        logger.exception("Failed to enqueue Celery task %s", task_name)
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Очередь фоновых задач недоступна. Повторите попытку позже "
+                "или свяжитесь с администратором."
+            ),
+        ) from exc
+
+    return _submission_response(async_result.id, request)
 
 
 @router.get(
