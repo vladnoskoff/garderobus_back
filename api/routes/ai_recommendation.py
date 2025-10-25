@@ -39,8 +39,10 @@ def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissi
 def _build_task_status_response(
     task_id: str, result: AsyncResult | EagerResult
 ) -> schemas.TaskStatusResponse:
-    status = result.state.lower()
-    retries = getattr(result, "retries", 0)
+    state = result.state or states.PENDING
+    status = state.lower()
+    raw_retries = getattr(result, "retries", 0)
+    retries = int(raw_retries or 0)
 
     response = schemas.TaskStatusResponse(
         task_id=task_id,
@@ -48,7 +50,7 @@ def _build_task_status_response(
         retries=retries,
     )
 
-    if result.state == states.SUCCESS:
+    if state == states.SUCCESS:
         payload = result.result
         if isinstance(payload, dict):
             payload_status = payload.get("status")
@@ -65,7 +67,7 @@ def _build_task_status_response(
                 response.result = payload
         elif payload is not None:
             response.result = {"value": payload}
-    elif result.state == states.FAILURE:
+    elif state == states.FAILURE:
         response.status = "failure"
         response.error = schemas.TaskErrorPayload(
             status_code=500,
