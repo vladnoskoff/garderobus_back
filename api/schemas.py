@@ -7,6 +7,7 @@ class UserCreate(BaseModel):
     name: str
     email: str
     password: str
+    phone: Optional[str] = None
     style_preference: Optional[str] = None
     openai_api_key: Optional[str] = None
     weather_api_key: Optional[str] = None
@@ -25,6 +26,7 @@ class UserResponse(BaseModel):
     id: int
     name: str
     email: str
+    phone: Optional[str] = None
     style_preference: Optional[str] = None
     openai_api_key: Optional[str] = None
     weather_api_key: Optional[str] = None
@@ -41,7 +43,7 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     email: Optional[str] = None
-    # phone: Optional[str] = None
+    phone: Optional[str] = None
     password: Optional[str] = None
     location: Optional[str] = None
     gender: Optional[str] = None

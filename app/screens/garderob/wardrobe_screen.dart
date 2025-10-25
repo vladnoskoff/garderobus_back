@@ -1,5 +1,8 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
 import 'add_clothes_screen.dart';
@@ -164,21 +167,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }).toList();
   }
 
-  void _applyFilters() {
-    if (!mounted) return;
-    setState(() {
-      clothes = _filterClothes(_allClothes);
-    });
-  }
-
-  void _resetFilters() {
-    setState(() {
-      _selectedCategoryFilter = null;
-      _selectedSeasonFilter = null;
-      clothes = _filterClothes(_allClothes);
-    });
-  }
-
   List<String> get _availableCategories {
     final categories = _allClothes
         .map((item) => item.category.trim())
@@ -209,134 +197,127 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     return values;
   }
 
-  Widget _buildActiveFilters() {
-    final chips = <Widget>[];
-    if (_selectedCategoryFilter != null) {
-      chips.add(
-        Chip(
-          label: Text('Категория: ${_selectedCategoryFilter!}'),
-          onDeleted: () {
-            setState(() {
-              _selectedCategoryFilter = null;
-              clothes = _filterClothes(_allClothes);
-            });
-          },
-        ),
-      );
-    }
-    if (_selectedSeasonFilter != null) {
-      chips.add(
-        Chip(
-          label: Text('Сезон: ${_selectedSeasonFilter!}'),
-          onDeleted: () {
-            setState(() {
-              _selectedSeasonFilter = null;
-              clothes = _filterClothes(_allClothes);
-            });
-          },
-        ),
-      );
-    }
-
-    if (chips.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: chips,
-      ),
-    );
-  }
-
-  void _openFilterSheet() {
+  Future<void> _openFilterSheet() async {
     final categories = _availableCategories;
     final seasons = _availableSeasons;
     String? tempCategory = _selectedCategoryFilter;
     String? tempSeason = _selectedSeasonFilter;
 
-    showModalBottomSheet<void>(
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
       builder: (context) {
         return Padding(
-          padding: MediaQuery.of(context).viewInsets,
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+            top: 24,
+          ),
           child: StatefulBuilder(
             builder: (context, setModalState) {
-              return Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Фильтры гардероба',
-                      style: Theme.of(context).textTheme.titleMedium,
+              final theme = Theme.of(context);
+              final colorScheme = theme.colorScheme;
+              final labelStyle = theme.textTheme.labelLarge?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+              );
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Фильтры гардероба',
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Сужайте подборку по категориям и сезонам.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
                     ),
+                  ),
+                  const SizedBox(height: 20),
+                  if (categories.isNotEmpty)
+                    DropdownButtonFormField<String?>(
+                      value: tempCategory,
+                      decoration: InputDecoration(
+                        labelText: 'Категория',
+                        labelStyle: labelStyle,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                        filled: true,
+                        fillColor: colorScheme.surfaceVariant.withOpacity(
+                          theme.brightness == Brightness.dark ? 0.3 : 0.6,
+                        ),
+                      ),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Все категории'),
+                        ),
+                        ...categories.map(
+                          (category) => DropdownMenuItem<String?>(
+                            value: category,
+                            child: Text(category),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        setModalState(() => tempCategory = value);
+                      },
+                    ),
+                  if (categories.isNotEmpty && seasons.isNotEmpty)
                     const SizedBox(height: 16),
-                    if (categories.isEmpty && seasons.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Text(
-                          'Фильтры появятся, когда будут добавлены вещи с категориями и сезонами.',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                  if (seasons.isNotEmpty)
+                    DropdownButtonFormField<String?>(
+                      value: tempSeason,
+                      decoration: InputDecoration(
+                        labelText: 'Сезон',
+                        labelStyle: labelStyle,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+                        filled: true,
+                        fillColor: colorScheme.surfaceVariant.withOpacity(
+                          theme.brightness == Brightness.dark ? 0.3 : 0.6,
                         ),
                       ),
-                    if (categories.isNotEmpty)
-                      DropdownButtonFormField<String?>(
-                        value: tempCategory,
-                        decoration: const InputDecoration(
-                          labelText: 'Категория',
-                          border: OutlineInputBorder(),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Все сезоны'),
                         ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('Все категории'),
+                        ...seasons.map(
+                          (season) => DropdownMenuItem<String?>(
+                            value: season,
+                            child: Text(season),
                           ),
-                          ...categories.map(
-                            (category) => DropdownMenuItem<String?>(
-                              value: category,
-                              child: Text(category),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setModalState(() => tempCategory = value);
-                        },
-                      ),
-                    if (categories.isNotEmpty) const SizedBox(height: 16),
-                    if (seasons.isNotEmpty)
-                      DropdownButtonFormField<String?>(
-                        value: tempSeason,
-                        decoration: const InputDecoration(
-                          labelText: 'Сезон',
-                          border: OutlineInputBorder(),
                         ),
-                        items: [
-                          const DropdownMenuItem<String?>(
-                            value: null,
-                            child: Text('Все сезоны'),
-                          ),
-                          ...seasons.map(
-                            (season) => DropdownMenuItem<String?>(
-                              value: season,
-                              child: Text(season),
-                            ),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          setModalState(() => tempSeason = value);
-                        },
+                      ],
+                      onChanged: (value) {
+                        setModalState(() => tempSeason = value);
+                      },
+                    ),
+                  if (categories.isEmpty && seasons.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceVariant.withOpacity(
+                          theme.brightness == Brightness.dark ? 0.35 : 0.8,
+                        ),
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                    const SizedBox(height: 24),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        TextButton(
+                      child: Text(
+                        'Фильтры появятся, когда вы добавите вещи с категориями и сезонами.',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
                           onPressed: () {
                             setState(() {
                               _selectedCategoryFilter = null;
@@ -347,7 +328,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           },
                           child: const Text('Сбросить'),
                         ),
-                        FilledButton(
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton(
                           onPressed: () {
                             setState(() {
                               _selectedCategoryFilter = tempCategory;
@@ -358,11 +342,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                           },
                           child: const Text('Применить'),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                ],
               );
             },
           ),
@@ -371,20 +354,28 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
+  void _resetFilters() {
+    setState(() {
+      _selectedCategoryFilter = null;
+      _selectedSeasonFilter = null;
+      clothes = _filterClothes(_allClothes);
+    });
+  }
+
   Future<void> confirmAndDeleteClothes(int clothesId) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Удалить вещь'),
-        content: Text('Вы уверены, что хотите удалить эту вещь?'),
+        title: const Text('Удалить вещь'),
+        content: const Text('Вы уверены, что хотите удалить эту вещь?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: Text('Отмена'),
+            child: const Text('Отмена'),
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: Text('Удалить', style: TextStyle(color: Colors.red)),
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -430,6 +421,367 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
+  Future<void> _openClothesDetails(Clothes item) async {
+    final deleted = await showClothesDetailSheet(context, item);
+    if (deleted == true) {
+      await fetchClothes();
+    }
+  }
+
+  Widget _buildWardrobeHeader(
+    BuildContext context,
+    List<DropdownMenuItem<int?>> locationItems,
+    bool filtersAreActive,
+  ) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brightness = theme.brightness;
+    final totalCount = clothes.length;
+    final activeFiltersCount = [
+      if (_selectedCategoryFilter != null) _selectedCategoryFilter,
+      if (_selectedSeasonFilter != null) _selectedSeasonFilter,
+    ].length;
+
+    final baseSurface = colorScheme.surfaceVariant.withOpacity(
+      brightness == Brightness.dark ? 0.32 : 0.7,
+    );
+    final buttonPadding = const EdgeInsets.symmetric(vertical: 10);
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            colorScheme.primaryContainer.withOpacity(brightness == Brightness.dark ? 0.35 : 0.75),
+            baseSurface,
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.18)),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.checkroom_outlined,
+                color: colorScheme.onPrimaryContainer,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Гардероб',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      totalCount > 0
+                          ? 'Всего вещей: $totalCount'
+                          : 'Добавьте первую вещь в гардероб',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colorScheme.onPrimaryContainer.withOpacity(0.85),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                onPressed: _openHistory,
+                icon: const Icon(Icons.history),
+                tooltip: 'История нарядов',
+                style: IconButton.styleFrom(
+                  foregroundColor: colorScheme.onPrimaryContainer,
+                  backgroundColor: colorScheme.onPrimaryContainer.withOpacity(0.12),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<int?>(
+            value: selectedLocationId,
+            decoration: InputDecoration(
+              labelText: 'Локация гардероба',
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              filled: true,
+              fillColor: colorScheme.surface.withOpacity(brightness == Brightness.dark ? 0.33 : 0.92),
+            ),
+            items: [
+              const DropdownMenuItem<int?>(
+                value: null,
+                child: Text('Все локации'),
+              ),
+              ...locationItems,
+            ],
+            onChanged: isLocationsLoading ? null : (value) => _onLocationChanged(value),
+          ),
+          if (isLocationsLoading) ...[
+            const SizedBox(height: 12),
+            const LinearProgressIndicator(minHeight: 2),
+          ],
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: navigateToAddClothes,
+                  style: FilledButton.styleFrom(padding: buttonPadding),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Добавить вещь'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed: _openFilterSheet,
+                  style: FilledButton.styleFrom(padding: buttonPadding),
+                  icon: const Icon(Icons.tune_rounded),
+                  label: Text(
+                    activeFiltersCount > 0
+                        ? 'Фильтры • $activeFiltersCount'
+                        : 'Фильтры',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterSummary(ColorScheme colorScheme) {
+    final theme = Theme.of(context);
+    final chips = <Widget>[];
+    if (_selectedCategoryFilter != null) {
+      chips.add(_buildFilterChip(
+        label: 'Категория: ${_selectedCategoryFilter!}',
+        onDeleted: () {
+          setState(() {
+            _selectedCategoryFilter = null;
+            clothes = _filterClothes(_allClothes);
+          });
+        },
+        colorScheme: colorScheme,
+      ));
+    }
+    if (_selectedSeasonFilter != null) {
+      chips.add(_buildFilterChip(
+        label: 'Сезон: ${_selectedSeasonFilter!}',
+        onDeleted: () {
+          setState(() {
+            _selectedSeasonFilter = null;
+            clothes = _filterClothes(_allClothes);
+          });
+        },
+        colorScheme: colorScheme,
+      ));
+    }
+
+    if (chips.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceVariant.withOpacity(
+          Theme.of(context).brightness == Brightness.dark ? 0.35 : 0.65,
+        ),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Активные фильтры',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: chips,
+          ),
+          const SizedBox(height: 12),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: _resetFilters,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Сбросить фильтры'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required VoidCallback onDeleted,
+    required ColorScheme colorScheme,
+  }) {
+    return Chip(
+      label: Text(label),
+      onDeleted: onDeleted,
+      deleteIcon: const Icon(Icons.close, size: 18),
+      labelStyle: TextStyle(
+        color: colorScheme.onSecondaryContainer,
+      ),
+      backgroundColor: colorScheme.secondaryContainer.withOpacity(0.8),
+    );
+  }
+
+  Widget _buildClothesCard(Clothes item) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final brightness = theme.brightness;
+    final category = item.category.trim();
+    final season = item.season.trim();
+
+    final chips = <Widget>[
+      if (category.isNotEmpty)
+        _buildMetadataChip(Icons.category_outlined, category),
+      if (season.isNotEmpty)
+        _buildMetadataChip(Icons.style_outlined, season),
+    ];
+
+    return InkWell(
+      onTap: () => _openClothesDetails(item),
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              colorScheme.surfaceVariant.withOpacity(brightness == Brightness.dark ? 0.45 : 0.85),
+              colorScheme.surfaceVariant.withOpacity(brightness == Brightness.dark ? 0.3 : 0.6),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.15)),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AspectRatio(
+              aspectRatio: 3 / 4,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: colorScheme.surfaceVariant.withOpacity(0.25),
+                    child: item.imageUrl != null && item.imageUrl!.isNotEmpty
+                        ? Image.network(
+                            item.imageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Center(
+                              child: Icon(
+                                Icons.broken_image_outlined,
+                                color: colorScheme.onSurfaceVariant,
+                                size: 40,
+                              ),
+                            ),
+                          )
+                        : Center(
+                            child: Icon(
+                              Icons.image_outlined,
+                              size: 42,
+                              color: colorScheme.onSurfaceVariant.withOpacity(0.6),
+                            ),
+                          ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: IconButton(
+                      tooltip: 'Удалить',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () => confirmAndDeleteClothes(item.id),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black.withOpacity(0.35),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      height: 1.2,
+                    ),
+                  ),
+                  if (chips.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: chips,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetadataChip(IconData icon, String label) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: colorScheme.secondaryContainer.withOpacity(
+          theme.brightness == Brightness.dark ? 0.45 : 0.75,
+        ),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 15, color: colorScheme.onSecondaryContainer),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: colorScheme.onSecondaryContainer,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String? _temperatureRangeText(Clothes item) {
     final min = item.temperatureMin;
     final max = item.temperatureMax;
@@ -446,298 +798,6 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     return value != null ? '$value°C' : null;
   }
 
-  Widget _buildInfoPill(BuildContext context, IconData icon, String label) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textStyle = theme.textTheme.labelSmall?.copyWith(
-      color: colorScheme.onSecondaryContainer,
-    );
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: colorScheme.secondaryContainer,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: colorScheme.onSecondaryContainer),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              label,
-              style: textStyle,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _openClothesDetails(Clothes item) async {
-    final deleted = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ClothesDetailScreen(clothes: item),
-      ),
-    );
-    if (deleted == true) {
-      await fetchClothes();
-    }
-  }
-
-  Widget _buildClothesCard(Clothes item) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final textTheme = theme.textTheme;
-    final temperatureText = _temperatureRangeText(item);
-    final careText = item.careInstructions?.trim();
-    final materialText = item.material?.trim();
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _openClothesDetails(item),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                      if (item.imageUrl != null && item.imageUrl!.isNotEmpty)
-                        Image.network(
-                          item.imageUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Center(
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              color: colorScheme.onSurfaceVariant,
-                              size: 40,
-                            ),
-                          ),
-                        )
-                    else
-                      Container(
-                        color: colorScheme.surfaceVariant,
-                        child: Icon(
-                          Icons.image_not_supported,
-                          color: colorScheme.onSurfaceVariant,
-                          size: 40,
-                        ),
-                      ),
-                    Positioned(
-                      right: 8,
-                      top: 8,
-                      child: Material(
-                        color: colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(8),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(8),
-                          onTap: () async {
-                            await confirmAndDeleteClothes(item.id);
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(6),
-                            child: Icon(
-                              Icons.delete,
-                              size: 18,
-                              color: colorScheme.onErrorContainer,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      _buildInfoPill(context, Icons.checkroom, item.category),
-                      _buildInfoPill(context, Icons.calendar_today_outlined, item.season),
-                      if (temperatureText != null)
-                        _buildInfoPill(context, Icons.device_thermostat, temperatureText),
-                      if (materialText != null && materialText.isNotEmpty)
-                        _buildInfoPill(context, Icons.texture, materialText),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
-    final locationDropdownItems = wardrobeLocations
-        .whereType<Map<String, dynamic>>()
-        .map((loc) {
-          final parsedId = _extractLocationId(loc['id']);
-          if (parsedId == null) {
-            return null;
-          }
-          final name = loc['name']?.toString() ?? 'Без названия';
-          return DropdownMenuItem<int?>(
-            value: parsedId,
-            child: Text(name),
-          );
-        })
-        .whereType<DropdownMenuItem<int?>>()
-        .toList();
-    final categoryOptions = _availableCategories;
-    final seasons = _availableSeasons;
-    final filtersAreActive =
-        _selectedCategoryFilter != null || _selectedSeasonFilter != null;
-
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Гардероб 26'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(Icons.filter_list),
-                if (filtersAreActive)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: colorScheme.error,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            tooltip: 'Фильтры',
-            onPressed: categoryOptions.isEmpty && seasons.isEmpty && _allClothes.isEmpty
-                ? null
-                : _openFilterSheet,
-          ),
-          IconButton(
-            icon: const Icon(Icons.history),
-            tooltip: 'История нарядов',
-            onPressed: _openHistory,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          if (isLocationsLoading) const LinearProgressIndicator(),
-          if (wardrobeLocations.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: DropdownButtonFormField<int?>(
-                value: selectedLocationId,
-                decoration: const InputDecoration(
-                  labelText: 'Локация гардероба',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  const DropdownMenuItem<int?>(
-                    value: null,
-                    child: Text('Без привязки'),
-                  ),
-                  ...locationDropdownItems,
-                ],
-                onChanged: (value) {
-                  _onLocationChanged(value);
-                },
-              ),
-            ),
-          if (filtersAreActive) _buildActiveFilters(),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: GestureDetector(
-              onTap: navigateToAddClothes,
-              child: Container(
-                height: 60,
-                decoration: BoxDecoration(
-                  color: colorScheme.primaryContainer,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.add,
-                  color: colorScheme.onPrimaryContainer,
-                  size: 32,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      )
-                    : clothes.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'В этом гардеробе пока нет вещей.',
-                              textAlign: TextAlign.center,
-                            ),
-                          )
-                        : Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: GridView.builder(
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                childAspectRatio: 0.68,
-                              ),
-                              itemCount: clothes.length,
-                              itemBuilder: (context, index) {
-                                final item = clothes[index];
-                                return _buildClothesCard(item);
-                              },
-                            ),
-                          ),
-          ),
-        ],
-      ),
-    );
-}
-
   int? _extractLocationId(dynamic rawId) {
     if (rawId is int) return rawId;
     if (rawId is String) {
@@ -747,5 +807,125 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       return int.tryParse(rawId.toString());
     }
     return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final filtersAreActive = _selectedCategoryFilter != null || _selectedSeasonFilter != null;
+
+    final locationDropdownItems = wardrobeLocations
+        .whereType<Map<String, dynamic>>()
+        .map((location) {
+          final id = _extractLocationId(location['id']);
+          final name = location['name']?.toString() ?? (id != null ? 'Локация #$id' : null);
+          if (id == null || name == null) {
+            return null;
+          }
+          return DropdownMenuItem<int?>(
+            value: id,
+            child: Text(name),
+          );
+        })
+        .whereType<DropdownMenuItem<int?>>()
+        .toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Гардероб${!isLoading ? ' ${clothes.length}' : ''}'),
+        centerTitle: true,
+      ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final targetWidth = math.min(constraints.maxWidth, 980.0);
+            final horizontalPadding = math.max(20.0, (constraints.maxWidth - targetWidth) / 2);
+
+            return RefreshIndicator(
+              onRefresh: fetchClothes,
+              child: CustomScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverPadding(
+                    padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildWardrobeHeader(context, locationDropdownItems, filtersAreActive),
+                          if (filtersAreActive) ...[
+                            const SizedBox(height: 20),
+                            _buildFilterSummary(colorScheme),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (isLoading)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (_error != null)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            _error!,
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (clothes.isEmpty)
+                    const SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 32),
+                          child: Text(
+                            'В этом гардеробе пока нет вещей. Добавьте новые элементы, чтобы увидеть их здесь.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        24,
+                        horizontalPadding,
+                        24 + MediaQuery.of(context).padding.bottom,
+                      ),
+                      sliver: SliverGrid(
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            final item = clothes[index];
+                            return _buildClothesCard(item);
+                          },
+                          childCount: clothes.length,
+                        ),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: constraints.maxWidth >= 1200
+                              ? 4
+                              : constraints.maxWidth >= 900
+                                  ? 3
+                                  : 2,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                          childAspectRatio: 0.65,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
   }
 }

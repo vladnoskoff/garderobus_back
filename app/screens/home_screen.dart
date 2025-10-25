@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_service.dart';
 import '../services/clothes.dart';
-import '../services/theme_controller.dart';
 import '../widgets/rounded_back_button.dart';
 import 'garderob/clothes_detail_screen.dart';
 import 'settings/home_settings/home_screen_settings.dart';
@@ -70,20 +69,26 @@ class _MannequinRefreshButton extends StatelessWidget {
   const _MannequinRefreshButton({
     required this.onPressed,
     required this.isLoading,
+    this.foregroundColor,
+    this.backgroundColor,
   });
 
   final VoidCallback onPressed;
   final bool isLoading;
+  final Color? foregroundColor;
+  final Color? backgroundColor;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final foregroundColor = colorScheme.onSecondaryContainer;
+    final resolvedForeground = foregroundColor ?? colorScheme.onSecondaryContainer;
+    final resolvedBackground =
+        backgroundColor ?? resolvedForeground.withOpacity(0.1);
 
     return Tooltip(
       message: 'Обновить манекен',
       child: Material(
-        color: foregroundColor.withOpacity(0.1),
+        color: resolvedBackground,
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           borderRadius: BorderRadius.circular(12),
@@ -96,12 +101,12 @@ class _MannequinRefreshButton extends StatelessWidget {
                     height: 18,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(foregroundColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(resolvedForeground),
                     ),
                   )
                 : Icon(
                     Icons.autorenew,
-                    color: foregroundColor,
+                    color: resolvedForeground,
                     size: 20,
                   ),
           ),
@@ -155,13 +160,14 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> mannequins = [];
   String? weatherComment;
   String? weatherIconUrl;
-  final storage = FlutterSecureStorage();
+  final storage = const FlutterSecureStorage();
   int? userId;
   List<dynamic> wardrobeLocations = [];
   int? selectedLocationId;
   bool isLocationsLoading = false;
   bool isMannequinsLoading = false;
   String? mannequinsError;
+  Timer? _weatherTimer;
 
   @override
   void initState() {
@@ -170,15 +176,20 @@ class _HomeScreenState extends State<HomeScreen> {
     fetchWeather();
     fetchMannequins();
     _loadLocations();
-    
-    // Автообновление погоды каждые 10 секунд
-    Timer.periodic(Duration(seconds: 10), (timer) {
+
+    _weatherTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
         fetchWeather();
       } else {
         timer.cancel();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _weatherTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> loadUserId() async {
@@ -190,7 +201,6 @@ class _HomeScreenState extends State<HomeScreen> {
       fetchWeather();
       fetchMannequins();
       _loadLocations();
-      // ✅ вызываем только после загрузки
       await checkInitialSettings();
     }
   }
@@ -218,7 +228,7 @@ class _HomeScreenState extends State<HomeScreen> {
       fetchWeather();
       fetchMannequins();
     } catch (e) {
-      print('Ошибка загрузки локаций: $e');
+      debugPrint('Ошибка загрузки локаций: $e');
     } finally {
       if (mounted) {
         setState(() => isLocationsLoading = false);
@@ -254,8 +264,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selectedLocation == null) {
       return null;
     }
-    if (selectedLocation['latitude'] == null ||
-        selectedLocation['longitude'] == null) {
+    if (selectedLocation['latitude'] == null || selectedLocation['longitude'] == null) {
       return null;
     }
     return selectedLocationId;
@@ -311,23 +320,21 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!hasLocation) missingParts += '• Координаты\n';
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
           showDialog(
             context: context,
             builder: (_) => AlertDialog(
-              title: const Text("Нужна настройка"),
+              title: const Text('Нужна настройка'),
               content: Text(
-                "Пожалуйста, укажите следующие параметры:\n\n$missingParts\nчтобы приложение работало корректно.",
+                'Пожалуйста, укажите следующие параметры:\n\n$missingParts\nчтобы приложение работало корректно.',
               ),
               actions: [
                 TextButton(
                   onPressed: () {
                     Navigator.of(context).pop();
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const HomeScreenSettings()),
-                    );
+                    Future.microtask(() => showHomeSettingsSheet(context));
                   },
-                  child: const Text("Перейти в настройки"),
+                  child: const Text('Перейти в настройки'),
                 ),
               ],
             ),
@@ -335,10 +342,9 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      print("Ошибка проверки настроек: $e");
+      debugPrint('Ошибка проверки настроек: $e');
     }
   }
-
 
   Future<void> fetchWeather() async {
     if (userId == null) return;
@@ -356,7 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
         weatherComment = generateWeatherComment(weatherData);
       });
     } catch (e) {
-      print("Ошибка при получении погоды: $e");
+      debugPrint('Ошибка при получении погоды: $e');
     }
   }
 
@@ -383,7 +389,7 @@ class _HomeScreenState extends State<HomeScreen> {
         mannequins = mannequinResults.take(1).toList();
       });
     } catch (e) {
-      print("Ошибка при получении манекенов: $e");
+      debugPrint('Ошибка при получении манекенов: $e');
       if (mounted) {
         setState(() {
           mannequins = [];
@@ -418,7 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
         mannequins = [mannequin];
       });
     } catch (e) {
-      print('Ошибка при генерации манекена: $e');
+      debugPrint('Ошибка при генерации манекена: $e');
       if (!mounted) return;
       setState(() {
         mannequinsError = 'Не удалось создать манекен. Попробуйте снова.';
@@ -445,7 +451,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (temp < -10) {
       recommendation = 'Экстремальный холод — утепляйтесь по максимуму.';
     } else if (temp < 0) {
-      recommendation = 'Очень холодно, одевайтесь теплее и добавьте аксессуары для защиты от мороза.';
+      recommendation =
+          'Очень холодно, одевайтесь теплее и добавьте аксессуары для защиты от мороза.';
     } else if (temp < 10) {
       recommendation = 'Прохладно — наденьте тёплый верхний слой.';
     } else if (temp < 18) {
@@ -468,7 +475,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return recommendation;
   }
-
 
   Widget _buildMannequinCard(
     BuildContext context,
@@ -604,11 +610,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final Clothes clothes = await ApiService.getClothesById(clothesId);
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ClothesDetailScreen(clothes: clothes),
-        ),
-      );
+      await showClothesDetailSheet(context, clothes);
     } catch (error) {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
@@ -626,272 +628,743 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
-    final themeNotifier = ThemeScope.of(context);
-    final isDarkMode = themeNotifier.themeMode == ThemeMode.dark;
-    final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
     final pressureValue = weather?["pressure"];
     final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
+    final isWeatherLoading = weather == null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Гардероб 26"),
+        title: const Text('Гардероб 26'),
+        centerTitle: true,
         actions: [
           IconButton(
-            icon: Icon(isDarkMode ? Icons.light_mode : Icons.dark_mode),
-            tooltip: isDarkMode ? 'Включить светлую тему' : 'Включить тёмную тему',
-            onPressed: () async {
-              try {
-                await themeNotifier.toggleTheme();
-                if (!mounted) return;
-                final message = themeNotifier.themeMode == ThemeMode.dark
-                    ? 'Тёмная тема включена'
-                    : 'Светлая тема включена';
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(message)),
-                );
-              } catch (error) {
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Не удалось сменить тему: $error')),
-                );
-              }
+            icon: const Icon(Icons.tune),
+            tooltip: 'Настройки',
+            onPressed: () {
+              showHomeSettingsSheet(context);
             },
           ),
         ],
       ),
-      body: weather == null
-          ? Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      if (wardrobeLocations.isNotEmpty)
-                        Container(
-                          width: double.infinity,
-                          margin: const EdgeInsets.only(bottom: 16),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(12),
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return Align(
+            alignment: Alignment.topCenter,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 640),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildLocationSection(context),
+                    const SizedBox(height: 20),
+                    _buildWeatherSection(
+                      context,
+                      isLoading: isWeatherLoading,
+                      pressureMm: pressureMm,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildMannequinSection(context),
+                    const SizedBox(height: 32),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildLocationSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final locationItems = <DropdownMenuItem<int?>>[
+      const DropdownMenuItem<int?>(
+        value: null,
+        child: Text('Использовать личные координаты'),
+      ),
+      ...wardrobeLocations.whereType<Map<String, dynamic>>().map((map) {
+        final name = map['name']?.toString() ?? 'Без названия';
+        final hasCoords = map['latitude'] != null && map['longitude'] != null;
+        final subtitle = hasCoords ? '' : ' (нет координат)';
+        final parsedId = _parseLocationId(map['id']);
+        if (parsedId == null) {
+          return null;
+        }
+        return DropdownMenuItem<int?>(
+          value: parsedId,
+          child: Text('$name$subtitle'),
+        );
+      }).whereType<DropdownMenuItem<int?>>(),
+    ];
+
+    return _buildHomeCard(
+      context,
+      accentColor: colorScheme.primary,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildCardIcon(colorScheme.primary, Icons.home_work_outlined),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Дом и места',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Выберите гардероб для погоды и рекомендаций.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            FilledButton.tonalIcon(
+              onPressed: () => showHomeSettingsSheet(context),
+              icon: const Icon(Icons.tune),
+              label: const Text('Управлять'),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (isLocationsLoading)
+          const LinearProgressIndicator()
+        else if (wardrobeLocations.isNotEmpty)
+          DecoratedBox(
+            decoration: BoxDecoration(
+              color: colorScheme.surface.withOpacity(0.9),
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<int?>(
+                value: selectedLocationId,
+                isExpanded: true,
+                icon: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: colorScheme.primary,
+                ),
+                style: theme.textTheme.titleSmall,
+                borderRadius: BorderRadius.circular(18),
+                items: locationItems,
+                onChanged: (value) => _handleLocationChange(value),
+              ),
+            ),
+          )
+        else
+          _buildEmptyState(
+            context,
+            'Добавьте адрес в настройках, чтобы выбрать конкретный гардероб.',
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWeatherSection(
+    BuildContext context, {
+    required bool isLoading,
+    required int? pressureMm,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final weatherData = weather;
+    final humidity = weatherData?['humidity'];
+    final wind = (weatherData?['wind_speed'] as num?)?.toDouble();
+    final temperature = weatherData?['temperature'];
+    final hasDetails = !isLoading && weatherData != null;
+
+    return _buildHomeCard(
+      context,
+      accentColor: colorScheme.primary,
+      onTap: hasDetails ? () => _showWeatherDetailsSheet(context, pressureMm) : null,
+      children: [
+        Row(
+          children: [
+            _buildCardIcon(colorScheme.primary, Icons.cloud_outlined),
+            const SizedBox(width: 16),
+            Text(
+              'Погода сейчас',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            if (hasDetails)
+              Icon(
+                Icons.keyboard_arrow_up,
+                color: colorScheme.primary,
+              ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        if (isLoading)
+          const SizedBox(
+            height: 140,
+            child: Center(child: CircularProgressIndicator()),
+          )
+        else
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          temperature != null ? '${_formatTemperature(temperature)}°C' : '—',
+                          style: theme.textTheme.displaySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
                           ),
-                          child: isLocationsLoading
-                              ? const LinearProgressIndicator()
-                              : DropdownButton<int?>(
-                                  value: selectedLocationId,
-                                  isExpanded: true,
-                                  hint: const Text('Выберите локацию гардероба'),
-                                  dropdownColor: colorScheme.surface,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
-                                  iconEnabledColor: colorScheme.onPrimaryContainer,
-                                  items: [
-                                    const DropdownMenuItem<int?>(
-                                      value: null,
-                                      child: Text('Использовать личные координаты'),
-                                    ),
-                                    ...wardrobeLocations.whereType<Map<String, dynamic>>().map((map) {
-                                      final name = map['name']?.toString() ?? 'Без названия';
-                                      final hasCoords =
-                                          map['latitude'] != null && map['longitude'] != null;
-                                      final subtitle = hasCoords ? '' : ' (нет координат)';
-                                      final parsedId = _parseLocationId(map['id']);
-                                      if (parsedId == null) {
-                                        return null;
-                                      }
-                                      return DropdownMenuItem<int?>(
-                                        value: parsedId,
-                                        child: Text('$name$subtitle'),
-                                      );
-                                    }).whereType<DropdownMenuItem<int?>>(),
-                                  ],
-                                  onChanged: (value) {
-                                    _handleLocationChange(value);
-                                  },
-                                ),
                         ),
-                      // Блок погоды
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxWidth: 400),
-                        decoration: BoxDecoration(
-                          color: colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.center,
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 20,
+                          runSpacing: 12,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${weather!["temperature"]}°C',
-                                  style: theme.textTheme.displaySmall?.copyWith(
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Влажность: ${weather!["humidity"]}%',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onPrimaryContainer,
-                                  ),
-                                ),
-                                if (pressureMm != null) ...[
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Давление: $pressureMm мм рт. ст.',
-                                    style: theme.textTheme.titleMedium?.copyWith(
-                                      color: colorScheme.onPrimaryContainer,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            Image.network(
-                              weatherIconUrl ?? '',
+                            if (humidity != null)
+                              _buildWeatherMetric(
+                                context,
+                                label: 'Влажность',
+                                value: '$humidity%',
+                              ),
+                            if (pressureMm != null)
+                              _buildWeatherMetric(
+                                context,
+                                label: 'Давление',
+                                value: '$pressureMm мм рт. ст.',
+                              ),
+                            if (wind != null)
+                              _buildWeatherMetric(
+                                context,
+                                label: 'Ветер',
+                                value: '${wind.toStringAsFixed(1)} м/с',
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: Container(
+                      color: colorScheme.surface.withOpacity(0.6),
+                      padding: const EdgeInsets.all(12),
+                      child: weatherIconUrl != null && weatherIconUrl!.isNotEmpty
+                          ? Image.network(
+                              weatherIconUrl!,
                               width: 72,
                               height: 72,
                               errorBuilder: (_, __, ___) => Icon(
                                 Icons.cloud,
                                 size: 48,
-                                color: colorScheme.onPrimaryContainer,
+                                color: colorScheme.onSurfaceVariant,
                               ),
+                            )
+                          : Icon(
+                              Icons.cloud,
+                              size: 48,
+                              color: colorScheme.onSurfaceVariant,
                             ),
-                          ],
-                        ),
-                      ),
+                    ),
+                  ),
+                ],
+              ),
+              if (weatherComment != null) ...[
+                const SizedBox(height: 14),
+                Text(
+                  weatherComment!,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+              if (hasDetails) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Нажмите, чтобы посмотреть подробный прогноз и погоду на неделю',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.7),
+                  ),
+                ),
+              ],
+            ],
+          ),
+      ],
+    );
+  }
 
-                      const SizedBox(height: 10),
-                      // Блок с погодой на 3 дня
-                      if (weather?['forecast'] != null)
-                        Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(maxWidth: 400),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: colorScheme.primaryContainer,
-                            borderRadius: BorderRadius.circular(18),
-                          ),
+  Future<void> _showWeatherDetailsSheet(BuildContext context, int? pressureMm) async {
+    final weatherData = weather;
+    if (weatherData == null) {
+      return;
+    }
+
+    final humidity = weatherData['humidity'];
+    final wind = (weatherData['wind_speed'] as num?)?.toDouble();
+    final temperature = weatherData['temperature'];
+    final feelsLike = weatherData['feels_like'];
+    final description = weatherData['description']?.toString();
+    final forecastDays = (weatherData['forecast'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((day) => day.map((key, value) => MapEntry(key.toString(), value)))
+        .take(7)
+        .toList(growable: false);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        final theme = Theme.of(sheetContext);
+        final colorScheme = theme.colorScheme;
+        final brightness = theme.brightness;
+        final bottomPadding = MediaQuery.of(sheetContext).padding.bottom;
+
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.6,
+          maxChildSize: 0.92,
+          minChildSize: 0.4,
+          builder: (context, controller) {
+            return Container(
+              decoration: BoxDecoration(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+                gradient: LinearGradient(
+                  colors: [
+                    colorScheme.surfaceVariant.withOpacity(brightness == Brightness.dark ? 0.65 : 0.95),
+                    colorScheme.surface.withOpacity(brightness == Brightness.dark ? 0.92 : 1),
+                  ],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(24, 12, 24, 20 + bottomPadding),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: colorScheme.onSurface.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildCardIcon(colorScheme.primary, Icons.cloud_outlined),
+                        const SizedBox(width: 16),
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Прогноз на 3 дня:",
+                                'Прогноз погоды',
                                 style: theme.textTheme.titleMedium?.copyWith(
-                                  color: colorScheme.onPrimaryContainer,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              Column(
-                                children: (weather!['forecast'] as List<dynamic>).map((day) {
-                                  return Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        day['date'],
-                                        style: theme.textTheme.bodyMedium?.copyWith(
-                                          color: colorScheme.onPrimaryContainer,
-                                        ),
-                                      ),
-                                      Row(
-                                        children: [
-                                          Text(
-                                            '${day['temp']}°C',
-                                            style: theme.textTheme.bodyMedium?.copyWith(
-                                              color: colorScheme.onPrimaryContainer,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Image.network(
-                                            "http://openweathermap.org/img/wn/${day['icon']}@2x.png",
-                                            width: 32,
-                                            height: 32,
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  );
-                                }).toList(),
-                              ),
+                              if (description != null && description.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  description,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),
-                      
-                      const SizedBox(height: 10),
-                      // Блок с манекенами
-                      Container(
-                        width: double.infinity,
-                        constraints: const BoxConstraints(maxWidth: 480),
-                        decoration: BoxDecoration(
-                          color: colorScheme.secondaryContainer,
-                          borderRadius: BorderRadius.circular(20),
+                        IconButton(
+                          onPressed: () => Navigator.of(sheetContext).pop(),
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Закрыть',
                         ),
-                        child: Stack(
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 56, top: 4),
-                                    child: Text(
-                                      weatherComment ??
-                                          'Подождите, загружаем рекомендации...',
-                                      style: theme.textTheme.bodyMedium?.copyWith(
-                                        color: colorScheme.onSecondaryContainer,
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Expanded(
+                      child: ListView(
+                        controller: controller,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      temperature != null
+                                          ? '${_formatTemperature(temperature)}°C'
+                                          : '—',
+                                      style: theme.textTheme.displaySmall?.copyWith(
+                                        fontWeight: FontWeight.w700,
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 18),
-                                  if (isMannequinsLoading)
-                                    const Center(child: CircularProgressIndicator())
-                                  else if (mannequins.isEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.symmetric(vertical: 24),
-                                      child: Text(
-                                        mannequinsError ??
-                                            'Нажмите «Создать манекен», чтобы ИИ подобрал образ для текущей погоды и гардероба.',
-                                        textAlign: TextAlign.center,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: colorScheme.onSecondaryContainer,
+                                    if (feelsLike != null) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Ощущается как ${_formatTemperature(feelsLike)}°C',
+                                        style: theme.textTheme.bodyMedium?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
                                         ),
                                       ),
-                                    )
-                                  else
-                                    _buildMannequinCard(
-                                      context,
-                                      mannequins.first,
-                                    ),
-                                ],
+                                    ],
+                                  ],
+                                ),
                               ),
-                            ),
-                            Positioned(
-                              top: 12,
-                              right: 12,
-                              child: _MannequinRefreshButton(
-                                onPressed: _generateMannequin,
-                                isLoading: isMannequinsLoading,
+                              const SizedBox(width: 24),
+                              if (weatherIconUrl != null && weatherIconUrl!.isNotEmpty)
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Image.network(
+                                    weatherIconUrl!,
+                                    width: 88,
+                                    height: 88,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (_, __, ___) => Icon(
+                                      Icons.cloud,
+                                      size: 54,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                  ),
+                                )
+                              else
+                                Icon(
+                                  Icons.cloud,
+                                  size: 54,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 20,
+                            runSpacing: 12,
+                            children: [
+                              if (humidity != null)
+                                _buildWeatherMetric(
+                                  context,
+                                  label: 'Влажность',
+                                  value: '$humidity%',
+                                ),
+                              if (pressureMm != null)
+                                _buildWeatherMetric(
+                                  context,
+                                  label: 'Давление',
+                                  value: '$pressureMm мм рт. ст.',
+                                ),
+                              if (wind != null)
+                                _buildWeatherMetric(
+                                  context,
+                                  label: 'Ветер',
+                                  value: '${wind.toStringAsFixed(1)} м/с',
+                                ),
+                            ],
+                          ),
+                          if (weatherComment != null) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              weatherComment!,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: colorScheme.onSurfaceVariant,
                               ),
                             ),
                           ],
-                        ),
+                          if (forecastDays.isNotEmpty) ...[
+                            const SizedBox(height: 24),
+                            Text(
+                              'Прогноз на неделю',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            ...forecastDays.map((day) => _buildForecastTile(context, day)),
+                          ],
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ),
+            );
+          },
+        );
+      },
     );
   }
 
+  Widget _buildForecastTile(BuildContext context, Map<String, dynamic> day) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final date = day['date']?.toString() ?? '';
+    final temp = day['temp'];
+    final iconCode = day['icon']?.toString();
+    final description = day['description']?.toString();
+    final formattedTemp = temp != null ? '${_formatTemperature(temp)}°C' : '—';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  date,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (description != null && description.isNotEmpty)
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Text(
+            formattedTemp,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(width: 12),
+          if (iconCode != null && iconCode.isNotEmpty)
+            Image.network(
+              'http://openweathermap.org/img/wn/$iconCode@2x.png',
+              width: 40,
+              height: 40,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.cloud,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            )
+          else
+            Icon(
+              Icons.cloud,
+              color: colorScheme.onSurfaceVariant,
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMannequinSection(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final accent = colorScheme.tertiary;
+
+    return _buildHomeCard(
+      context,
+      accentColor: accent,
+      children: [
+        Row(
+          children: [
+            _buildCardIcon(accent, Icons.checkroom_outlined),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Text(
+                'Образ дня',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            _MannequinRefreshButton(
+              onPressed: _generateMannequin,
+              isLoading: isMannequinsLoading,
+              foregroundColor: accent,
+              backgroundColor: accent.withOpacity(0.14),
+            ),
+          ],
+        ),
+        if (weatherComment != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            weatherComment!,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        if (isMannequinsLoading)
+          const Center(child: CircularProgressIndicator())
+        else if (mannequins.isEmpty)
+          _buildEmptyState(
+            context,
+            mannequinsError ??
+                'Нажмите «Обновить», чтобы ИИ подобрал образ под вашу погоду и гардероб.',
+          )
+        else
+          _buildMannequinCard(
+            context,
+            mannequins.first,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildWeatherMetric(
+    BuildContext context, {
+    required String label,
+    required String value,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
+  String _formatTemperature(dynamic value) {
+    if (value == null) {
+      return '';
+    }
+    if (value is num) {
+      final isWhole = value % 1 == 0;
+      return isWhole ? value.toInt().toString() : value.toStringAsFixed(1);
+    }
+    final parsed = num.tryParse(value.toString());
+    if (parsed != null) {
+      final isWhole = parsed % 1 == 0;
+      return isWhole ? parsed.toInt().toString() : parsed.toStringAsFixed(1);
+    }
+    return value.toString();
+  }
+
+  Widget _buildEmptyState(BuildContext context, String message) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withOpacity(0.75),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeCard(
+    BuildContext context, {
+    required Color accentColor,
+    required List<Widget> children,
+    VoidCallback? onTap,
+    EdgeInsetsGeometry? padding,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final baseColor = colorScheme.surfaceVariant;
+    final borderRadius = BorderRadius.circular(26);
+    final resolvedPadding = padding ?? const EdgeInsets.symmetric(horizontal: 18, vertical: 18);
+
+    final decoration = BoxDecoration(
+      borderRadius: borderRadius,
+      gradient: LinearGradient(
+        colors: [
+          baseColor.withOpacity(0.7),
+          baseColor,
+          accentColor.withOpacity(0.18),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    );
+
+    final content = Padding(
+      padding: resolvedPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+
+    if (onTap != null) {
+      return Material(
+        color: Colors.transparent,
+        child: Ink(
+          decoration: decoration,
+          child: InkWell(
+            borderRadius: borderRadius,
+            onTap: onTap,
+            child: content,
+          ),
+        ),
+      );
+    }
+
+    return DecoratedBox(
+      decoration: decoration,
+      child: content,
+    );
+  }
+
+  Widget _buildCardIcon(Color color, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Icon(
+        icon,
+        color: color,
+        size: 24,
+      ),
+    );
+  }
 }

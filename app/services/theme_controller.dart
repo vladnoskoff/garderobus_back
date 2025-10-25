@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'api_service.dart';
 
 class ThemeNotifier extends ChangeNotifier {
-  ThemeMode _themeMode = ThemeMode.light;
+  ThemeMode _themeMode = ThemeMode.system;
 
   ThemeMode get themeMode => _themeMode;
 
@@ -59,7 +59,7 @@ class ThemeNotifier extends ChangeNotifier {
 
   Future<void> _persistTheme(ThemeMode mode) async {
     if (_themeMode == mode) {
-      await ApiService.cacheThemePreference(_themeMode == ThemeMode.dark ? 'dark' : 'light');
+      await ApiService.cacheThemePreference(_serializeThemeMode(mode));
       return;
     }
 
@@ -67,7 +67,7 @@ class ThemeNotifier extends ChangeNotifier {
     _themeMode = mode;
     notifyListeners();
 
-    final themeValue = _themeMode == ThemeMode.dark ? 'dark' : 'light';
+    final themeValue = _serializeThemeMode(mode);
     try {
       final userId = await ApiService.getStoredUserId();
       if (userId != null) {
@@ -79,6 +79,18 @@ class ThemeNotifier extends ChangeNotifier {
       _themeMode = previous;
       notifyListeners();
       throw error;
+    }
+  }
+
+  String _serializeThemeMode(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.dark:
+        return 'dark';
+      case ThemeMode.light:
+        return 'light';
+      case ThemeMode.system:
+      default:
+        return 'system';
     }
   }
 
@@ -95,6 +107,14 @@ class ThemeNotifier extends ChangeNotifier {
           'night',
         }.contains(normalized)) {
       return ThemeMode.dark;
+    }
+    if (normalized.contains('system') ||
+        normalized.contains('auto') ||
+        normalized.contains('device') ||
+        normalized.contains('систем') ||
+        normalized.contains('авто') ||
+        normalized.contains('умолч')) {
+      return ThemeMode.system;
     }
     return ThemeMode.light;
   }

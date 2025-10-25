@@ -101,6 +101,12 @@ REST API для «умного» гардероба, построенный на
 -- Добавить пол пользователя
 ALTER TABLE users ADD COLUMN IF NOT EXISTS gender VARCHAR(16);
 
+-- Контактный телефон пользователя
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(32);
+UPDATE users
+SET phone = NULL
+WHERE phone IS NOT NULL AND TRIM(phone) IN ('', 'null', 'undefined');
+
 -- Таблица локаций гардероба
 CREATE TABLE IF NOT EXISTS wardrobe_locations (
     id SERIAL PRIMARY KEY,

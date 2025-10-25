@@ -424,12 +424,12 @@ def generate_mannequin(
         image_response.data[0].b64_json, user_id, location_segment, request
     )
 
-    serialized_items = [
-        schemas.MannequinItem.model_validate(
-            item, from_attributes=True
-        ).model_dump()
+    mannequin_items = [
+        schemas.MannequinItem.model_validate(item, from_attributes=True)
         for item in selected_items
     ]
+
+    serialized_items = [item.model_dump() for item in mannequin_items]
 
     mannequin_record = models.MannequinImage(
         user_id=user_id,
@@ -455,8 +455,5 @@ def generate_mannequin(
             condition=weather.condition,
             wind_speed=_coerce_int(weather.wind_speed),
         ),
-        items=[
-            schemas.MannequinItem.model_validate(item, from_attributes=True)
-            for item in selected_items
-        ],
+        items=mannequin_items,
     )

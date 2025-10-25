@@ -142,6 +142,17 @@ def _normalize_language(value: Optional[str]) -> str:
     )
 
 
+def _normalize_phone(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+
+    cleaned = value.strip()
+    if not cleaned or cleaned.lower() in {"null", "undefined"}:
+        return None
+
+    return cleaned
+
+
 def create_access_token(data: dict):
     to_encode = data.copy()
     expire = datetime.datetime.utcnow() + datetime.timedelta(days=1)
@@ -162,6 +173,7 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     new_user = models.User(
         name=user.name,
         email=user.email,
+        phone=_normalize_phone(user.phone),
         password_hash=hashed_password,
         gender=_normalize_gender(user.gender),
         theme_preference=_normalize_theme(user.theme_preference),
@@ -223,6 +235,8 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
         user.name = updates.name
     if updates.email is not None:
         user.email = updates.email
+    if updates.phone is not None:
+        user.phone = _normalize_phone(updates.phone)
     if updates.password is not None:
         _ensure_password_fits_backend(updates.password)
         user.password_hash = _hash_password(updates.password)

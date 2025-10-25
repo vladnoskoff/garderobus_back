@@ -2,23 +2,80 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../../services/api_service.dart';
-import '../../../widgets/rounded_back_button.dart';
 import '../home_settings/Location_Picker_Screen.dart';
 
-class PlacesScreen extends StatefulWidget {
-  const PlacesScreen({super.key});
-
-  @override
-  State<PlacesScreen> createState() => _PlacesScreenState();
+Future<void> showPlacesSettingsSheet(BuildContext context) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+    ),
+    builder: (sheetContext) {
+      return FractionallySizedBox(
+        heightFactor: 0.92,
+        child: PlacesSettingsSheet(sheetContext: sheetContext),
+      );
+    },
+  );
 }
 
-class _PlacesScreenState extends State<PlacesScreen> {
+class PlacesSettingsSheet extends StatefulWidget {
+  const PlacesSettingsSheet({required this.sheetContext, super.key});
+
+  final BuildContext sheetContext;
+
+  @override
+  State<PlacesSettingsSheet> createState() => _PlacesSettingsSheetState();
+}
+
+class _PlacesSettingsSheetState extends State<PlacesSettingsSheet> {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   int? _userId;
   List<dynamic> _locations = [];
   bool _isLoading = false;
   String? _homeCoordinates;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    setState(() => _isLoading = true);
+    try {
+      final idString = await _storage.read(key: 'user_id');
+      if (idString == null) return;
+      final parsedId = int.tryParse(idString);
+      if (parsedId == null) return;
+
+      final user = await ApiService.getUser(parsedId);
+      final locations = await ApiService.getWardrobeLocations(parsedId);
+      final mappedLocations =
+          locations.whereType<Map<String, dynamic>>().toList(growable: false);
+
+      if (!mounted) return;
+      setState(() {
+        _userId = parsedId;
+        _locations = mappedLocations;
+        _homeCoordinates = user['location']?.toString();
+      });
+    } catch (e) {
+      _showError('Не удалось загрузить данные: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(widget.sheetContext).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
 
   int? _parseLocationId(dynamic value) {
     if (value is int) return value;
@@ -40,43 +97,6 @@ class _PlacesScreenState extends State<PlacesScreen> {
     return null;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    _initialize();
-  }
-
-  Future<void> _initialize() async {
-    setState(() => _isLoading = true);
-    try {
-      final idString = await _storage.read(key: 'user_id');
-      if (idString == null) return;
-      final parsedId = int.tryParse(idString);
-      if (parsedId == null) return;
-
-      final user = await ApiService.getUser(parsedId);
-      final locations = await ApiService.getWardrobeLocations(parsedId);
-      final mappedLocations =
-          locations.whereType<Map<String, dynamic>>().toList(growable: false);
-
-      setState(() {
-        _userId = parsedId;
-        _locations = mappedLocations;
-        _homeCoordinates = user['location']?.toString();
-      });
-    } catch (e) {
-      _showError('Не удалось загрузить данные: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
   String _formatCoordinates(dynamic latitude, dynamic longitude) {
     if (latitude == null || longitude == null) {
       return 'Координаты не указаны';
@@ -93,6 +113,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
     if (_userId == null) return;
     try {
       final locations = await ApiService.getWardrobeLocations(_userId!);
+      if (!mounted) return;
       setState(() =>
           _locations = locations.whereType<Map<String, dynamic>>().toList());
     } catch (e) {
@@ -118,8 +139,9 @@ class _PlacesScreenState extends State<PlacesScreen> {
     if (result != null) {
       try {
         await ApiService.updateLocation(_userId!, result);
+        if (!mounted) return;
         setState(() => _homeCoordinates = result);
-        ScaffoldMessenger.of(context).showSnackBar(
+        ScaffoldMessenger.of(widget.sheetContext).showSnackBar(
           const SnackBar(content: Text('Домашние координаты обновлены')),
         );
       } catch (e) {
@@ -286,7 +308,7 @@ class _PlacesScreenState extends State<PlacesScreen> {
     }
   }
 
-  Widget _buildHomeCard() {
+  Widget _buildHomeCard(ColorScheme colorScheme, TextTheme textTheme) {
     final coordinatesText =
         (_homeCoordinates != null && _homeCoordinates!.trim().isNotEmpty)
             ? _homeCoordinates!
@@ -296,25 +318,25 @@ class _PlacesScreenState extends State<PlacesScreen> {
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF62DEFA),
-        borderRadius: BorderRadius.circular(15),
+        color: colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Домашние координаты',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            style: textTheme.titleMedium,
           ),
           const SizedBox(height: 8),
           Text(
             coordinatesText,
-            style: const TextStyle(fontSize: 16),
+            style: textTheme.bodyMedium,
           ),
           const SizedBox(height: 12),
           Align(
             alignment: Alignment.centerRight,
-            child: ElevatedButton.icon(
+            child: FilledButton.icon(
               onPressed: _pickHomeCoordinates,
               icon: const Icon(Icons.edit_location_alt),
               label: const Text('Изменить'),
@@ -325,15 +347,19 @@ class _PlacesScreenState extends State<PlacesScreen> {
     );
   }
 
-  Widget _buildLocationTile(Map<String, dynamic> location) {
+  Widget _buildLocationTile(
+    Map<String, dynamic> location,
+    ColorScheme colorScheme,
+    TextTheme textTheme,
+  ) {
     final coords = _formatCoordinates(location['latitude'], location['longitude']);
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      height: 72,
+      height: 80,
       decoration: BoxDecoration(
-        color: const Color(0xFF62DEFA),
-        borderRadius: BorderRadius.circular(15),
+        color: colorScheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
@@ -341,10 +367,10 @@ class _PlacesScreenState extends State<PlacesScreen> {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: const Color(0xFFD9D9D9),
-              borderRadius: BorderRadius.circular(10),
+              color: colorScheme.onSecondaryContainer.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.location_on, color: Colors.black),
+            child: Icon(Icons.location_on, color: colorScheme.onSecondaryContainer),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -354,26 +380,26 @@ class _PlacesScreenState extends State<PlacesScreen> {
               children: [
                 Text(
                   location['name']?.toString() ?? 'Без названия',
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: textTheme.titleMedium,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   coords,
-                  style: const TextStyle(color: Colors.black87, fontSize: 14),
+                  style: textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSecondaryContainer.withOpacity(0.7),
+                  ),
                 ),
               ],
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.edit, color: Colors.black),
+            icon: const Icon(Icons.edit),
+            color: colorScheme.onSecondaryContainer,
             onPressed: () => _showLocationDialog(location: location),
           ),
           IconButton(
-            icon: const Icon(Icons.delete, color: Colors.redAccent),
+            icon: const Icon(Icons.delete),
+            color: colorScheme.error,
             onPressed: () => _deleteLocation(location['id']),
           ),
         ],
@@ -383,41 +409,91 @@ class _PlacesScreenState extends State<PlacesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: const RoundedBackButton(),
-        title: const Text('Места'),
-        centerTitle: true,
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _refreshLocations,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                physics: const AlwaysScrollableScrollPhysics(),
-                children: [
-                  _buildHomeCard(),
-                  if (_locations.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 40),
-                      alignment: Alignment.center,
-                      child: const Text('Локации гардероба пока не добавлены'),
-                    )
-                  else
-                    ..._locations
-                        .whereType<Map<String, dynamic>>()
-                        .map(_buildLocationTile),
-                  const SizedBox(height: 80),
-                ],
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 16,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.center,
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: colorScheme.outlineVariant.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showLocationDialog(),
-        backgroundColor: const Color(0xFFCFDDE0),
-        child: const Icon(
-          Icons.add,
-          color: Colors.black,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Места',
+                    style: textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildHomeCard(colorScheme, textTheme),
+                          if (_locations.isEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 40),
+                              alignment: Alignment.center,
+                              child: const Text('Локации гардероба пока не добавлены'),
+                            )
+                          else
+                            ..._locations
+                                .whereType<Map<String, dynamic>>()
+                                .map((location) => _buildLocationTile(
+                                      location,
+                                      colorScheme,
+                                      textTheme,
+                                    )),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            onPressed: () => _showLocationDialog(),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Добавить место'),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () {
+                Navigator.of(context).maybePop();
+              },
+              child: const Text('Готово'),
+            ),
+          ],
         ),
       ),
     );
