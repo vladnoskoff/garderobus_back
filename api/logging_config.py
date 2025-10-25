@@ -11,9 +11,8 @@ from pythonjsonlogger import jsonlogger
 
 
 DEFAULT_LOG_LEVEL = "INFO"
-DEFAULT_LOG_PATH = str(
-    (Path(__file__).resolve().parents[1] / "logs" / "garderobus" / "api.log").absolute()
-)
+DEFAULT_LOG_PATH = "/www/wwwroot/api/chkaf_update/log/garderobus/api.log"
+
 
 
 class _JsonFormatter(jsonlogger.JsonFormatter):

@@ -1,5 +1,5 @@
 <?php
-$apiBaseUrl = getenv('API_BASE_URL') ?: 'http://localhost:8000';
+$apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
 ?>
 <!DOCTYPE html>
 <html lang="ru">

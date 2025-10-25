@@ -1,6 +1,6 @@
 (function () {
   const config = window.APP_CONFIG || {};
-  const apiBaseUrl = config.apiBaseUrl || "http://localhost:8000";
+  const apiBaseUrl = config.apiBaseUrl || "http://aapanel-api.noksovsteam.ru";
 
   const token = localStorage.getItem("authToken");
   if (token) {
