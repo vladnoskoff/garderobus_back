@@ -162,7 +162,10 @@ def _load_clothes(user_id: int, location_id: Optional[int]) -> List[models.Cloth
     with db_session(read_only=True) as session:
         query = (
             session.query(models.Clothes)
-            .options(joinedload(models.Clothes.location))
+            .options(
+                joinedload(models.Clothes.location),
+                joinedload(models.Clothes.metadata_entry),
+            )
             .filter(models.Clothes.user_id == user_id)
         )
         if location_id is not None:
@@ -182,6 +185,9 @@ def _load_clothes(user_id: int, location_id: Optional[int]) -> List[models.Cloth
         if not clothes:
             raise TaskError("Одежда не найдена", status_code=404)
         for item in clothes:
+            # Access related data before expunging to avoid detached lazy loads.
+            if item.metadata_entry is not None:
+                _ = item.metadata_entry.data
             session.expunge(item)
         return clothes
 
