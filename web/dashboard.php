@@ -27,7 +27,10 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
             <h2 class="page-title">Пользователи и статистика</h2>
             <p class="text-muted">Обзор активности гардероба по всем учетным записям.</p>
           </div>
-          <button class="primary" type="button" id="refresh-button">Обновить</button>
+          <div class="flex gap-sm">
+            <button class="secondary" type="button" id="refresh-button">Обновить</button>
+            <button class="primary" type="button" id="create-user-button">Добавить пользователя</button>
+          </div>
         </div>
 
         <section class="grid" style="margin-bottom: 32px;">
@@ -53,60 +56,6 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
           </div>
         </section>
 
-        <section class="card" style="margin-bottom: 24px;">
-          <h3 style="margin-top: 0;">Создание пользователя</h3>
-          <p class="text-muted" style="margin-top: 8px;">
-            Добавьте нового участника, чтобы он мог пользоваться приложением и админ-панелью.
-          </p>
-          <form id="create-user-form" class="grid" style="margin-top: 20px; gap: 16px;">
-            <label class="flex-column gap-sm">
-              <span>Имя</span>
-              <input name="name" type="text" placeholder="Иван Иванов" required />
-            </label>
-            <label class="flex-column gap-sm">
-              <span>Email</span>
-              <input name="email" type="email" placeholder="user@example.com" required />
-            </label>
-            <label class="flex-column gap-sm">
-              <span>Пароль</span>
-              <input name="password" type="password" placeholder="Минимум 6 символов" required />
-            </label>
-            <label class="flex-column gap-sm">
-              <span>Телефон</span>
-              <input name="phone" type="text" placeholder="+7 900 000-00-00" />
-            </label>
-            <label class="flex-column gap-sm">
-              <span>Пол</span>
-              <input name="gender" type="text" placeholder="female / male" />
-            </label>
-            <label class="flex-column gap-sm">
-              <span>PIN-код (необязательно)</span>
-              <input name="pin_code" type="text" placeholder="4-8 цифр" />
-            </label>
-            <label class="flex-column gap-sm">
-              <span>Тема оформления</span>
-              <select name="theme_preference" style="padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db;">
-                <option value="light">Светлая</option>
-                <option value="dark">Темная</option>
-              </select>
-            </label>
-            <label class="flex-column gap-sm">
-              <span>Язык интерфейса</span>
-              <select name="language_preference" style="padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db;">
-                <option value="ru">Русский</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-            <div class="flex" style="align-items: flex-end;">
-              <button class="primary" type="submit" id="create-user-submit">Добавить</button>
-            </div>
-          </form>
-          <div id="create-user-error" class="alert hidden" style="margin-top: 16px;"></div>
-          <div id="create-user-success" class="alert success hidden" style="margin-top: 16px;">
-            Пользователь успешно создан.
-          </div>
-        </section>
-
         <section class="card">
           <div class="flex-between" style="margin-bottom: 20px;">
             <h3 style="margin: 0;">Статистика пользователей</h3>
@@ -126,6 +75,8 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
                   <th>Примерки (30 дней)</th>
                   <th>Всего примерок</th>
                   <th>Новые вещи (30 дней)</th>
+                  <th>Очередь обработки</th>
+                  <th>Локации</th>
                   <th>Последнее использование</th>
                   <th>Популярные вещи</th>
                   <th class="actions"></th>
@@ -136,6 +87,162 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
           </div>
         </section>
       </main>
+    </div>
+
+    <div class="drawer-overlay hidden" id="drawer-overlay" role="presentation">
+      <div class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
+        <div class="drawer-header">
+          <h3 id="drawer-title" class="drawer-title"></h3>
+          <button class="icon-button" type="button" id="drawer-close" aria-label="Закрыть панель">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="drawer-body" id="drawer-content">
+          <section id="drawer-create-user" class="drawer-section hidden">
+            <p class="text-muted" style="margin-top: 0;">
+              Добавьте нового участника, чтобы он мог пользоваться приложением и админ-панелью.
+            </p>
+            <form id="create-user-form" class="grid drawer-form-grid">
+              <label class="flex-column gap-sm">
+                <span>Имя</span>
+                <input name="name" type="text" placeholder="Иван Иванов" required />
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Email</span>
+                <input name="email" type="email" placeholder="user@example.com" required />
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Пароль</span>
+                <input name="password" type="password" placeholder="Минимум 6 символов" required />
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Телефон</span>
+                <input name="phone" type="text" placeholder="+7 900 000-00-00" />
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Пол</span>
+                <input name="gender" type="text" placeholder="female / male" />
+              </label>
+              <label class="flex-column gap-sm">
+                <span>PIN-код (необязательно)</span>
+                <input name="pin_code" type="text" placeholder="4-8 цифр" />
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Тема оформления</span>
+                <select name="theme_preference">
+                  <option value="light">Светлая</option>
+                  <option value="dark">Темная</option>
+                </select>
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Язык интерфейса</span>
+                <select name="language_preference">
+                  <option value="ru">Русский</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+              <div class="drawer-form-actions">
+                <button class="primary" type="submit" id="create-user-submit">Добавить</button>
+              </div>
+            </form>
+            <div id="create-user-error" class="alert hidden" style="margin-top: 16px;"></div>
+            <div id="create-user-success" class="alert success hidden" style="margin-top: 16px;">
+              Пользователь успешно создан.
+            </div>
+          </section>
+
+          <section id="drawer-user-detail" class="drawer-section hidden">
+            <div class="detail-header">
+              <div>
+                <h3 id="detail-name" class="detail-name"></h3>
+                <div class="detail-contact">
+                  <span id="detail-email"></span>
+                  <span id="detail-phone"></span>
+                </div>
+              </div>
+              <div class="detail-pill" id="detail-queue-badge">—</div>
+            </div>
+
+            <div class="detail-meta">
+              <div class="detail-meta-item">
+                <span class="detail-meta-label">Пол</span>
+                <strong id="detail-gender">—</strong>
+              </div>
+              <div class="detail-meta-item">
+                <span class="detail-meta-label">Тема</span>
+                <strong id="detail-theme">—</strong>
+              </div>
+              <div class="detail-meta-item">
+                <span class="detail-meta-label">Язык</span>
+                <strong id="detail-language">—</strong>
+              </div>
+              <div class="detail-meta-item">
+                <span class="detail-meta-label">PIN-код</span>
+                <strong id="detail-pin">—</strong>
+              </div>
+            </div>
+
+            <div class="detail-stats-grid">
+              <div class="detail-stat">
+                <span class="detail-stat-label">Всего вещей</span>
+                <strong id="detail-total-clothes">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Фотографии</span>
+                <strong id="detail-total-clothes-images">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Манекены</span>
+                <strong id="detail-total-mannequins">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Примерки 30 дней</span>
+                <strong id="detail-wear-30">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Всего примерок</span>
+                <strong id="detail-wear-total">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Новые вещи 30 дней</span>
+                <strong id="detail-new-clothes-30">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Локаций</span>
+                <strong id="detail-locations-count">0</strong>
+              </div>
+              <div class="detail-stat">
+                <span class="detail-stat-label">Очередь</span>
+                <strong id="detail-queue-value">0</strong>
+              </div>
+            </div>
+
+            <div class="detail-dates">
+              <div>
+                <span class="detail-meta-label">Последняя примерка</span>
+                <strong id="detail-last-wear">—</strong>
+              </div>
+              <div>
+                <span class="detail-meta-label">Последний манекен</span>
+                <strong id="detail-last-mannequin">—</strong>
+              </div>
+            </div>
+
+            <div class="detail-section">
+              <h4>Популярные вещи</h4>
+              <div id="detail-top-items" class="detail-top-items"></div>
+            </div>
+
+            <div class="detail-section">
+              <h4>Локации и гардеробы</h4>
+              <p id="detail-loading" class="text-muted hidden">Загрузка данных...</p>
+              <div id="detail-error" class="alert hidden" style="margin-bottom: 16px;"></div>
+              <p id="detail-no-locations" class="text-muted hidden">Локации ещё не добавлены.</p>
+              <div id="detail-locations-list" class="location-list"></div>
+            </div>
+          </section>
+        </div>
+      </div>
     </div>
 
     <script>
