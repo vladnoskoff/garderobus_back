@@ -11,6 +11,7 @@
   const elements = {
     logoutButton: document.getElementById("logout-button"),
     refreshButton: document.getElementById("refresh-button"),
+    createUserButton: document.getElementById("create-user-button"),
     loadingIndicator: document.getElementById("loading-indicator"),
     loadError: document.getElementById("load-error"),
     tableWrapper: document.getElementById("users-table-wrapper"),
@@ -28,12 +29,113 @@
     createSubmit: document.getElementById("create-user-submit"),
     createError: document.getElementById("create-user-error"),
     createSuccess: document.getElementById("create-user-success"),
+    drawerOverlay: document.getElementById("drawer-overlay"),
+    drawer: document.getElementById("drawer"),
+    drawerTitle: document.getElementById("drawer-title"),
+    drawerClose: document.getElementById("drawer-close"),
+    drawerCreateSection: document.getElementById("drawer-create-user"),
+    drawerDetailSection: document.getElementById("drawer-user-detail"),
+    detailName: document.getElementById("detail-name"),
+    detailEmail: document.getElementById("detail-email"),
+    detailPhone: document.getElementById("detail-phone"),
+    detailGender: document.getElementById("detail-gender"),
+    detailTheme: document.getElementById("detail-theme"),
+    detailLanguage: document.getElementById("detail-language"),
+    detailPin: document.getElementById("detail-pin"),
+    detailQueueBadge: document.getElementById("detail-queue-badge"),
+    detailTotalClothes: document.getElementById("detail-total-clothes"),
+    detailTotalClothesImages: document.getElementById("detail-total-clothes-images"),
+    detailTotalMannequins: document.getElementById("detail-total-mannequins"),
+    detailWear30: document.getElementById("detail-wear-30"),
+    detailWearTotal: document.getElementById("detail-wear-total"),
+    detailNewClothes30: document.getElementById("detail-new-clothes-30"),
+    detailLocationsCount: document.getElementById("detail-locations-count"),
+    detailQueueValue: document.getElementById("detail-queue-value"),
+    detailLastWear: document.getElementById("detail-last-wear"),
+    detailLastMannequin: document.getElementById("detail-last-mannequin"),
+    detailTopItems: document.getElementById("detail-top-items"),
+    detailLocationsList: document.getElementById("detail-locations-list"),
+    detailLocationsEmpty: document.getElementById("detail-no-locations"),
+    detailError: document.getElementById("detail-error"),
+    detailLoading: document.getElementById("detail-loading"),
+  };
+
+  const state = {
+    drawerMode: null,
+    activeDetailUserId: null,
+    detailAbortController: null,
   };
 
   function handleUnauthorized() {
     localStorage.removeItem("authToken");
     localStorage.removeItem("userId");
     window.location.replace("index.php");
+  }
+
+  function setDrawerVisibility(open) {
+    if (!elements.drawerOverlay || !elements.drawer) {
+      return;
+    }
+    if (open) {
+      elements.drawerOverlay.classList.remove("hidden");
+      requestAnimationFrame(() => {
+        elements.drawerOverlay?.classList.add("active");
+        elements.drawer?.classList.add("active");
+      });
+    } else {
+      elements.drawerOverlay.classList.remove("active");
+      elements.drawer.classList.remove("active");
+      window.setTimeout(() => {
+        if (!elements.drawerOverlay?.classList.contains("active")) {
+          elements.drawerOverlay?.classList.add("hidden");
+        }
+      }, 220);
+    }
+  }
+
+  function showDrawerSection(section) {
+    if (!elements.drawer) {
+      return;
+    }
+    const sections = [elements.drawerCreateSection, elements.drawerDetailSection];
+    sections.forEach((item) => {
+      if (item) {
+        toggleHidden(item, item !== section);
+      }
+    });
+  }
+
+  function openDrawer(mode) {
+    state.drawerMode = mode;
+    if (elements.drawerTitle) {
+      elements.drawerTitle.textContent =
+        mode === "create" ? "Создание пользователя" : "Карточка пользователя";
+    }
+    setDrawerVisibility(true);
+    if (mode === "create") {
+      showDrawerSection(elements.drawerCreateSection);
+      toggleHidden(elements.createError, true);
+      toggleHidden(elements.createSuccess, true);
+    } else {
+      showDrawerSection(elements.drawerDetailSection);
+    }
+  }
+
+  function closeDrawer() {
+    state.drawerMode = null;
+    state.activeDetailUserId = null;
+    if (state.detailAbortController) {
+      state.detailAbortController.abort();
+      state.detailAbortController = null;
+    }
+    setDrawerVisibility(false);
+    showDrawerSection(null);
+    if (elements.detailError) {
+      toggleHidden(elements.detailError, true);
+    }
+    if (elements.detailLoading) {
+      toggleHidden(elements.detailLoading, true);
+    }
   }
 
   function toggleHidden(element, hidden) {
@@ -91,6 +193,13 @@
     return container;
   }
 
+  function renderQueueBadge(count) {
+    const badge = document.createElement("span");
+    badge.className = "status-badge " + (count > 0 ? "warning" : "success");
+    badge.textContent = count > 0 ? `${count} в очереди` : "Очередь пуста";
+    return badge;
+  }
+
   function renderUsers(users) {
     if (!elements.tableBody) {
       return;
@@ -132,6 +241,14 @@
       row.appendChild(createTextCell(user.total_wear_events));
       row.appendChild(createTextCell(user.new_clothes_last_30_days));
 
+      const queueCell = document.createElement("td");
+      queueCell.appendChild(renderQueueBadge(user.pending_metadata_items || 0));
+      row.appendChild(queueCell);
+
+      const locationCell = document.createElement("td");
+      locationCell.textContent = String(user.locations_count ?? 0);
+      row.appendChild(locationCell);
+
       const lastWearCell = document.createElement("td");
       const datesContainer = document.createElement("div");
       datesContainer.className = "flex-column gap-sm";
@@ -151,6 +268,16 @@
 
       const actionsCell = document.createElement("td");
       actionsCell.className = "actions";
+
+      const detailButton = document.createElement("button");
+      detailButton.className = "secondary";
+      detailButton.type = "button";
+      detailButton.textContent = "Подробнее";
+      detailButton.addEventListener("click", () => {
+        void loadUserDetail(user.id);
+      });
+      actionsCell.appendChild(detailButton);
+
       const deleteButton = document.createElement("button");
       deleteButton.className = "danger";
       deleteButton.type = "button";
@@ -169,6 +296,114 @@
 
       elements.tableBody.appendChild(row);
     });
+  }
+
+  function setDetailQueueBadge(value) {
+    if (!elements.detailQueueBadge) {
+      return;
+    }
+    elements.detailQueueBadge.textContent = value > 0 ? `${value} в очереди` : "Очередь пуста";
+    elements.detailQueueBadge.className =
+      "detail-pill" + (value > 0 ? " detail-pill-warning" : " detail-pill-success");
+  }
+
+  function renderLocationCard(location) {
+    const card = document.createElement("div");
+    card.className = "location-card";
+
+    const header = document.createElement("div");
+    header.className = "location-card-header";
+    const title = document.createElement("strong");
+    title.textContent = location.name || "Без названия";
+    header.appendChild(title);
+
+    if (location.created_at && !location.is_virtual) {
+      const meta = document.createElement("span");
+      meta.className = "location-meta";
+      meta.textContent = `Создана: ${formatDate(location.created_at, false)}`;
+      header.appendChild(meta);
+    }
+
+    card.appendChild(header);
+
+    if (location.pending_metadata_items > 0) {
+      const queueBadge = renderQueueBadge(location.pending_metadata_items);
+      card.appendChild(queueBadge);
+    }
+
+    const stats = document.createElement("dl");
+    stats.className = "location-stats";
+
+    function appendStat(label, value) {
+      const term = document.createElement("dt");
+      term.textContent = label;
+      stats.appendChild(term);
+      const data = document.createElement("dd");
+      data.textContent = String(value ?? 0);
+      stats.appendChild(data);
+    }
+
+    appendStat("Вещи", location.total_clothes);
+    appendStat("Новые", location.new_clothes_last_30_days);
+    appendStat("Фото", location.total_clothes_images);
+    appendStat("Примерки", location.total_wear_events);
+    appendStat("Манекены", location.mannequins_generated);
+    appendStat("Очередь", location.pending_metadata_items);
+
+    card.appendChild(stats);
+    return card;
+  }
+
+  function renderUserDetail(detail) {
+    if (elements.detailError) {
+      toggleHidden(elements.detailError, true);
+    }
+    setText(elements.detailName, detail.name || "Без имени");
+    setText(elements.detailEmail, detail.email || "—");
+    setText(elements.detailPhone, detail.phone || "Телефон не указан");
+
+    const genderMap = { female: "Женский", male: "Мужской" };
+    setText(elements.detailGender, genderMap[detail.gender] || detail.gender || "Не указан");
+
+    const themeMap = { light: "Светлая", dark: "Тёмная" };
+    setText(elements.detailTheme, themeMap[detail.theme_preference] || detail.theme_preference);
+
+    const languageMap = { ru: "Русский", en: "English" };
+    setText(elements.detailLanguage, languageMap[detail.language_preference] || detail.language_preference);
+
+    setText(elements.detailPin, detail.has_pin ? "Установлен" : "Нет");
+
+    setText(elements.detailTotalClothes, detail.total_clothes ?? 0);
+    setText(elements.detailTotalClothesImages, detail.total_clothes_images ?? 0);
+    setText(elements.detailTotalMannequins, detail.total_mannequins ?? 0);
+    setText(elements.detailWear30, detail.wear_events_last_30_days ?? 0);
+    setText(elements.detailWearTotal, detail.total_wear_events ?? 0);
+    setText(elements.detailNewClothes30, detail.new_clothes_last_30_days ?? 0);
+    setText(elements.detailLocationsCount, detail.locations_count ?? 0);
+    setText(elements.detailQueueValue, detail.pending_metadata_items ?? 0);
+
+    setText(elements.detailLastWear, formatDate(detail.last_wear_at, true));
+    setText(elements.detailLastMannequin, formatDate(detail.last_mannequin_at, true));
+
+    setDetailQueueBadge(detail.pending_metadata_items || 0);
+
+    if (elements.detailTopItems) {
+      elements.detailTopItems.innerHTML = "";
+      elements.detailTopItems.appendChild(formatTopItems(detail));
+    }
+
+    if (elements.detailLocationsList) {
+      elements.detailLocationsList.innerHTML = "";
+      const locations = Array.isArray(detail.locations) ? detail.locations : [];
+      if (locations.length === 0) {
+        toggleHidden(elements.detailLocationsEmpty, false);
+      } else {
+        toggleHidden(elements.detailLocationsEmpty, true);
+        locations.forEach((location) => {
+          elements.detailLocationsList?.appendChild(renderLocationCard(location));
+        });
+      }
+    }
   }
 
   function updateStats(users) {
@@ -224,6 +459,80 @@
     }
   }
 
+  async function loadUserDetail(userId, options) {
+    const keepDrawer = options?.keepDrawerOpen ?? false;
+    state.activeDetailUserId = userId;
+
+    if (!keepDrawer) {
+      openDrawer("detail");
+    } else {
+      showDrawerSection(elements.drawerDetailSection);
+    }
+
+    if (elements.detailError) {
+      toggleHidden(elements.detailError, true);
+    }
+    if (elements.detailLoading) {
+      elements.detailLoading.textContent = "Загрузка данных...";
+      toggleHidden(elements.detailLoading, false);
+    }
+    if (elements.detailLocationsList) {
+      elements.detailLocationsList.innerHTML = "";
+    }
+    if (elements.detailLocationsEmpty) {
+      toggleHidden(elements.detailLocationsEmpty, true);
+    }
+    if (elements.detailTopItems) {
+      elements.detailTopItems.innerHTML = "";
+    }
+    if (elements.detailQueueBadge) {
+      elements.detailQueueBadge.className = "detail-pill";
+      elements.detailQueueBadge.textContent = "Загрузка...";
+    }
+
+    if (state.detailAbortController) {
+      state.detailAbortController.abort();
+    }
+    const controller = new AbortController();
+    state.detailAbortController = controller;
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/users/${userId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        signal: controller.signal,
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+
+      const detail = await response.json();
+      renderUserDetail(detail);
+    } catch (error) {
+      if (error.name === "AbortError") {
+        return;
+      }
+      console.error(error);
+      if (elements.detailError) {
+        elements.detailError.textContent = "Не удалось загрузить карточку пользователя.";
+        toggleHidden(elements.detailError, false);
+      }
+    } finally {
+      if (elements.detailLoading) {
+        toggleHidden(elements.detailLoading, true);
+      }
+      if (state.detailAbortController === controller) {
+        state.detailAbortController = null;
+      }
+    }
+  }
+
   async function loadUsers() {
     if (elements.loadingIndicator) {
       elements.loadingIndicator.textContent = "Загрузка...";
@@ -265,6 +574,10 @@
       if (elements.loadingIndicator) {
         toggleHidden(elements.loadingIndicator, true);
       }
+
+      if (state.drawerMode === "detail" && state.activeDetailUserId) {
+        void loadUserDetail(state.activeDetailUserId, { keepDrawerOpen: true });
+      }
     }
   }
 
@@ -281,6 +594,32 @@
       void loadUsers();
     });
   }
+
+  if (elements.createUserButton) {
+    elements.createUserButton.addEventListener("click", () => {
+      openDrawer("create");
+    });
+  }
+
+  if (elements.drawerClose) {
+    elements.drawerClose.addEventListener("click", () => {
+      closeDrawer();
+    });
+  }
+
+  if (elements.drawerOverlay) {
+    elements.drawerOverlay.addEventListener("click", (event) => {
+      if (event.target === elements.drawerOverlay) {
+        closeDrawer();
+      }
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.drawerMode) {
+      closeDrawer();
+    }
+  });
 
   if (elements.createForm) {
     elements.createForm.addEventListener("submit", async (event) => {
