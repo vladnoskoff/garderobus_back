@@ -220,6 +220,29 @@ class AdminUserSummary(BaseModel):
     last_wear_at: Optional[datetime] = None
     last_mannequin_at: Optional[datetime] = None
     top_worn_items: List[AdminUserUsageItem] = Field(default_factory=list)
+    locations_count: int = 0
+    pending_metadata_items: int = 0
+
+
+class AdminUserLocationDetail(BaseModel):
+    id: Optional[int]
+    name: str
+    created_at: Optional[datetime] = None
+    total_clothes: int
+    new_clothes_last_30_days: int
+    total_clothes_images: int
+    total_wear_events: int
+    mannequins_generated: int
+    pending_metadata_items: int
+    is_virtual: bool = False
+
+
+class AdminUserDetail(AdminUserSummary):
+    theme_preference: str
+    language_preference: str
+    gender: Optional[str] = None
+    has_pin: bool = False
+    locations: List[AdminUserLocationDetail] = Field(default_factory=list)
 
 
 class WardrobeLocationUpdate(BaseModel):

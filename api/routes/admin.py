@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from sqlalchemy.sql import func
 
 import models
@@ -43,39 +44,7 @@ def _get_current_user(
     return user
 
 
-@router.post("/login")
-def admin_login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
-    """Делегируем авторизацию стандартному пользовательскому логину."""
-
-    return user_routes.login(credentials, db)  # type: ignore[arg-type]
-
-
-@router.post("/users", response_model=schemas.UserResponse)
-def create_user(
-    payload: schemas.UserCreate,
-    _: models.User = Depends(_get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Создание пользователя с использованием бизнес-логики пользовательского модуля."""
-
-    return user_routes.register(payload, db)  # type: ignore[arg-type]
-
-
-@router.delete("/users/{user_id}")
-def remove_user(
-    user_id: int,
-    _: models.User = Depends(_get_current_user),
-    db: Session = Depends(get_db),
-):
-    return user_routes.delete_user(user_id, db)
-
-
-@router.get("/users/summary", response_model=List[schemas.AdminUserSummary])
-def get_users_summary(
-    _: models.User = Depends(_get_current_user),
-    db: Session = Depends(get_read_db),
-) -> List[schemas.AdminUserSummary]:
-    users = db.query(models.User).order_by(models.User.id).all()
+def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[schemas.AdminUserSummary]:
     if not users:
         return []
 
@@ -154,6 +123,30 @@ def get_users_summary(
         .all()
     )
 
+    location_counts = dict(
+        db.query(models.WardrobeLocation.user_id, func.count(models.WardrobeLocation.id))
+        .filter(models.WardrobeLocation.user_id.in_(user_ids))
+        .group_by(models.WardrobeLocation.user_id)
+        .all()
+    )
+
+    pending_metadata_counts = dict(
+        db.query(models.Clothes.user_id, func.count(models.Clothes.id))
+        .outerjoin(
+            models.ClothesMetadata,
+            models.ClothesMetadata.clothes_id == models.Clothes.id,
+        )
+        .filter(
+            models.Clothes.user_id.in_(user_ids),
+            or_(
+                models.ClothesMetadata.clothes_id.is_(None),
+                models.ClothesMetadata.data.is_(None),
+            ),
+        )
+        .group_by(models.Clothes.user_id)
+        .all()
+    )
+
     summaries: List[schemas.AdminUserSummary] = []
 
     for user in users:
@@ -196,7 +189,187 @@ def get_users_summary(
                 last_wear_at=last_wear_dates.get(user.id),
                 last_mannequin_at=last_mannequin_dates.get(user.id),
                 top_worn_items=top_worn_items,
+                locations_count=location_counts.get(user.id, 0),
+                pending_metadata_items=pending_metadata_counts.get(user.id, 0),
             )
         )
 
     return summaries
+
+
+def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUserLocationDetail]:
+    locations = (
+        db.query(models.WardrobeLocation)
+        .filter(models.WardrobeLocation.user_id == user_id)
+        .order_by(models.WardrobeLocation.created_at.asc())
+        .all()
+    )
+
+    last_30_days = datetime.utcnow() - timedelta(days=30)
+
+    clothes_by_location = dict(
+        db.query(models.Clothes.location_id, func.count(models.Clothes.id))
+        .filter(models.Clothes.user_id == user_id)
+        .group_by(models.Clothes.location_id)
+        .all()
+    )
+
+    new_clothes_by_location = dict(
+        db.query(models.Clothes.location_id, func.count(models.Clothes.id))
+        .filter(
+            models.Clothes.user_id == user_id,
+            models.Clothes.created_at >= last_30_days,
+        )
+        .group_by(models.Clothes.location_id)
+        .all()
+    )
+
+    images_by_location = dict(
+        db.query(models.Clothes.location_id, func.count(models.ClothesImage.id))
+        .join(models.ClothesImage, models.ClothesImage.clothes_id == models.Clothes.id)
+        .filter(models.Clothes.user_id == user_id)
+        .group_by(models.Clothes.location_id)
+        .all()
+    )
+
+    mannequins_by_location = dict(
+        db.query(models.MannequinImage.location_id, func.count(models.MannequinImage.id))
+        .filter(models.MannequinImage.user_id == user_id)
+        .group_by(models.MannequinImage.location_id)
+        .all()
+    )
+
+    wear_by_location = dict(
+        db.query(models.Clothes.location_id, func.count(models.WearHistory.id))
+        .join(models.WearHistory, models.WearHistory.clothing_id == models.Clothes.id)
+        .filter(models.Clothes.user_id == user_id)
+        .group_by(models.Clothes.location_id)
+        .all()
+    )
+
+    pending_by_location = dict(
+        db.query(models.Clothes.location_id, func.count(models.Clothes.id))
+        .outerjoin(
+            models.ClothesMetadata,
+            models.ClothesMetadata.clothes_id == models.Clothes.id,
+        )
+        .filter(
+            models.Clothes.user_id == user_id,
+            or_(
+                models.ClothesMetadata.clothes_id.is_(None),
+                models.ClothesMetadata.data.is_(None),
+            ),
+        )
+        .group_by(models.Clothes.location_id)
+        .all()
+    )
+
+    details: List[schemas.AdminUserLocationDetail] = []
+
+    for location in locations:
+        details.append(
+            schemas.AdminUserLocationDetail(
+                id=location.id,
+                name=location.name,
+                created_at=location.created_at,
+                total_clothes=clothes_by_location.get(location.id, 0),
+                new_clothes_last_30_days=new_clothes_by_location.get(location.id, 0),
+                total_clothes_images=images_by_location.get(location.id, 0),
+                total_wear_events=wear_by_location.get(location.id, 0),
+                mannequins_generated=mannequins_by_location.get(location.id, 0),
+                pending_metadata_items=pending_by_location.get(location.id, 0),
+            )
+        )
+
+    has_unassigned = any(
+        mapping.get(None, 0) > 0
+        for mapping in (
+            clothes_by_location,
+            new_clothes_by_location,
+            images_by_location,
+            wear_by_location,
+            mannequins_by_location,
+            pending_by_location,
+        )
+    )
+
+    if has_unassigned:
+        details.insert(
+            0,
+            schemas.AdminUserLocationDetail(
+                id=None,
+                name="Без локации",
+                created_at=None,
+                total_clothes=clothes_by_location.get(None, 0),
+                new_clothes_last_30_days=new_clothes_by_location.get(None, 0),
+                total_clothes_images=images_by_location.get(None, 0),
+                total_wear_events=wear_by_location.get(None, 0),
+                mannequins_generated=mannequins_by_location.get(None, 0),
+                pending_metadata_items=pending_by_location.get(None, 0),
+                is_virtual=True,
+            ),
+        )
+
+    return details
+
+
+@router.post("/login")
+def admin_login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+    """Делегируем авторизацию стандартному пользовательскому логину."""
+
+    return user_routes.login(credentials, db)  # type: ignore[arg-type]
+
+
+@router.post("/users", response_model=schemas.UserResponse)
+def create_user(
+    payload: schemas.UserCreate,
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Создание пользователя с использованием бизнес-логики пользовательского модуля."""
+
+    return user_routes.register(payload, db)  # type: ignore[arg-type]
+
+
+@router.delete("/users/{user_id}")
+def remove_user(
+    user_id: int,
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_db),
+):
+    return user_routes.delete_user(user_id, db)
+
+
+@router.get("/users/summary", response_model=List[schemas.AdminUserSummary])
+def get_users_summary(
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_read_db),
+) -> List[schemas.AdminUserSummary]:
+    users = db.query(models.User).order_by(models.User.id).all()
+    return _build_user_summaries(db, users)
+
+
+@router.get("/users/{user_id}", response_model=schemas.AdminUserDetail)
+def get_user_detail(
+    user_id: int,
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_read_db),
+) -> schemas.AdminUserDetail:
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+    summary = _build_user_summaries(db, [user])
+    if not summary:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
+
+    locations = _build_location_details(db, user.id)
+
+    return schemas.AdminUserDetail(
+        **summary[0].model_dump(),
+        theme_preference=user.theme_preference,
+        language_preference=user.language_preference,
+        gender=user.gender,
+        has_pin=user.has_pin,
+        locations=locations,
+    )
