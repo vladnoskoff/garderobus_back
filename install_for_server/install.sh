@@ -142,29 +142,14 @@ sudo -Hiu postgres psql \
     --set=db_password="${DB_PASSWORD}" \
     --set=db_name="${DB_NAME}" <<'EOSQL'
 \set ON_ERROR_STOP on
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'db_user') THEN
-        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password');
-    ELSE
-        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'db_user', :'db_password');
-    END IF;
-END
-$$;
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name') THEN
-        EXECUTE format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user');
-    ELSE
-        EXECUTE format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user');
-    END IF;
-END
-$$;
-DO $$
-BEGIN
-    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'db_name', :'db_user');
-END
-$$;
+SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
+WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'db_user')\gexec
+SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'db_user', :'db_password')\gexec
+SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user')
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name')\gexec
+SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user')
+WHERE EXISTS (SELECT FROM pg_database WHERE datname = :'db_name')\gexec
+SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'db_name', :'db_user')\gexec
 EOSQL
 
 echo "[INFO] Готовим директории логов и медиа..."
