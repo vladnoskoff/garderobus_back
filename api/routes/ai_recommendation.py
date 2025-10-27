@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, Optional
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
 import logging
 from uuid import uuid4
 
@@ -27,6 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
 INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
+INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissionResponse:
@@ -83,7 +87,7 @@ def _build_task_status_response(
     summary="Запуск генерации AI-рекомендаций",
 )
 async def enqueue_recommendation(user_id: int, request: Request) -> schemas.TaskSubmissionResponse:
-    return _enqueue_task(
+    return await _enqueue_task(
         generate_recommendation_task,
         request=request,
         task_kwargs={"user_id": user_id},
@@ -102,14 +106,39 @@ async def enqueue_mannequin_generation(
         default=None, description="Выбор гардероба по локации"
     ),
 ) -> schemas.TaskSubmissionResponse:
-    return _enqueue_task(
+    return await _enqueue_task(
         generate_mannequin_task,
         request=request,
         task_kwargs={"user_id": user_id, "location_id": location_id},
     )
 
 
-def _enqueue_task(
+async def _run_inline_task(
+    task: Callable[..., AsyncResult],
+    task_id: str,
+    task_kwargs: dict[str, Any],
+) -> None:
+    loop = asyncio.get_running_loop()
+
+    def _invoke_task() -> AsyncResult | EagerResult:
+        return task.apply(args=[], kwargs=task_kwargs, throw=False)
+
+    try:
+        inline_result = await loop.run_in_executor(INLINE_EXECUTOR, _invoke_task)
+    except Exception as exc:  # pragma: no cover - defensive, should not happen with throw=False
+        logger.exception("Inline task %s crashed", task_id)
+        INLINE_TASK_RESULTS[task_id] = schemas.TaskStatusResponse(
+            task_id=task_id,
+            status="failure",
+            retries=0,
+            error=schemas.TaskErrorPayload(status_code=500, detail=str(exc)),
+        )
+    else:
+        status_response = _build_task_status_response(task_id, inline_result)
+        INLINE_TASK_RESULTS[task_id] = status_response
+
+
+async def _enqueue_task(
     task: Callable[..., AsyncResult],
     *,
     request: Request,
@@ -124,10 +153,13 @@ def _enqueue_task(
             task_name,
             exc_info=True,
         )
-        inline_result = task.apply(args=[], kwargs=task_kwargs, throw=False)
-        task_id = inline_result.id or f"inline-{uuid4()}"
-        status_response = _build_task_status_response(task_id, inline_result)
-        INLINE_TASK_RESULTS[task_id] = status_response
+        task_id = f"inline-{uuid4()}"
+        INLINE_TASK_RESULTS[task_id] = schemas.TaskStatusResponse(
+            task_id=task_id,
+            status="pending",
+            retries=0,
+        )
+        asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
         return _submission_response(task_id, request)
 
     return _submission_response(async_result.id, request)
