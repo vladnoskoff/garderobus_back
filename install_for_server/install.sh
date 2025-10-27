@@ -137,24 +137,25 @@ systemctl start redis-server
 systemctl start nginx
 
 echo "[INFO] Создаём базу данных PostgreSQL (если отсутствует)..."
-sudo -u postgres psql <<EOSQL
-DO $$
+sudo -Hiu postgres psql --set=DB_USER="${DB_USER}" --set=DB_PASSWORD="${DB_PASSWORD}" --set=DB_NAME="${DB_NAME}" <<'EOSQL'
+\set ON_ERROR_STOP on
+DO $do$
 BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
-        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', '${DB_USER}', '${DB_PASSWORD}');
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'DB_USER') THEN
+        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', :'DB_USER', :'DB_PASSWORD');
     ELSE
-        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', '${DB_USER}', '${DB_PASSWORD}');
+        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'DB_USER', :'DB_PASSWORD');
     END IF;
 END
-$$;
-DO $$
+$do$;
+DO $do$
 BEGIN
-    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') THEN
-        EXECUTE format('CREATE DATABASE %I OWNER %I', '${DB_NAME}', '${DB_USER}');
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = :'DB_NAME') THEN
+        EXECUTE format('CREATE DATABASE %I OWNER %I', :'DB_NAME', :'DB_USER');
     END IF;
 END
-$$;
-GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
+$do$;
+GRANT ALL PRIVILEGES ON DATABASE :"DB_NAME" TO :"DB_USER";
 EOSQL
 
 echo "[INFO] Готовим директории логов и медиа..."

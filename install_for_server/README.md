@@ -60,6 +60,23 @@ sudo systemctl enable garderobus-api garderobus-celery
 sudo systemctl start garderobus-api garderobus-celery
 ```
 
+### Если вы уже запускали старую версию скрипта
+
+Скрипт можно выполнять повторно — он безопасно переустановит зависимости и перепроверит базу данных.
+Если вы запускали предыдущую версию `install.sh` и увидели ошибки `syntax error at or near "19400"`,
+просто повторите установку уже обновлённым скриптом:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/vladnoskoff/garderobus_back/main/install_for_server/bootstrap.sh \
+  | sudo env "REPO_URL=https://github.com/vladnoskoff/garderobus_back.git" \
+             "PROJECT_ROOT=/opt/garderobus_back" \
+             bash
+```
+
+Команда выполнит все шаги повторно: роли/БД будут созданы, зависимости обновлены, unit-файлы перезаписаны и
+выполнится `systemctl daemon-reload`. Никаких дополнительных действий по очистке не требуется. После повторного
+запуска проверьте `.env` и включите сервисы, как описано выше.
+
 Проверить статус можно командой:
 
 ```bash
