@@ -141,42 +141,14 @@ echo "[INFO] Устанавливаем системные зависимост�
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     git curl ca-certificates build-essential \
     python3 python3-venv python3-pip python3-dev \
-    libpq-dev postgresql postgresql-contrib \
+    libpq-dev \
     redis-server nginx
 
-systemctl enable postgresql
 systemctl enable redis-server
 systemctl enable nginx
 
-systemctl start postgresql
 systemctl start redis-server
 systemctl start nginx
-
-echo "[INFO] Создаём базу данных PostgreSQL (если отсутствует)..."
-sudo -Hiu postgres psql <<EOSQL
-\set ON_ERROR_STOP on
-DO $$$$
-DECLARE
-    db_user CONSTANT text := '${DB_USER_LITERAL}';
-    db_password CONSTANT text := '${DB_PASSWORD_LITERAL}';
-    db_name CONSTANT text := '${DB_NAME_LITERAL}';
-BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = db_user) THEN
-        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', db_user, db_password);
-    ELSE
-        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', db_user, db_password);
-    END IF;
-
-    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = db_name) THEN
-        EXECUTE format('CREATE DATABASE %I OWNER %I', db_name, db_user);
-    ELSE
-        EXECUTE format('ALTER DATABASE %I OWNER TO %I', db_name, db_user);
-    END IF;
-
-    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', db_name, db_user);
-END
-$$$$;
-EOSQL
 
 echo "[INFO] Готовим директории логов и медиа..."
 mkdir -p "${LOG_DIR}"
@@ -281,8 +253,8 @@ echo "[INFO] Создаём unit-файл systemd для API..."
 cat <<EOF_API > "${SYSTEMD_DIR}/garderobus-api.service"
 [Unit]
 Description=Garderobus FastAPI service
-After=network.target postgresql.service redis-server.service
-Requires=postgresql.service redis-server.service
+After=network.target redis-server.service
+Requires=redis-server.service
 
 [Service]
 Type=simple
@@ -306,8 +278,8 @@ echo "[INFO] Создаём unit-файл systemd для Celery воркера..
 cat <<EOF_CELERY > "${SYSTEMD_DIR}/garderobus-celery.service"
 [Unit]
 Description=Garderobus Celery worker
-After=network.target redis-server.service postgresql.service
-Requires=redis-server.service postgresql.service
+After=network.target redis-server.service
+Requires=redis-server.service
 
 [Service]
 Type=simple
