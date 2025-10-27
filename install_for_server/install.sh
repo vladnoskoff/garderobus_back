@@ -60,9 +60,25 @@ if [[ ! -d "${API_DIR}" ]]; then
     exit 1
 fi
 
+sql_escape_literal() {
+    local value="${1-}"
+    value="$(printf '%s' "$value" | sed 's/\\/\\\\/g')"
+    value="$(printf '%s' "$value" | sed "s/'/''/g")"
+    printf '%s' "$value"
+}
+
 DB_NAME="${DB_NAME:-smart_closet}"
 DB_USER="${DB_USER:-garderobus}"
 DB_PASSWORD="${DB_PASSWORD:-garderobus_pass}"
+
+if [[ -z "${DB_NAME}" || -z "${DB_USER}" || -z "${DB_PASSWORD}" ]]; then
+    echo "[ERROR] Переменные DB_NAME, DB_USER и DB_PASSWORD не должны быть пустыми." >&2
+    exit 1
+fi
+
+DB_NAME_LITERAL="$(sql_escape_literal "${DB_NAME}")"
+DB_USER_LITERAL="$(sql_escape_literal "${DB_USER}")"
+DB_PASSWORD_LITERAL="$(sql_escape_literal "${DB_PASSWORD}")"
 
 APP_PORT="${APP_PORT:-8000}"
 VENV_DIR="${VENV_DIR:-${PROJECT_ROOT}/.venv}"
@@ -137,19 +153,29 @@ systemctl start redis-server
 systemctl start nginx
 
 echo "[INFO] Создаём базу данных PostgreSQL (если отсутствует)..."
-sudo -Hiu postgres psql \
-    --set=db_user="${DB_USER}" \
-    --set=db_password="${DB_PASSWORD}" \
-    --set=db_name="${DB_NAME}" <<'EOSQL'
+sudo -Hiu postgres psql <<EOSQL
 \set ON_ERROR_STOP on
-SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password')
-WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'db_user')\gexec
-SELECT format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'db_user', :'db_password')\gexec
-SELECT format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user')
-WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name')\gexec
-SELECT format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user')
-WHERE EXISTS (SELECT FROM pg_database WHERE datname = :'db_name')\gexec
-SELECT format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'db_name', :'db_user')\gexec
+DO $$$$
+DECLARE
+    db_user CONSTANT text := '${DB_USER_LITERAL}';
+    db_password CONSTANT text := '${DB_PASSWORD_LITERAL}';
+    db_name CONSTANT text := '${DB_NAME_LITERAL}';
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = db_user) THEN
+        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', db_user, db_password);
+    ELSE
+        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', db_user, db_password);
+    END IF;
+
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = db_name) THEN
+        EXECUTE format('CREATE DATABASE %I OWNER %I', db_name, db_user);
+    ELSE
+        EXECUTE format('ALTER DATABASE %I OWNER TO %I', db_name, db_user);
+    END IF;
+
+    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', db_name, db_user);
+END
+$$$$;
 EOSQL
 
 echo "[INFO] Готовим директории логов и медиа..."
