@@ -32,7 +32,7 @@ INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissionResponse:
     return schemas.TaskSubmissionResponse(
         task_id=task_id,
-        status_url=request.url_for("get_ai_task_status", task_id=task_id),
+        status_url=str(request.url_for("get_ai_task_status", task_id=task_id)),
     )
 
 
