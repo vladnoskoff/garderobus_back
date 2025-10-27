@@ -136,38 +136,33 @@ systemctl start postgresql
 systemctl start redis-server
 systemctl start nginx
 
-sql_escape_literal() {
-    printf "%s" "${1-}" | sed "s/'/''/g"
-}
-
-DB_USER_ESCAPED="$(sql_escape_literal "${DB_USER}")"
-DB_PASSWORD_ESCAPED="$(sql_escape_literal "${DB_PASSWORD}")"
-DB_NAME_ESCAPED="$(sql_escape_literal "${DB_NAME}")"
-
 echo "[INFO] Создаём базу данных PostgreSQL (если отсутствует)..."
-sudo -Hiu postgres psql <<EOSQL
+sudo -Hiu postgres psql \
+    --set=db_user="${DB_USER}" \
+    --set=db_password="${DB_PASSWORD}" \
+    --set=db_name="${DB_NAME}" <<'EOSQL'
 \set ON_ERROR_STOP on
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER_ESCAPED}') THEN
-        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', '${DB_USER_ESCAPED}', '${DB_PASSWORD_ESCAPED}');
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = :'db_user') THEN
+        EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', :'db_user', :'db_password');
     ELSE
-        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', '${DB_USER_ESCAPED}', '${DB_PASSWORD_ESCAPED}');
+        EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', :'db_user', :'db_password');
     END IF;
 END
 $$;
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME_ESCAPED}') THEN
-        EXECUTE format('CREATE DATABASE %I OWNER %I', '${DB_NAME_ESCAPED}', '${DB_USER_ESCAPED}');
+    IF NOT EXISTS (SELECT FROM pg_database WHERE datname = :'db_name') THEN
+        EXECUTE format('CREATE DATABASE %I OWNER %I', :'db_name', :'db_user');
     ELSE
-        EXECUTE format('ALTER DATABASE %I OWNER TO %I', '${DB_NAME_ESCAPED}', '${DB_USER_ESCAPED}');
+        EXECUTE format('ALTER DATABASE %I OWNER TO %I', :'db_name', :'db_user');
     END IF;
 END
 $$;
 DO $$
 BEGIN
-    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', '${DB_NAME_ESCAPED}', '${DB_USER_ESCAPED}');
+    EXECUTE format('GRANT ALL PRIVILEGES ON DATABASE %I TO %I', :'db_name', :'db_user');
 END
 $$;
 EOSQL
