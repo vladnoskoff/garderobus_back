@@ -35,21 +35,23 @@ sudo SERVICE_USER=deploy SERVICE_GROUP=deploy \
 Укажите адрес GitHub-репозитория в `REPO_URL`. По умолчанию код будет скачан в `/opt/garderobus_back`, но путь можно переопределить через `PROJECT_ROOT`.
 
 ```bash
-sudo REPO_URL=https://github.com/your-org/garderobus_back.git \
+sudo REPO_URL=https://github.com/vladnoskoff/garderobus_back.git \
      PROJECT_ROOT=/opt/garderobus_back \
      bash install_for_server/install.sh
 ```
 
-> Замените `your-org` на реальное имя организации или пользователя GitHub. При первом запуске скрипт установит `git`, скачает код в указанный каталог и создаст системного пользователя `garderobus` (если не задан свой).
+> Перед выполнением убедитесь, что файл `install_for_server/install.sh` доступен в текущем каталоге. Если вы на чистом сервере, скачайте его командой `curl` из раздела ниже либо предварительно клонируйте репозиторий.
 
 Если вы запускаете скрипт напрямую из GitHub, можно использовать `curl`/`wget` и передать нужные переменные окружения:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/your-org/garderobus_back/main/install_for_server/install.sh \
-  | sudo REPO_URL=https://github.com/your-org/garderobus_back.git bash
+curl -fsSL https://raw.githubusercontent.com/vladnoskoff/garderobus_back/main/install_for_server/bootstrap.sh \
+  | sudo env "REPO_URL=https://github.com/vladnoskoff/garderobus_back.git" \
+             "PROJECT_ROOT=/opt/garderobus_back" \
+             bash
 ```
 
-При необходимости передайте `TAKE_OWNERSHIP=true`, чтобы принудительно изменить владельца каталога проекта на пользователя сервисов.
+Скрипт `bootstrap.sh` скачивает последнюю версию `install.sh` во временный каталог и запускает её. Такой способ удобен для совсем «чистых» машин, где репозиторий ещё не доступен локально. При необходимости передайте `TAKE_OWNERSHIP=true`, чтобы принудительно изменить владельца каталога проекта на пользователя сервисов.
 
 После выполнения обязательно откройте файл `.env` и пропишите реальные значения API-ключей и URL. Затем запустите сервисы:
 
