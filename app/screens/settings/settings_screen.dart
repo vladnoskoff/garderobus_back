@@ -187,7 +187,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: l10n.settingsAccountPhone,
                           initialValue: _phone,
                           keyboardType: TextInputType.phone,
-                          inputFormatters: const [
+                          inputFormatters: [
                             FilteringTextInputFormatter.allow(
                               RegExp(r'[0-9()+\s-]'),
                             ),
