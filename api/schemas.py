@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
@@ -29,7 +29,9 @@ class UserCreate(BaseModel):
     style_preference: Optional[str] = None
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
-    pin_code: Optional[str] = None
+    pin_code: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("pin_code", "pinCode")
+    )
     language_preference: Optional[str] = None
 
 
@@ -62,7 +64,9 @@ class UserUpdate(BaseModel):
     location: Optional[str] = None
     gender: Optional[str] = None
     theme_preference: Optional[str] = None
-    pin_code: Optional[str] = None
+    pin_code: Optional[str] = Field(
+        default=None, validation_alias=AliasChoices("pin_code", "pinCode")
+    )
     language_preference: Optional[str] = None
 
 
