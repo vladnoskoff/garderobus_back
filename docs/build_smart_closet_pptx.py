@@ -9,7 +9,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 OUTPUT_PATH = Path(__file__).with_name("smart_closet_strategy.pptx")
 TITLE = "Стратегия стартапа «Garderobus»"
-SUBTITLE = "Четыре координаты успеха умного гардероба"
+SUBTITLE = "Программный комплекс рекомендаций по выбору одежды"
 
 
 def _flatten_items(items: Iterable[object], level: int = 0) -> List[Tuple[str, int]]:
@@ -549,6 +549,14 @@ PRESENTATION_RELS_TEMPLATE = """<?xml version='1.0' encoding='UTF-8' standalone=
 
 
 SLIDES_DATA = [
+    (
+        "Формулировка темы диплома",
+        [
+            "Предлагаемая формулировка: «Разработка программного комплекса рекомендаций по выбору одежды на основе мониторинга и анализа окружающей среды»",
+            "Фокус на приложении: Garderobus объединяет погодные данные из готовых API и датчиков партнёров",
+            "Аппаратная часть — интеграции с внешними метеостанциями, без разработки собственного железа",
+        ],
+    ),
     (
         "Контекст: почему «умный гардероб» актуален сейчас",
         [
