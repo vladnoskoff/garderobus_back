@@ -34,6 +34,13 @@ class UserCreate(BaseModel):
     )
     language_preference: Optional[str] = None
 
+    @root_validator(pre=True)
+    def _alias_pin_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Support both snake_case and camelCase pin fields."""
+        if "pin_code" not in values and "pinCode" in values:
+            values["pin_code"] = values["pinCode"]
+        return values
+
 
 class UserLogin(BaseModel):
     email: str
@@ -68,6 +75,12 @@ class UserUpdate(BaseModel):
         default=None, validation_alias=AliasChoices("pin_code", "pinCode")
     )
     language_preference: Optional[str] = None
+
+    @root_validator(pre=True)
+    def _alias_pin_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if "pin_code" not in values and "pinCode" in values:
+            values["pin_code"] = values["pinCode"]
+        return values
 
 
 class PinVerificationRequest(BaseModel):
