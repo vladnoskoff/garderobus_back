@@ -33,12 +33,13 @@ def get_weather_by_coordinates(
     lat: float,
     lon: float,
     db: Session = Depends(get_db),
-    api_key: str = None  # можно передать явно (вручную), иначе будет ошибка
+    api_key: Optional[str] = None,
 ):
-    if not api_key:
-        raise HTTPException(status_code=400, detail="API-ключ погоды не передан")
+    resolved_key = api_key or settings.OPENWEATHER_API_KEY
+    if not resolved_key:
+        raise HTTPException(status_code=500, detail="Не настроен API-ключ погоды")
 
-    cache_key = _weather_cache_key(lat, lon, api_key)
+    cache_key = _weather_cache_key(lat, lon, resolved_key)
     cached = cache.get_json(cache_key, resource="weather")
     if cached is not None:
         return cached
@@ -48,7 +49,7 @@ def get_weather_by_coordinates(
     params = {
         "lat": lat,
         "lon": lon,
-        "appid": api_key,
+        "appid": resolved_key,
         "units": "metric",
         "lang": "ru"
     }
@@ -133,8 +134,8 @@ def get_weather_for_user(
     db: Session = Depends(get_db),
 ):
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user or not user.weather_api_key:
-        raise HTTPException(status_code=404, detail="У пользователя нет координат или API-ключа")
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     _, lat, lon = resolve_location_and_coordinates(db, user, location_id)
 
@@ -151,7 +152,6 @@ def get_weather_for_user(
         lat=lat,
         lon=lon,
         db=db,
-        api_key=user.weather_api_key,
     )
 
     cache.set_json(

@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 import models
+import settings
 
 
 def ensure_location_for_user(db: Session, user_id: int, location_id: int) -> models.WardrobeLocation:
@@ -25,10 +26,11 @@ def resolve_location_and_coordinates(
     """Возвращает выбранную локацию и координаты для пользователя."""
 
     if location_id is None:
-        if not user.location:
-            raise HTTPException(status_code=400, detail="Нет координат или API-ключа пользователя")
+        raw_location = user.location or settings.DEFAULT_USER_LOCATION
+        if not raw_location:
+            raise HTTPException(status_code=400, detail="Для пользователя не заданы координаты")
         try:
-            lat, lon = map(float, user.location.split(","))
+            lat, lon = map(float, raw_location.split(","))
         except Exception as exc:
             raise HTTPException(status_code=400, detail="Некорректный формат координат пользователя") from exc
         return None, lat, lon

@@ -58,7 +58,6 @@
 | `get_user(user_id, db)` | Возвращает модель пользователя или 404. |
 | `update_user(user_id, updates, db)` | Обновляет имя, email, пароль, локацию и пол при наличии данных. |
 | `update_style(user_id, style, db)` | Сохраняет предпочтительный стиль пользователя (пока поле `style_preference` не объявлено в модели, но обновляется динамически). |
-| `update_keys(user_id, keys, db)` | Обновляет сохранённые API-ключи (OpenAI и OpenWeather). |
 
 ## `routes/clothes.py`
 

@@ -198,10 +198,10 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         userId = int.tryParse(idString);
       });
+      await checkInitialSettings();
       fetchWeather();
       fetchMannequins();
       _loadLocations();
-      await checkInitialSettings();
     }
   }
 
@@ -307,39 +307,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final user = await ApiService.getUser(userId!);
-
-      final weatherKey = user['weather_api_key'];
       final location = user['location'];
-
-      final hasWeatherKey = weatherKey != null && weatherKey.toString().trim().isNotEmpty;
       final hasLocation = location != null && location.toString().trim().isNotEmpty;
 
-      if (!hasWeatherKey || !hasLocation) {
-        String missingParts = '';
-        if (!hasWeatherKey) missingParts += '• API-ключ погоды\n';
-        if (!hasLocation) missingParts += '• Координаты\n';
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          showDialog(
-            context: context,
-            builder: (_) => AlertDialog(
-              title: const Text('Нужна настройка'),
-              content: Text(
-                'Пожалуйста, укажите следующие параметры:\n\n$missingParts\nчтобы приложение работало корректно.',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Future.microtask(() => showHomeSettingsSheet(context));
-                  },
-                  child: const Text('Перейти в настройки'),
-                ),
-              ],
-            ),
-          );
-        });
+      if (!hasLocation) {
+        await ApiService.updateLocation(userId!, ApiService.defaultHomeCoordinates);
       }
     } catch (e) {
       debugPrint('Ошибка проверки настроек: $e');
@@ -709,7 +681,7 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             _buildCardIcon(colorScheme.primary, Icons.home_work_outlined),
             const SizedBox(width: 16),
