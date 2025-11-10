@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, root_validator
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 
@@ -32,6 +32,13 @@ class UserCreate(BaseModel):
     pin_code: Optional[str] = None
     language_preference: Optional[str] = None
 
+    @root_validator(pre=True)
+    def _alias_pin_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Support both snake_case and camelCase pin fields."""
+        if "pin_code" not in values and "pinCode" in values:
+            values["pin_code"] = values["pinCode"]
+        return values
+
 
 class UserLogin(BaseModel):
     email: str
@@ -64,6 +71,12 @@ class UserUpdate(BaseModel):
     theme_preference: Optional[str] = None
     pin_code: Optional[str] = None
     language_preference: Optional[str] = None
+
+    @root_validator(pre=True)
+    def _alias_pin_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        if "pin_code" not in values and "pinCode" in values:
+            values["pin_code"] = values["pinCode"]
+        return values
 
 
 class PinVerificationRequest(BaseModel):
