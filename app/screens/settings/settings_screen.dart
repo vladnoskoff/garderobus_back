@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -28,6 +29,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _email = '';
   String _phone = '';
   String _gender = 'not_specified';
+  bool _isLoadingSelectedLocation = false;
+  String? _currentLocationName;
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
@@ -63,6 +66,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() {
           _userId = null;
           _isLoadingAccount = false;
+          _currentLocationName = null;
+          _isLoadingSelectedLocation = false;
         });
         return;
       }
@@ -84,6 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _hasPin = data['has_pin'] == true;
         _isLoadingAccount = false;
       });
+      await _loadSelectedLocationName(parsedId);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -187,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: l10n.settingsAccountPhone,
                           initialValue: _phone,
                           keyboardType: TextInputType.phone,
-                          inputFormatters: const [
+                          inputFormatters: [
                             FilteringTextInputFormatter.allow(
                               RegExp(r'[0-9()+\s-]'),
                             ),
@@ -372,6 +378,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }) {
     final themeIcon = _themeIconFor(themeMode);
     final themeLabel = _describeThemeMode(l10n, themeMode);
+    final locationLabel = _isLoadingSelectedLocation
+        ? l10n.settingsValueLoading
+        : ((_currentLocationName?.trim().isNotEmpty ?? false)
+            ? _currentLocationName!.trim()
+            : l10n.settingsHome);
     return Align(
       alignment: Alignment.center,
       child: Wrap(
@@ -382,7 +393,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         children: [
           _QuickActionButton(
             icon: Icons.home_outlined,
-            label: l10n.settingsHome,
+            label: locationLabel,
             color: colorScheme.primaryContainer,
             onTap: () {
               _openHomeSettings(context);
@@ -419,10 +430,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _openHomeSettings(BuildContext context) async {
     await showHomeSettingsSheet(context);
+    if (_userId != null) {
+      await _loadSelectedLocationName(_userId!);
+    }
   }
 
   Future<void> _openPlaces(BuildContext context) async {
     await showPlacesSettingsSheet(context);
+    if (_userId != null) {
+      await _loadSelectedLocationName(_userId!);
+    }
   }
 
   Future<void> _openThemeSelector(BuildContext context) async {
@@ -1216,6 +1233,91 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       },
     );
+  }
+
+  Future<void> _loadSelectedLocationName(int userId) async {
+    if (!mounted) return;
+    setState(() {
+      _isLoadingSelectedLocation = true;
+    });
+
+    String? resolvedName = _currentLocationName;
+
+    try {
+      final storedLocationIdString =
+          await _storage.read(key: 'selected_location_id');
+      int? selectedLocationId;
+      if (storedLocationIdString != null) {
+        selectedLocationId = int.tryParse(storedLocationIdString);
+      }
+
+      final locations = await ApiService.getWardrobeLocations(userId);
+
+      Map<String, dynamic>? selectedLocation;
+      if (selectedLocationId != null) {
+        selectedLocation =
+            _findLocationById(locations, selectedLocationId);
+      }
+
+      if (selectedLocation == null) {
+        final fallbackId = _deriveDefaultLocationId(locations);
+        if (fallbackId != null) {
+          selectedLocation = _findLocationById(locations, fallbackId);
+        }
+      }
+
+      if (selectedLocation != null) {
+        final rawName = selectedLocation['name'];
+        final trimmedName = rawName?.toString().trim();
+        if (trimmedName != null && trimmedName.isNotEmpty) {
+          resolvedName = trimmedName;
+        }
+      }
+    } catch (error) {
+      debugPrint('Не удалось загрузить выбранную локацию: $error');
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _currentLocationName = resolvedName;
+      _isLoadingSelectedLocation = false;
+    });
+  }
+
+  Map<String, dynamic>? _findLocationById(
+    List<dynamic> locations,
+    int locationId,
+  ) {
+    for (final location in locations.whereType<Map<String, dynamic>>()) {
+      if (_parseLocationId(location['id']) == locationId) {
+        return location;
+      }
+    }
+    return null;
+  }
+
+  int? _deriveDefaultLocationId(List<dynamic> locations) {
+    for (final location in locations.whereType<Map<String, dynamic>>()) {
+      final latitude = location['latitude'];
+      final longitude = location['longitude'];
+      if (latitude != null && longitude != null) {
+        return _parseLocationId(location['id']);
+      }
+    }
+    return null;
+  }
+
+  int? _parseLocationId(dynamic rawId) {
+    if (rawId is int) {
+      return rawId;
+    }
+    if (rawId is String) {
+      return int.tryParse(rawId);
+    }
+    if (rawId != null) {
+      return int.tryParse(rawId.toString());
+    }
+    return null;
   }
 
 }
