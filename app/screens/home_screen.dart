@@ -656,9 +656,12 @@ class _HomeScreenState extends State<HomeScreen> {
     final colorScheme = theme.colorScheme;
 
     final locationItems = <DropdownMenuItem<int?>>[
-      const DropdownMenuItem<int?>(
+      DropdownMenuItem<int?>(
         value: null,
-        child: Text('Использовать личные координаты'),
+        child: const Align(
+          alignment: Alignment.centerLeft,
+          child: Text('Использовать личные координаты'),
+        ),
       ),
       ...wardrobeLocations.whereType<Map<String, dynamic>>().map((map) {
         final name = map['name']?.toString() ?? 'Без названия';
@@ -670,7 +673,10 @@ class _HomeScreenState extends State<HomeScreen> {
         }
         return DropdownMenuItem<int?>(
           value: parsedId,
-          child: Text('$name$subtitle'),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text('$name$subtitle'),
+          ),
         );
       }).whereType<DropdownMenuItem<int?>>(),
     ];
@@ -725,18 +731,22 @@ class _HomeScreenState extends State<HomeScreen> {
               color: colorScheme.surface.withOpacity(0.9),
               borderRadius: BorderRadius.circular(18),
             ),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<int?>(
-                value: selectedLocationId,
-                isExpanded: true,
-                icon: Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  color: colorScheme.primary,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int?>(
+                  value: selectedLocationId,
+                  isExpanded: true,
+                  alignment: AlignmentDirectional.centerStart,
+                  icon: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: colorScheme.primary,
+                  ),
+                  style: theme.textTheme.titleSmall,
+                  borderRadius: BorderRadius.circular(18),
+                  items: locationItems,
+                  onChanged: (value) => _handleLocationChange(value),
                 ),
-                style: theme.textTheme.titleSmall,
-                borderRadius: BorderRadius.circular(18),
-                items: locationItems,
-                onChanged: (value) => _handleLocationChange(value),
               ),
             ),
           )
