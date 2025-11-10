@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+import datetime
 from typing import Optional
-from sqlalchemy.orm import Session
+
 import bcrypt
 import jwt
-import datetime
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 import models, schemas
+import settings
 from database import get_db
 
 router = APIRouter(prefix="/users", tags=["Users"])
@@ -175,6 +178,9 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
         email=user.email,
         phone=_normalize_phone(user.phone),
         password_hash=hashed_password,
+        openai_api_key=settings.OPENAI_API_KEY,
+        weather_api_key=settings.OPENWEATHER_API_KEY,
+        location=settings.DEFAULT_USER_LOCATION,
         gender=_normalize_gender(user.gender),
         theme_preference=_normalize_theme(user.theme_preference),
         language_preference=_normalize_language(user.language_preference),
@@ -266,22 +272,6 @@ def update_style(user_id: int, style: str, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Стиль обновлен", "style": style}
     
-@router.put("/{user_id}/update_keys")
-def update_keys(user_id: int, keys: schemas.ApiKeysUpdate, db: Session = Depends(get_db)):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Пользователь не найден")
-
-    if keys.openai_api_key is not None:
-        user.openai_api_key = keys.openai_api_key
-    if keys.weather_api_key is not None:
-        user.weather_api_key = keys.weather_api_key
-
-    db.commit()
-    db.refresh(user)
-    return {"message": "API-ключи успешно обновлены"}
-
-
 @router.post("/{user_id}/verify_pin")
 def verify_pin(user_id: int, payload: schemas.PinVerificationRequest, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.id == user_id).first()

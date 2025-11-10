@@ -9,6 +9,7 @@ import 'clothes.dart';
 
 class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
+  static const String defaultHomeCoordinates = '55.755826, 37.617299';
   static final storage = FlutterSecureStorage();
 
   static Future<int?> getStoredUserId() async {
@@ -264,25 +265,6 @@ class ApiService {
     }
   }
 
-  // Обновление API-ключей
-  static Future<void> updateApiKeys(int userId, String openaiKey, String weatherKey) async {
-    final token = await storage.read(key: "token");
-    final response = await http.put(
-      Uri.parse('$baseUrl/users/$userId/update_keys'),
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
-      body: jsonEncode({
-        "openai_api_key": openaiKey,
-        "weather_api_key": weatherKey,
-      }),
-    );
-    if (response.statusCode != 200) {
-      throw Exception("Ошибка при обновлении API-ключей");
-    }
-  }
-  
   // Обновление координат
   static Future<void> updateLocation(int userId, String location) async {
     final response = await http.put(

@@ -19,17 +19,15 @@ def get_outfit(
     location_id: Optional[int] = Query(default=None, description="Выбор гардероба по локации"),
     db: Session = Depends(get_db),
 ):
-    """
-    Выдаёт комплект одежды по погоде (использует координаты и API-ключ пользователя).
-    """
+    """Выдаёт комплект одежды по погоде, используя координаты пользователя."""
     user = db.query(models.User).filter(models.User.id == user_id).first()
-    if not user or not user.weather_api_key:
-        raise HTTPException(status_code=400, detail="Нет координат или API-ключа пользователя")
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     location, lat, lon = resolve_location_and_coordinates(db, user, location_id)
 
-    # Получаем погоду по координатам и пользовательскому API-ключу
-    weather_data = get_weather_by_coordinates(lat=lat, lon=lon, db=db, api_key=user.weather_api_key)
+    # Получаем погоду по координатам с использованием системного API-ключа
+    weather_data = get_weather_by_coordinates(lat=lat, lon=lon, db=db)
     if not weather_data:
         raise HTTPException(status_code=500, detail="Не удалось получить погоду")
 

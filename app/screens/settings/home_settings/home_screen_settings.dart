@@ -32,9 +32,7 @@ class HomeSettingsSheet extends StatefulWidget {
 }
 
 class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
-  String location = 'Нет координат';
-  String openAiKey = 'Нет ключа';
-  String weatherKey = 'Нет ключа';
+  String location = ApiService.defaultHomeCoordinates;
   String serialNumber = '0000001';
   int? userId;
   List<Map<String, dynamic>> locations = [];
@@ -65,8 +63,6 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
       if (!mounted) return;
       setState(() {
         location = userData['location'] ?? location;
-        openAiKey = userData['openai_api_key'] ?? openAiKey;
-        weatherKey = userData['weather_api_key'] ?? weatherKey;
       });
     } catch (e) {
       debugPrint('Ошибка загрузки данных пользователя: $e');
@@ -153,17 +149,6 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
     }
   }
 
-  Future<void> updateKeys() async {
-    if (userId == null) return;
-    try {
-      await ApiService.updateApiKeys(userId!, openAiKey, weatherKey);
-      _showSnack('API-ключи обновлены');
-    } catch (e) {
-      debugPrint('Ошибка обновления API-ключей: $e');
-      _showSnack('Не удалось обновить API-ключи');
-    }
-  }
-
   Future<void> updateLocation(String newLoc) async {
     if (userId == null) return;
     try {
@@ -233,7 +218,7 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
     if (locationId == null) return;
 
     final initial = _formatCoordinates(locationData['latitude'], locationData['longitude']);
-    final fallback = '55.751669743618876, 37.6164092387259';
+    final fallback = ApiService.defaultHomeCoordinates;
     final result = await Navigator.push<String>(
       context,
       MaterialPageRoute(
@@ -378,7 +363,6 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
                 onEdit(controller.text);
               }
               Navigator.pop(context);
-              if (title.contains('API')) updateKeys();
             },
             child: const Text('Сохранить'),
           ),
@@ -387,14 +371,7 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
     );
   }
 
-  String shortenKey(String key, {int start = 5, int end = 4}) {
-    if (key.length <= start + end) return key;
-    return '${key.substring(0, start)}...${key.substring(key.length - end)}';
-  }
-
   Widget buildOption(IconData icon, String title, String value, VoidCallback onTap) {
-    final isApiKey = title.contains('API');
-    final displayedValue = isApiKey ? shortenKey(value) : value;
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
@@ -423,7 +400,7 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  displayedValue,
+                  value,
                   style: theme.textTheme.titleSmall?.copyWith(
                     color: colorScheme.onSecondaryContainer,
                   ),
@@ -442,13 +419,25 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
     );
   }
 
+  String _activeLocationTitle() {
+    if (selectedWardrobeLocationId == null) {
+      return 'Личные координаты';
+    }
+    final data = _currentLocation();
+    final rawName = data?['name']?.toString().trim();
+    if (rawName == null || rawName.isEmpty) {
+      return 'Без названия';
+    }
+    return rawName;
+  }
+
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final dropdownItems = <DropdownMenuItem<int?>>[
       const DropdownMenuItem<int?>(
         value: null,
-        child: Text('Личные данные аккаунта'),
+        child: Text('Личные координаты'),
       ),
       ...locations.map((loc) {
         final id = _parseLocationId(loc['id']);
@@ -487,7 +476,7 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
               children: [
                 Expanded(
                   child: Text(
-                    'Дом',
+                    _activeLocationTitle(),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -523,18 +512,6 @@ class _HomeSettingsSheetState extends State<HomeSettingsSheet> {
                           else
                             _buildSelectedLocationCard(colorScheme),
                           const SizedBox(height: 24),
-                          Text('API-ключи', style: Theme.of(context).textTheme.titleMedium),
-                          const SizedBox(height: 12),
-                          buildOption(CupertinoIcons.lock, 'OpenAI API', openAiKey, () {
-                            showEditDialog('OpenAI API', openAiKey, (value) {
-                              setState(() => openAiKey = value);
-                            });
-                          }),
-                          buildOption(CupertinoIcons.cloud, 'OpenWeather API', weatherKey, () {
-                            showEditDialog('OpenWeather API', weatherKey, (value) {
-                              setState(() => weatherKey = value);
-                            });
-                          }),
                           buildOption(CupertinoIcons.wifi, 'SN', serialNumber, () {
                             showEditDialog('SN', serialNumber, (value) {
                               setState(() => serialNumber = value);
