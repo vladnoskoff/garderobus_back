@@ -242,10 +242,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
         }
         return PinUnlockScreen(
           userId: _userId!,
-          onUnlocked: () {
+          onUnlocked: (_) async {
             setState(() => _destination = _AuthDestination.home);
           },
-          onCancel: () async {
+          onCancel: (_) async {
             await storage.delete(key: 'user_id');
             await storage.delete(key: 'token');
             if (!mounted) return;

@@ -75,20 +75,22 @@ class _LoginScreenState extends State<LoginScreen> {
             builder: (_) => PinUnlockScreen(
               userId: userId,
               accessToken: accessToken,
-              onUnlocked: () {
-                Navigator.pushReplacementNamed(context, '/home');
+              onUnlocked: (pinContext) async {
+                if (!pinContext.mounted) return;
+                await Navigator.pushReplacementNamed(pinContext, '/home');
               },
-              onCancel: () async {
+              onCancel: (pinContext) async {
                 await storage.delete(key: "user_id");
                 await storage.delete(key: "token");
                 ApiService.rememberAccessToken(null);
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
+                if (!pinContext.mounted) {
+                  return;
                 }
+                await Navigator.pushNamedAndRemoveUntil(
+                  pinContext,
+                  '/login',
+                  (route) => false,
+                );
               },
             ),
           ),

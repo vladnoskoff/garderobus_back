@@ -6,8 +6,8 @@ import '../../services/biometric_auth_service.dart';
 class PinUnlockScreen extends StatefulWidget {
   final int userId;
   final String? accessToken;
-  final VoidCallback onUnlocked;
-  final VoidCallback? onCancel;
+  final Future<void> Function(BuildContext context) onUnlocked;
+  final Future<void> Function(BuildContext context)? onCancel;
 
   const PinUnlockScreen({
     super.key,
@@ -83,7 +83,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
 
       if (isValid) {
         _pinController.clear();
-        widget.onUnlocked();
+        await widget.onUnlocked(context);
       } else {
         setState(() {
           _error = 'Неверный PIN-код. Попробуйте ещё раз.';
@@ -125,7 +125,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       setState(() {
         _isBiometricAuthenticating = false;
       });
-      widget.onUnlocked();
+      await widget.onUnlocked(context);
     } else {
       setState(() {
         _error =
@@ -194,7 +194,9 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
               ],
               if (widget.onCancel != null)
                 TextButton(
-                  onPressed: widget.onCancel,
+                  onPressed: () async {
+                    await widget.onCancel!(context);
+                  },
                   child: const Text('Выйти'),
                 ),
             ],
