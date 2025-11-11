@@ -1,0 +1,1 @@
+"""Wardrobe service FastAPI application."""
