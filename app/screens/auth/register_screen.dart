@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../services/api_service.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -14,7 +13,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final nameController = TextEditingController();
   final passwordController = TextEditingController();
   final confirmPasswordController = TextEditingController();
-  final pinController = TextEditingController();
   String? selectedGender;
   bool isLoading = false;
 
@@ -38,20 +36,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
         return;
       }
 
-      final pin = pinController.text.trim();
-      if (pin.isNotEmpty && (pin.length < 4 || pin.length > 8 || !RegExp(r'^[0-9]+$').hasMatch(pin))) {
-        setState(() => isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PIN-код должен состоять из 4–8 цифр.')),
-        );
-        return;
-      }
       final response = await ApiService.register(
         nameController.text.trim(),
         emailController.text.trim(),
         password,
         selectedGender ?? 'not_specified',
-        pinCode: pin.isEmpty ? null : pin,
       );
 
       final newUserId = _extractUserId(response);
@@ -100,7 +89,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     nameController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
-    pinController.dispose();
     super.dispose();
   }
 
@@ -171,18 +159,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                     ),
                   ),
-                const SizedBox(height: 16),
-                TextField(
-                  controller: pinController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 8,
-                  obscureText: true,
-                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                  decoration: const InputDecoration(
-                    labelText: "PIN-код (необязательно)",
-                    counterText: '',
-                  ),
-                ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: selectedGender,

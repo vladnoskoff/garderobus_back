@@ -106,7 +106,6 @@ class ApiService {
     String email,
     String password,
     String gender, {
-    String? pinCode,
     String languageCode = 'ru',
   }) async {
     final response = await http.post(
@@ -118,7 +117,6 @@ class ApiService {
         "password": password,
         "gender": gender,
         "language_preference": languageCode,
-        if (pinCode != null && pinCode.trim().isNotEmpty) "pin_code": pinCode.trim(),
       }),
     );
     if (response.statusCode == 200 || response.statusCode == 201) {
