@@ -33,8 +33,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
       final response = await ApiService.login(email, password);
       final storage = const FlutterSecureStorage();
-      await storage.write(key: "user_id", value: response["user_id"].toString());
-      await storage.write(key: "token", value: response["access_token"]);
+      final userIdValue = response["user_id"]?.toString();
+      final accessToken = response["access_token"]?.toString();
+
+      if (userIdValue != null && userIdValue.isNotEmpty) {
+        await storage.write(key: "user_id", value: userIdValue);
+      } else {
+        await storage.delete(key: "user_id");
+      }
+
+      if (accessToken != null && accessToken.isNotEmpty) {
+        await storage.write(key: "token", value: accessToken);
+        ApiService.rememberAccessToken(accessToken);
+      } else {
+        await storage.delete(key: "token");
+        ApiService.rememberAccessToken(null);
+      }
       try {
         await SystemChannels.textInput
             .invokeMethod<void>('TextInput.finishAutofillContext');
@@ -51,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       setState(() => isLoading = false);
       if (!mounted) return;
-      final userId = int.tryParse(response["user_id"].toString());
+      final userId = int.tryParse(userIdValue ?? "");
       final hasPin = response["has_pin"] == true;
 
       if (hasPin && userId != null) {
@@ -60,19 +74,23 @@ class _LoginScreenState extends State<LoginScreen> {
           MaterialPageRoute(
             builder: (_) => PinUnlockScreen(
               userId: userId,
-              onUnlocked: () {
-                Navigator.pushReplacementNamed(context, '/home');
+              accessToken: accessToken,
+              onUnlocked: (pinContext) async {
+                if (!pinContext.mounted) return;
+                await Navigator.pushReplacementNamed(pinContext, '/home');
               },
-              onCancel: () async {
+              onCancel: (pinContext) async {
                 await storage.delete(key: "user_id");
                 await storage.delete(key: "token");
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
+                ApiService.rememberAccessToken(null);
+                if (!pinContext.mounted) {
+                  return;
                 }
+                await Navigator.pushNamedAndRemoveUntil(
+                  pinContext,
+                  '/login',
+                  (route) => false,
+                );
               },
             ),
           ),

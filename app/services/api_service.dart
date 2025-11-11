@@ -11,6 +11,16 @@ class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
   static const String defaultHomeCoordinates = '55.755826, 37.617299';
   static final storage = FlutterSecureStorage();
+  static String? _sessionToken;
+
+  static void rememberAccessToken(String? token) {
+    final normalized = token?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      _sessionToken = null;
+    } else {
+      _sessionToken = normalized;
+    }
+  }
 
   static Future<int?> getStoredUserId() async {
     final id = await storage.read(key: "user_id");
@@ -106,7 +116,6 @@ class ApiService {
     String email,
     String password,
     String gender, {
-    String? pinCode,
     String languageCode = 'ru',
   }) async {
     final response = await http.post(
@@ -118,7 +127,6 @@ class ApiService {
         "password": password,
         "gender": gender,
         "language_preference": languageCode,
-        if (pinCode != null && pinCode.trim().isNotEmpty) "pin_code": pinCode.trim(),
       }),
     );
     if (response.statusCode == 200 || response.statusCode == 201) {
@@ -144,7 +152,14 @@ class ApiService {
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      await storage.write(key: "token", value: data["access_token"]);
+      final accessToken = data["access_token"]?.toString();
+      if (accessToken != null && accessToken.trim().isNotEmpty) {
+        await storage.write(key: "token", value: accessToken);
+        rememberAccessToken(accessToken);
+      } else {
+        await storage.delete(key: "token");
+        rememberAccessToken(null);
+      }
       await storage.write(
         key: "user_id",
         value: data["user_id"].toString(),
@@ -224,12 +239,33 @@ class ApiService {
     return value == 'true';
   }
 
-  static Future<bool> verifyPin(int userId, String pinCode) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/users/$userId/verify_pin'),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"pin_code": pinCode}),
-    );
+  static Future<bool> verifyPin(int userId, String pinCode,
+      {String? accessToken}) async {
+    final headers = <String, String>{"Content-Type": "application/json"};
+
+    String? token = accessToken?.trim();
+    if (token == null || token.isEmpty) {
+      token = _sessionToken;
+    }
+    if (token == null || token.isEmpty) {
+      token = await storage.read(key: "token");
+      rememberAccessToken(token);
+    }
+
+    if (token != null && token.isNotEmpty) {
+      headers["Authorization"] = "Bearer $token";
+    }
+
+    http.Response response;
+    try {
+      response = await http.post(
+        Uri.parse('$baseUrl/users/$userId/verify_pin'),
+        headers: headers,
+        body: jsonEncode({"pin_code": pinCode}),
+      );
+    } catch (error) {
+      throw Exception('Сервис проверки PIN недоступен. Проверьте подключение.');
+    }
 
     if (response.statusCode == 200) {
       return true;
@@ -239,7 +275,20 @@ class ApiService {
       return false;
     }
 
-    throw Exception('Не удалось проверить PIN-код');
+    String? detailMessage;
+    if (response.body.isNotEmpty) {
+      try {
+        final data = jsonDecode(response.body);
+        final detail = data['detail'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          detailMessage = detail.trim();
+        }
+      } catch (_) {
+        // Игнорируем ошибки парсинга, используем сообщение по умолчанию.
+      }
+    }
+
+    throw Exception(detailMessage ?? 'Не удалось проверить PIN-код');
   }
 
   static Future<void> setPinCode(int userId, String pinCode) async {
@@ -280,7 +329,12 @@ class ApiService {
 
   // Получение сохраненного токена
   static Future<String?> getToken() async {
-    return await storage.read(key: "token");
+    if (_sessionToken != null && _sessionToken!.isNotEmpty) {
+      return _sessionToken;
+    }
+    final token = await storage.read(key: "token");
+    rememberAccessToken(token);
+    return _sessionToken;
   }
 
 

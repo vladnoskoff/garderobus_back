@@ -5,12 +5,14 @@ import '../../services/biometric_auth_service.dart';
 
 class PinUnlockScreen extends StatefulWidget {
   final int userId;
-  final VoidCallback onUnlocked;
-  final VoidCallback? onCancel;
+  final String? accessToken;
+  final Future<void> Function(BuildContext context) onUnlocked;
+  final Future<void> Function(BuildContext context)? onCancel;
 
   const PinUnlockScreen({
     super.key,
     required this.userId,
+    this.accessToken,
     required this.onUnlocked,
     this.onCancel,
   });
@@ -75,12 +77,13 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     });
 
     try {
-      final isValid = await ApiService.verifyPin(widget.userId, pin);
+      final isValid =
+          await ApiService.verifyPin(widget.userId, pin, accessToken: widget.accessToken);
       if (!mounted) return;
 
       if (isValid) {
         _pinController.clear();
-        widget.onUnlocked();
+        await widget.onUnlocked(context);
       } else {
         setState(() {
           _error = 'Неверный PIN-код. Попробуйте ещё раз.';
@@ -88,8 +91,13 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      final rawMessage = e.toString();
+      final cleanedMessage =
+          rawMessage.replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
       setState(() {
-        _error = 'Не удалось проверить PIN-код: $e';
+        _error = cleanedMessage.isNotEmpty
+            ? 'Не удалось проверить PIN-код: $cleanedMessage'
+            : 'Не удалось проверить PIN-код. Попробуйте позже.';
       });
     } finally {
       if (mounted) {
@@ -117,7 +125,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       setState(() {
         _isBiometricAuthenticating = false;
       });
-      widget.onUnlocked();
+      await widget.onUnlocked(context);
     } else {
       setState(() {
         _error =
@@ -186,7 +194,9 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
               ],
               if (widget.onCancel != null)
                 TextButton(
-                  onPressed: widget.onCancel,
+                  onPressed: () async {
+                    await widget.onCancel!(context);
+                  },
                   child: const Text('Выйти'),
                 ),
             ],
