@@ -18,6 +18,7 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
         </div>
         <nav>
           <a href="dashboard.php" class="active">Пользователи</a>
+          <a href="#system-section">Система</a>
         </nav>
         <button class="link" type="button" id="logout-button">Выйти</button>
       </aside>
@@ -53,6 +54,45 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
             <h3>Образы и использование</h3>
             <strong id="stat-outfits">0</strong>
             <span>Примерок за все время: <span id="stat-wear-events">0</span></span>
+          </div>
+        </section>
+
+        <section class="card" id="system-section">
+          <div class="flex-between" style="margin-bottom: 20px;">
+            <div>
+              <h3 style="margin: 0;">Сервис и инфраструктура</h3>
+              <p class="text-muted">Мониторинг API и быстрые действия администраторов.</p>
+            </div>
+            <div class="flex gap-sm system-actions">
+              <button class="secondary" type="button" id="system-refresh-button">Обновить статус</button>
+              <button class="secondary" type="button" id="open-code-editor-button">Редактировать код</button>
+              <button class="danger" type="button" id="restart-api-button">Перезапустить API</button>
+            </div>
+          </div>
+          <div id="system-status-error" class="alert hidden" style="margin-bottom: 16px;"></div>
+          <div id="system-status-feedback" class="alert success hidden" style="margin-bottom: 16px;"></div>
+          <p id="system-status-loading" class="text-muted">Загрузка состояния сервиса...</p>
+          <div class="grid system-status-grid hidden" id="system-status-grid">
+            <div class="stat-card">
+              <h3>Аптайм сервиса</h3>
+              <strong id="system-uptime">—</strong>
+              <span>В секундах: <span id="system-uptime-seconds">0</span></span>
+            </div>
+            <div class="stat-card">
+              <h3>Версия и окружение</h3>
+              <strong id="system-app-name">—</strong>
+              <span>Версия: <span id="system-app-version">—</span> · Окружение: <span id="system-environment">—</span></span>
+            </div>
+            <div class="stat-card">
+              <h3>Перезапуск API</h3>
+              <strong id="system-restart-state">Недоступно</strong>
+              <span>Последний запрос: <span id="system-last-restart">—</span></span>
+            </div>
+            <div class="stat-card">
+              <h3>Редактируемые файлы</h3>
+              <strong id="system-files-count">0</strong>
+              <div id="system-files-list" class="system-files-list tag-list"></div>
+            </div>
           </div>
         </section>
 
@@ -240,6 +280,36 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
               <p id="detail-no-locations" class="text-muted hidden">Локации ещё не добавлены.</p>
               <div id="detail-locations-list" class="location-list"></div>
             </div>
+          </section>
+
+          <section id="drawer-code-editor" class="drawer-section hidden">
+            <p class="text-muted" style="margin-top: 0;">
+              Управляйте сервисными сценариями прямо из браузера. Все изменения сразу сохраняются в файловой системе API.
+            </p>
+            <div class="flex-column gap-md">
+              <label class="flex-column gap-sm">
+                <span>Файл</span>
+                <select id="code-editor-file-select"></select>
+              </label>
+              <p id="code-editor-empty" class="text-muted hidden">Нет доступных файлов для редактирования. Добавьте их на сервер.</p>
+              <div class="flex" style="gap: 8px; flex-wrap: wrap;">
+                <button class="secondary" type="button" id="code-editor-refresh">Обновить файл</button>
+              </div>
+              <label class="flex-column gap-sm">
+                <span>Содержимое</span>
+                <textarea id="code-editor-content" class="code-editor" rows="18" spellcheck="false"></textarea>
+              </label>
+              <label class="flex-column gap-sm">
+                <span>Комментарий к изменению</span>
+                <input type="text" id="code-editor-message" placeholder="Например: обновление логики очистки" />
+              </label>
+              <div class="drawer-form-actions gap-sm">
+                <button class="secondary" type="button" id="code-editor-cancel">Закрыть</button>
+                <button class="primary" type="button" id="code-editor-save">Сохранить изменения</button>
+              </div>
+            </div>
+            <p id="code-editor-loading" class="text-muted hidden">Загрузка файла...</p>
+            <div id="code-editor-status" class="alert hidden" style="margin-top: 16px;"></div>
           </section>
         </div>
       </div>

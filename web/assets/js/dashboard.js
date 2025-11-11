@@ -35,6 +35,7 @@
     drawerClose: document.getElementById("drawer-close"),
     drawerCreateSection: document.getElementById("drawer-create-user"),
     drawerDetailSection: document.getElementById("drawer-user-detail"),
+    drawerCodeEditorSection: document.getElementById("drawer-code-editor"),
     detailName: document.getElementById("detail-name"),
     detailEmail: document.getElementById("detail-email"),
     detailPhone: document.getElementById("detail-phone"),
@@ -58,12 +59,40 @@
     detailLocationsEmpty: document.getElementById("detail-no-locations"),
     detailError: document.getElementById("detail-error"),
     detailLoading: document.getElementById("detail-loading"),
+    systemStatusGrid: document.getElementById("system-status-grid"),
+    systemStatusLoading: document.getElementById("system-status-loading"),
+    systemStatusError: document.getElementById("system-status-error"),
+    systemStatusFeedback: document.getElementById("system-status-feedback"),
+    systemUptime: document.getElementById("system-uptime"),
+    systemUptimeSeconds: document.getElementById("system-uptime-seconds"),
+    systemAppName: document.getElementById("system-app-name"),
+    systemAppVersion: document.getElementById("system-app-version"),
+    systemEnvironment: document.getElementById("system-environment"),
+    systemRestartState: document.getElementById("system-restart-state"),
+    systemLastRestart: document.getElementById("system-last-restart"),
+    systemFilesCount: document.getElementById("system-files-count"),
+    systemFilesList: document.getElementById("system-files-list"),
+    systemRefreshButton: document.getElementById("system-refresh-button"),
+    openCodeEditorButton: document.getElementById("open-code-editor-button"),
+    restartApiButton: document.getElementById("restart-api-button"),
+    codeEditorSelect: document.getElementById("code-editor-file-select"),
+    codeEditorEmpty: document.getElementById("code-editor-empty"),
+    codeEditorRefresh: document.getElementById("code-editor-refresh"),
+    codeEditorContent: document.getElementById("code-editor-content"),
+    codeEditorMessage: document.getElementById("code-editor-message"),
+    codeEditorCancel: document.getElementById("code-editor-cancel"),
+    codeEditorSave: document.getElementById("code-editor-save"),
+    codeEditorStatus: document.getElementById("code-editor-status"),
+    codeEditorLoading: document.getElementById("code-editor-loading"),
   };
 
   const state = {
     drawerMode: null,
     activeDetailUserId: null,
     detailAbortController: null,
+    systemStatus: null,
+    managedFiles: [],
+    activeCodeFile: null,
   };
 
   function handleUnauthorized() {
@@ -97,7 +126,11 @@
     if (!elements.drawer) {
       return;
     }
-    const sections = [elements.drawerCreateSection, elements.drawerDetailSection];
+    const sections = [
+      elements.drawerCreateSection,
+      elements.drawerDetailSection,
+      elements.drawerCodeEditorSection,
+    ];
     sections.forEach((item) => {
       if (item) {
         toggleHidden(item, item !== section);
@@ -108,14 +141,24 @@
   function openDrawer(mode) {
     state.drawerMode = mode;
     if (elements.drawerTitle) {
-      elements.drawerTitle.textContent =
-        mode === "create" ? "Создание пользователя" : "Карточка пользователя";
+      let title = "Карточка пользователя";
+      if (mode === "create") {
+        title = "Создание пользователя";
+      } else if (mode === "code") {
+        title = "Редактор кода";
+      }
+      elements.drawerTitle.textContent = title;
     }
     setDrawerVisibility(true);
     if (mode === "create") {
       showDrawerSection(elements.drawerCreateSection);
       toggleHidden(elements.createError, true);
       toggleHidden(elements.createSuccess, true);
+    } else if (mode === "code") {
+      showDrawerSection(elements.drawerCodeEditorSection);
+      if (elements.codeEditorStatus) {
+        toggleHidden(elements.codeEditorStatus, true);
+      }
     } else {
       showDrawerSection(elements.drawerDetailSection);
     }
@@ -136,6 +179,30 @@
     if (elements.detailLoading) {
       toggleHidden(elements.detailLoading, true);
     }
+    state.activeCodeFile = null;
+    if (elements.codeEditorContent) {
+      elements.codeEditorContent.value = "";
+      elements.codeEditorContent.disabled = false;
+    }
+    if (elements.codeEditorMessage) {
+      elements.codeEditorMessage.value = "";
+    }
+    if (elements.codeEditorStatus) {
+      elements.codeEditorStatus.classList.remove("success");
+      toggleHidden(elements.codeEditorStatus, true);
+    }
+    if (elements.codeEditorLoading) {
+      toggleHidden(elements.codeEditorLoading, true);
+    }
+    if (elements.codeEditorEmpty) {
+      toggleHidden(elements.codeEditorEmpty, true);
+    }
+    if (elements.codeEditorSave) {
+      elements.codeEditorSave.disabled = false;
+    }
+    if (elements.codeEditorRefresh) {
+      elements.codeEditorRefresh.disabled = false;
+    }
   }
 
   function toggleHidden(element, hidden) {
@@ -146,6 +213,25 @@
       element.classList.add("hidden");
     } else {
       element.classList.remove("hidden");
+    }
+  }
+
+  function showAlert(element, message, type = "error") {
+    if (!element) {
+      return;
+    }
+    if (!message) {
+      element.textContent = "";
+      element.classList.remove("success");
+      element.classList.add("hidden");
+      return;
+    }
+    element.textContent = message;
+    element.classList.remove("hidden");
+    if (type === "success") {
+      element.classList.add("success");
+    } else {
+      element.classList.remove("success");
     }
   }
 
@@ -198,6 +284,271 @@
     badge.className = "status-badge " + (count > 0 ? "warning" : "success");
     badge.textContent = count > 0 ? `${count} в очереди` : "Очередь пуста";
     return badge;
+  }
+
+  function renderManagedFiles(files) {
+    if (!elements.systemFilesList) {
+      return;
+    }
+    elements.systemFilesList.innerHTML = "";
+    if (!files || !files.length) {
+      const empty = document.createElement("span");
+      empty.className = "text-muted";
+      empty.textContent = "Нет файлов";
+      elements.systemFilesList.appendChild(empty);
+      return;
+    }
+    files.forEach((file) => {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = file;
+      elements.systemFilesList.appendChild(badge);
+    });
+  }
+
+  function buildFileUrl(path) {
+    return path
+      .split("/")
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+  }
+
+  function setCodeEditorEnabled(enabled) {
+    const disabled = !enabled;
+    if (elements.codeEditorContent) {
+      elements.codeEditorContent.disabled = disabled;
+    }
+    if (elements.codeEditorMessage) {
+      elements.codeEditorMessage.disabled = disabled;
+    }
+    if (elements.codeEditorSave) {
+      elements.codeEditorSave.disabled = disabled;
+    }
+    if (elements.codeEditorRefresh) {
+      elements.codeEditorRefresh.disabled = disabled;
+    }
+  }
+
+  function updateCodeEditorFileList(files) {
+    if (!elements.codeEditorSelect) {
+      return;
+    }
+    elements.codeEditorSelect.innerHTML = "";
+    if (!files || !files.length) {
+      elements.codeEditorSelect.disabled = true;
+      setCodeEditorEnabled(false);
+      if (elements.codeEditorContent) {
+        elements.codeEditorContent.value = "";
+      }
+      toggleHidden(elements.codeEditorEmpty, false);
+      return;
+    }
+    toggleHidden(elements.codeEditorEmpty, true);
+    elements.codeEditorSelect.disabled = false;
+    files.forEach((file) => {
+      const option = document.createElement("option");
+      option.value = file;
+      option.textContent = file;
+      elements.codeEditorSelect.appendChild(option);
+    });
+    setCodeEditorEnabled(true);
+  }
+
+  function updateSystemStatus(status) {
+    if (!status) {
+      return;
+    }
+    state.systemStatus = status;
+    const files = Array.isArray(status.managed_files) ? status.managed_files : [];
+    state.managedFiles = files;
+    if (elements.systemStatusGrid) {
+      toggleHidden(elements.systemStatusGrid, false);
+    }
+    setText(elements.systemUptime, status.uptime_human || "—");
+    setText(
+      elements.systemUptimeSeconds,
+      Math.round(Number(status.uptime_seconds ?? 0))
+    );
+    setText(elements.systemAppName, status.app_name || "—");
+    setText(elements.systemAppVersion, status.app_version || "—");
+    setText(elements.systemEnvironment, status.environment || "—");
+    setText(
+      elements.systemRestartState,
+      status.restart_supported ? "Доступно" : "Недоступно"
+    );
+    setText(
+      elements.systemLastRestart,
+      status.last_restart_requested_at
+        ? formatDate(status.last_restart_requested_at, true)
+        : "—"
+    );
+    setText(elements.systemFilesCount, files.length);
+    renderManagedFiles(files);
+    if (state.drawerMode === "code") {
+      updateCodeEditorFileList(files);
+    }
+  }
+
+  async function loadSystemStatus(options = {}) {
+    const { showLoader = true, silent = false } = options;
+    if (showLoader && elements.systemStatusLoading) {
+      elements.systemStatusLoading.textContent = "Загрузка состояния сервиса...";
+      toggleHidden(elements.systemStatusLoading, false);
+    }
+    if (!silent) {
+      showAlert(elements.systemStatusError, "");
+      showAlert(elements.systemStatusFeedback, "");
+    }
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/status`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return null;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const data = await response.json();
+      updateSystemStatus(data);
+      return data;
+    } catch (error) {
+      console.error(error);
+      if (!silent) {
+        showAlert(
+          elements.systemStatusError,
+          "Не удалось загрузить состояние сервиса."
+        );
+      }
+      return null;
+    } finally {
+      if (elements.systemStatusLoading) {
+        toggleHidden(elements.systemStatusLoading, true);
+      }
+    }
+  }
+
+  async function loadCodeFile(path) {
+    if (!path) {
+      setCodeEditorEnabled(false);
+      return null;
+    }
+    showAlert(elements.codeEditorStatus, "");
+    if (elements.codeEditorLoading) {
+      elements.codeEditorLoading.textContent = "Загрузка файла...";
+      toggleHidden(elements.codeEditorLoading, false);
+    }
+    try {
+      const encoded = buildFileUrl(path);
+      const response = await fetch(`${apiBaseUrl}/admin/system/files/${encoded}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return null;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const data = await response.json();
+      state.activeCodeFile = data.path || path;
+      if (elements.codeEditorSelect) {
+        elements.codeEditorSelect.value = state.activeCodeFile;
+      }
+      if (elements.codeEditorContent) {
+        elements.codeEditorContent.value = data.content ?? "";
+      }
+      return data;
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        elements.codeEditorStatus,
+        "Не удалось загрузить файл. Попробуйте позже."
+      );
+      return null;
+    } finally {
+      if (elements.codeEditorLoading) {
+        toggleHidden(elements.codeEditorLoading, true);
+      }
+    }
+  }
+
+  async function prepareCodeEditor() {
+    showAlert(elements.codeEditorStatus, "");
+    try {
+      if (!state.systemStatus) {
+        await loadSystemStatus({ showLoader: false, silent: true });
+      }
+    } catch (error) {
+      // уведомление уже показано
+    }
+    updateCodeEditorFileList(state.managedFiles || []);
+    if (state.managedFiles && state.managedFiles.length) {
+      const initialFile = state.activeCodeFile || state.managedFiles[0];
+      if (elements.codeEditorSelect) {
+        elements.codeEditorSelect.value = initialFile;
+      }
+      await loadCodeFile(initialFile);
+    } else if (elements.codeEditorContent) {
+      elements.codeEditorContent.value = "";
+    }
+  }
+
+  async function saveCodeFile() {
+    if (!state.activeCodeFile || !elements.codeEditorContent) {
+      return;
+    }
+    const payload = {
+      content: elements.codeEditorContent.value,
+    };
+    if (elements.codeEditorMessage) {
+      const message = elements.codeEditorMessage.value.trim();
+      if (message) {
+        payload.message = message;
+      }
+    }
+    showAlert(elements.codeEditorStatus, "");
+    if (elements.codeEditorSave) {
+      elements.codeEditorSave.disabled = true;
+      elements.codeEditorSave.textContent = "Сохранение...";
+    }
+    try {
+      const encoded = buildFileUrl(state.activeCodeFile);
+      const response = await fetch(`${apiBaseUrl}/admin/system/files/${encoded}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      await response.json();
+      showAlert(elements.codeEditorStatus, "Файл успешно сохранён.", "success");
+      void loadSystemStatus({ showLoader: false, silent: true });
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        elements.codeEditorStatus,
+        "Не удалось сохранить изменения. Проверьте журнал сервера."
+      );
+    } finally {
+      if (elements.codeEditorSave) {
+        elements.codeEditorSave.disabled = false;
+        elements.codeEditorSave.textContent = "Сохранить изменения";
+      }
+    }
   }
 
   function renderUsers(users) {
@@ -594,6 +945,106 @@
       void loadUsers();
     });
   }
+
+  if (elements.systemRefreshButton) {
+    elements.systemRefreshButton.addEventListener("click", () => {
+      void loadSystemStatus({ showLoader: true });
+    });
+  }
+
+  if (elements.openCodeEditorButton) {
+    elements.openCodeEditorButton.addEventListener("click", () => {
+      openDrawer("code");
+      void prepareCodeEditor();
+    });
+  }
+
+  if (elements.restartApiButton) {
+    elements.restartApiButton.addEventListener("click", async () => {
+      const confirmed = window.confirm(
+        "Перезапустить API сейчас? Активные соединения будут прерваны."
+      );
+      if (!confirmed) {
+        return;
+      }
+      showAlert(elements.systemStatusError, "");
+      showAlert(elements.systemStatusFeedback, "");
+      elements.restartApiButton.disabled = true;
+      elements.restartApiButton.textContent = "Перезапуск...";
+      try {
+        const response = await fetch(`${apiBaseUrl}/admin/system/restart`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          },
+        });
+        if (response.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(errorText || "Request failed");
+        }
+        showAlert(
+          elements.systemStatusFeedback,
+          "Перезапуск API инициирован.",
+          "success"
+        );
+        void loadSystemStatus({ showLoader: false, silent: true });
+      } catch (error) {
+        console.error(error);
+        showAlert(
+          elements.systemStatusError,
+          "Не удалось инициировать перезапуск. Проверьте настройки сервера."
+        );
+      } finally {
+        elements.restartApiButton.disabled = false;
+        elements.restartApiButton.textContent = "Перезапустить API";
+      }
+    });
+  }
+
+  if (elements.codeEditorSelect) {
+    elements.codeEditorSelect.addEventListener("change", (event) => {
+      const value = event.target.value;
+      if (value) {
+        void loadCodeFile(value);
+      }
+    });
+  }
+
+  if (elements.codeEditorRefresh) {
+    elements.codeEditorRefresh.addEventListener("click", () => {
+      if (state.activeCodeFile) {
+        void loadCodeFile(state.activeCodeFile);
+      } else if (elements.codeEditorSelect && elements.codeEditorSelect.value) {
+        void loadCodeFile(elements.codeEditorSelect.value);
+      }
+    });
+  }
+
+  if (elements.codeEditorSave) {
+    elements.codeEditorSave.addEventListener("click", () => {
+      void saveCodeFile();
+    });
+  }
+
+  if (elements.codeEditorCancel) {
+    elements.codeEditorCancel.addEventListener("click", () => {
+      closeDrawer();
+    });
+  }
+
+  if (elements.codeEditorContent) {
+    elements.codeEditorContent.addEventListener("input", () => {
+      showAlert(elements.codeEditorStatus, "");
+    });
+  }
+
+  void loadSystemStatus({ showLoader: true, silent: true });
+
+
 
   if (elements.createUserButton) {
     elements.createUserButton.addEventListener("click", () => {

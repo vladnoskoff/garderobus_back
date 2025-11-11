@@ -13,6 +13,7 @@ from sqlalchemy.sql import func
 import models
 import schemas
 from database import get_db, get_read_db
+from services import system_tools
 from . import users as user_routes
 
 security = HTTPBearer(auto_error=False)
@@ -311,6 +312,50 @@ def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUser
         )
 
     return details
+
+
+
+@router.get("/system/status", response_model=schemas.AdminSystemStatus)
+def get_system_status(
+    _: models.User = Depends(_get_current_user),
+) -> schemas.AdminSystemStatus:
+    return system_tools.get_system_status()
+
+
+@router.get("/system/files", response_model=schemas.AdminManagedFileList)
+def list_managed_files(
+    _: models.User = Depends(_get_current_user),
+) -> schemas.AdminManagedFileList:
+    return schemas.AdminManagedFileList(files=system_tools.list_managed_files())
+
+
+@router.get("/system/files/{relative_path:path}", response_model=schemas.AdminCodeFile)
+def read_managed_file_endpoint(
+    relative_path: str,
+    _: models.User = Depends(_get_current_user),
+) -> schemas.AdminCodeFile:
+    return system_tools.read_managed_file(relative_path)
+
+
+@router.put("/system/files/{relative_path:path}", response_model=schemas.AdminCodeFile)
+def update_managed_file(
+    relative_path: str,
+    payload: schemas.AdminCodeUpdateRequest,
+    current_user: models.User = Depends(_get_current_user),
+) -> schemas.AdminCodeFile:
+    return system_tools.write_managed_file(
+        relative_path,
+        payload.content,
+        message=payload.message,
+        actor=current_user,
+    )
+
+
+@router.post("/system/restart", response_model=schemas.AdminRestartResponse)
+def restart_api_endpoint(
+    current_user: models.User = Depends(_get_current_user),
+) -> schemas.AdminRestartResponse:
+    return system_tools.restart_api(requested_by=current_user)
 
 
 @router.post("/login")

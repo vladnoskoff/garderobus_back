@@ -625,3 +625,51 @@ button.link {
     text-align: center;
   }
 }
+textarea {
+  width: 100%;
+  min-height: 260px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 10px;
+  font-family: "JetBrains Mono", "Fira Code", "Menlo", monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+  background-color: #f9fafb;
+  color: #0f172a;
+}
+
+textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.system-status-grid {
+  margin-top: 12px;
+}
+
+.system-files-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.system-files-list .badge {
+  background-color: rgba(79, 70, 229, 0.12);
+  color: #312e81;
+}
+
+.code-editor {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+
+.system-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.system-actions .danger {
+  white-space: nowrap;
+}

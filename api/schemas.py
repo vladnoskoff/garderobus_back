@@ -254,6 +254,37 @@ class AdminUserDetail(AdminUserSummary):
     locations: List[AdminUserLocationDetail] = Field(default_factory=list)
 
 
+
+class AdminManagedFileList(BaseModel):
+    files: List[str] = Field(default_factory=list)
+
+
+class AdminSystemStatus(BaseModel):
+    uptime_seconds: float = Field(..., ge=0)
+    uptime_human: str
+    restart_supported: bool
+    last_restart_requested_at: Optional[datetime] = None
+    managed_files: List[str] = Field(default_factory=list)
+    app_name: str
+    app_version: str
+    environment: str
+
+
+class AdminCodeFile(BaseModel):
+    path: str
+    content: str
+
+
+class AdminCodeUpdateRequest(BaseModel):
+    content: str
+    message: Optional[str] = None
+
+
+class AdminRestartResponse(BaseModel):
+    detail: str
+    pid: Optional[int] = None
+
+
 class WardrobeLocationUpdate(BaseModel):
     name: Optional[str] = None
     latitude: Optional[float] = None
