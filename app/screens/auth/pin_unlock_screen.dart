@@ -88,8 +88,13 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       }
     } catch (e) {
       if (!mounted) return;
+      final rawMessage = e.toString();
+      final cleanedMessage =
+          rawMessage.replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
       setState(() {
-        _error = 'Не удалось проверить PIN-код: $e';
+        _error = cleanedMessage.isNotEmpty
+            ? 'Не удалось проверить PIN-код: $cleanedMessage'
+            : 'Не удалось проверить PIN-код. Попробуйте позже.';
       });
     } finally {
       if (mounted) {

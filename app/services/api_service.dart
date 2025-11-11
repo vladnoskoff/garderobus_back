@@ -223,11 +223,23 @@ class ApiService {
   }
 
   static Future<bool> verifyPin(int userId, String pinCode) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/users/$userId/verify_pin'),
-      headers: {"Content-Type": "application/json"},
-      body: jsonEncode({"pin_code": pinCode}),
-    );
+    final token = await storage.read(key: "token");
+
+    final headers = <String, String>{"Content-Type": "application/json"};
+    if (token != null && token.trim().isNotEmpty) {
+      headers["Authorization"] = "Bearer $token";
+    }
+
+    http.Response response;
+    try {
+      response = await http.post(
+        Uri.parse('$baseUrl/users/$userId/verify_pin'),
+        headers: headers,
+        body: jsonEncode({"pin_code": pinCode}),
+      );
+    } catch (error) {
+      throw Exception('Сервис проверки PIN недоступен. Проверьте подключение.');
+    }
 
     if (response.statusCode == 200) {
       return true;
@@ -237,7 +249,20 @@ class ApiService {
       return false;
     }
 
-    throw Exception('Не удалось проверить PIN-код');
+    String? detailMessage;
+    if (response.body.isNotEmpty) {
+      try {
+        final data = jsonDecode(response.body);
+        final detail = data['detail'];
+        if (detail is String && detail.trim().isNotEmpty) {
+          detailMessage = detail.trim();
+        }
+      } catch (_) {
+        // Игнорируем ошибки парсинга, используем сообщение по умолчанию.
+      }
+    }
+
+    throw Exception(detailMessage ?? 'Не удалось проверить PIN-код');
   }
 
   static Future<void> setPinCode(int userId, String pinCode) async {
