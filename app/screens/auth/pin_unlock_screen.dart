@@ -5,12 +5,14 @@ import '../../services/biometric_auth_service.dart';
 
 class PinUnlockScreen extends StatefulWidget {
   final int userId;
+  final String? accessToken;
   final VoidCallback onUnlocked;
   final VoidCallback? onCancel;
 
   const PinUnlockScreen({
     super.key,
     required this.userId,
+    this.accessToken,
     required this.onUnlocked,
     this.onCancel,
   });
@@ -75,7 +77,8 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     });
 
     try {
-      final isValid = await ApiService.verifyPin(widget.userId, pin);
+      final isValid =
+          await ApiService.verifyPin(widget.userId, pin, accessToken: widget.accessToken);
       if (!mounted) return;
 
       if (isValid) {

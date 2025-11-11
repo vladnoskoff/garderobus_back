@@ -11,6 +11,16 @@ class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
   static const String defaultHomeCoordinates = '55.755826, 37.617299';
   static final storage = FlutterSecureStorage();
+  static String? _sessionToken;
+
+  static void rememberAccessToken(String? token) {
+    final normalized = token?.trim();
+    if (normalized == null || normalized.isEmpty) {
+      _sessionToken = null;
+    } else {
+      _sessionToken = normalized;
+    }
+  }
 
   static Future<int?> getStoredUserId() async {
     final id = await storage.read(key: "user_id");
@@ -142,7 +152,14 @@ class ApiService {
     );
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      await storage.write(key: "token", value: data["access_token"]);
+      final accessToken = data["access_token"]?.toString();
+      if (accessToken != null && accessToken.trim().isNotEmpty) {
+        await storage.write(key: "token", value: accessToken);
+        rememberAccessToken(accessToken);
+      } else {
+        await storage.delete(key: "token");
+        rememberAccessToken(null);
+      }
       await storage.write(
         key: "user_id",
         value: data["user_id"].toString(),
@@ -222,11 +239,20 @@ class ApiService {
     return value == 'true';
   }
 
-  static Future<bool> verifyPin(int userId, String pinCode) async {
-    final token = await storage.read(key: "token");
-
+  static Future<bool> verifyPin(int userId, String pinCode,
+      {String? accessToken}) async {
     final headers = <String, String>{"Content-Type": "application/json"};
-    if (token != null && token.trim().isNotEmpty) {
+
+    String? token = accessToken?.trim();
+    if (token == null || token.isEmpty) {
+      token = _sessionToken;
+    }
+    if (token == null || token.isEmpty) {
+      token = await storage.read(key: "token");
+      rememberAccessToken(token);
+    }
+
+    if (token != null && token.isNotEmpty) {
       headers["Authorization"] = "Bearer $token";
     }
 
@@ -303,7 +329,12 @@ class ApiService {
 
   // Получение сохраненного токена
   static Future<String?> getToken() async {
-    return await storage.read(key: "token");
+    if (_sessionToken != null && _sessionToken!.isNotEmpty) {
+      return _sessionToken;
+    }
+    final token = await storage.read(key: "token");
+    rememberAccessToken(token);
+    return _sessionToken;
   }
 
 
