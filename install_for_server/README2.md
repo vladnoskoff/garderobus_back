@@ -1,6 +1,6 @@
 # Ручная установка Smart Closet API (каталог `api_services`)
 
-Этот документ описывает пошаговую установку серверной части Garderobus (FastAPI) на **чистую Ubuntu Server 22.04+** без использования автоматических скриптов. Все команды можно копировать и выполнять последовательно. Инструкции ориентированы на установку API, исходный код которого находится в каталоге `api` (служебные классы в `api/services`, далее именуемые `api_services`).
+Этот документ описывает пошаговую установку серверной части Garderobus (FastAPI) на **чистую Ubuntu Server 22.04+** без использования автоматических скриптов. Все команды можно копировать и выполнять последовательно. Инструкции ориентированы на установку API, исходный код которого находится в каталоге `api_services` репозитория.
 
 ## 1. Подготовка системы
 
@@ -64,10 +64,10 @@ sudo chown garderobus:garderobus /opt/garderobus_back
 sudo -u garderobus git clone https://github.com/vladnoskoff/garderobus_back.git /opt/garderobus_back
 ```
 
-Проверяем структуру и переходим в каталог API:
+Проверяем структуру и переходим в каталог `api_services`:
 
 ```bash
-cd /opt/garderobus_back/api
+cd /opt/garderobus_back/api_services
 ```
 
 ## 5. Создание виртуального окружения и установка зависимостей
@@ -86,7 +86,7 @@ pip install -r requirements.txt
 Создаём файл `.env` в корне репозитория. Можно начать с минимального шаблона:
 
 ```bash
-cat <<'ENV' | sudo tee /opt/garderobus_back/.env
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_services/.env
 DATABASE_URL=postgresql://garderobus:strong_password@127.0.0.1:5432/smart_closet
 CLOTHES_IMAGE_DIR=clothes_images
 MANNEQUIN_IMAGE_DIR=mannequins
@@ -102,12 +102,12 @@ DEBUG=false
 ENV
 ```
 
-При необходимости добавьте дополнительные переменные, перечисленные в `api/settings.py`.
+При необходимости добавьте дополнительные переменные, перечисленные в `api_services/settings.py`.
 
 Создаём каталоги для хранения изображений и выдаём права пользователю приложения:
 
 ```bash
-sudo mkdir -p /opt/garderobus_back/api/clothes_images /opt/garderobus_back/api/mannequins
+sudo mkdir -p /opt/garderobus_back/api_services/clothes_images /opt/garderobus_back/api_services/mannequins
 sudo chown -R garderobus:garderobus /opt/garderobus_back
 ```
 
@@ -116,19 +116,19 @@ sudo chown -R garderobus:garderobus /opt/garderobus_back
 На чистой базе достаточно один раз создать таблицы с помощью SQLAlchemy. Запустите Python внутри окружения и выполните команду:
 
 ```bash
-cd /opt/garderobus_back/api
+cd /opt/garderobus_back/api_services
 source /opt/garderobus_back/.venv/bin/activate
 python -c "from models import Base; from database import engine; Base.metadata.create_all(bind=engine)"
 ```
 
-Если в будущем будут добавляться новые поля, используйте SQL-скрипты из `api/README.md` (раздел «Миграции базы данных»).
+Если в будущем будут добавляться новые поля, используйте SQL-скрипты из `api_services/README.md` (раздел «Миграции базы данных»).
 
 ## 8. Локальный запуск API (uvicorn)
 
 Для проверки работоспособности можно запустить сервер вручную:
 
 ```bash
-cd /opt/garderobus_back/api
+cd /opt/garderobus_back/api_services
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8000
 ```
@@ -150,8 +150,8 @@ After=network.target
 [Service]
 User=garderobus
 Group=garderobus
-WorkingDirectory=/opt/garderobus_back/api
-EnvironmentFile=/opt/garderobus_back/.env
+WorkingDirectory=/opt/garderobus_back/api_services
+EnvironmentFile=/opt/garderobus_back/api_services/.env
 ExecStart=/opt/garderobus_back/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
@@ -172,8 +172,8 @@ After=network.target redis-server.service
 [Service]
 User=garderobus
 Group=garderobus
-WorkingDirectory=/opt/garderobus_back/api
-EnvironmentFile=/opt/garderobus_back/.env
+WorkingDirectory=/opt/garderobus_back/api_services
+EnvironmentFile=/opt/garderobus_back/api_services/.env
 ExecStart=/opt/garderobus_back/.venv/bin/celery -A celery_app.app worker --loglevel=INFO
 Restart=always
 RestartSec=5
@@ -211,11 +211,11 @@ server {
     }
 
     location /clothes_images/ {
-        alias /opt/garderobus_back/api/clothes_images/;
+        alias /opt/garderobus_back/api_services/clothes_images/;
     }
 
     location /mannequins/ {
-        alias /opt/garderobus_back/api/mannequins/;
+        alias /opt/garderobus_back/api_services/mannequins/;
     }
 }
 NGINX
