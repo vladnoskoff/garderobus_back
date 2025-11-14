@@ -252,3 +252,65 @@ sudo journalctl -u garderobus-api -u garderobus-celery -f
 - Для HTTPS можно использовать Certbot (`sudo apt install certbot python3-certbot-nginx`).
 
 Готово! Теперь Smart Closet API из каталога `api_services` установлено и готово к работе на вашем сервере Ubuntu.
+
+## 13. Что внутри `api_services` и как запускать микросервисы
+
+Каталог `api_services` повторяет структуру предлагаемой микросервисной архитектуры: в нём по отдельным подпапкам лежат сервисы
+`gateway`, `auth_service`, `wardrobe_service`, `ai_service` и `weather_service`, а общие классы и утилиты вынесены в пакет
+`common`. Каждый сервис представляет собой самостоятельное приложение FastAPI со своей зависимостью и точкой входа в
+`app/main.py`, поэтому их можно запускать как индивидуально, так и в связке через API-шлюз.【F:api_microservice/README.md†L1-L61】
+
+### 13.1 Базовые команды запуска
+
+Все сервисы используют одни и те же приёмы запуска: активируйте виртуальное окружение и из каталога конкретного сервиса
+выполните `uvicorn app.main:app --host 0.0.0.0 --port <порт>`. Порты можно выбрать произвольно (например, 8000–8004) или
+повторить значения из `docker-compose.yml`. Пример для основных компонентов:
+
+```bash
+# API-шлюз, агрегирует запросы клиентов
+cd /opt/garderobus_back/api_services/gateway
+source /opt/garderobus_back/.venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Auth Service: регистрация и авторизация пользователей
+cd /opt/garderobus_back/api_services/auth_service
+source /opt/garderobus_back/.venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8001
+
+# Wardrobe Service: одежда, образы и медиа-файлы
+cd /opt/garderobus_back/api_services/wardrobe_service
+source /opt/garderobus_back/.venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8002
+
+# Weather Service: метео-данные
+cd /opt/garderobus_back/api_services/weather_service
+source /opt/garderobus_back/.venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8003
+```
+
+`ai_service` помимо FastAPI-приложения использует Celery-воркер для длительных заданий. Запустите API-сервис командой, как
+показано ниже, а воркер — отдельным процессом, аналогично тому, как мы создавали systemd unit в разделе 9.2.【F:api_microservice/README.md†L14-L51】
+
+```bash
+cd /opt/garderobus_back/api_services/ai_service
+source /opt/garderobus_back/.venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8004
+
+# фоновые задачи Celery (использует брокер, указанный в переменных окружения)
+celery -A app.worker worker --loglevel=INFO
+```
+
+### 13.2 Взаимодействие сервисов и инфраструктура
+
+- **Сообщения и очередь задач.** Для обмена заданиями `ai_service` и другие компоненты используют брокер (например, Redis или
+  RabbitMQ). При установке по инструкции выше Redis уже установлен, его адрес настраивается переменными окружения.
+- **База данных.** Каждый сервис отвечает за свою схему в PostgreSQL. Создайте отдельные БД или схемы и пропишите подключения в
+  соответствующих `.env` файлах сервисов.
+- **Общий код.** Пакет `common` содержит повторно используемые клиенты и DTO. Он подключается через `PYTHONPATH` при запуске или
+  устанавливается как editable-пакет (`pip install -e /opt/garderobus_back/api_services/common`).
+- **Оркестрация.** Для локальной разработки можно воспользоваться `docker-compose.yml`, чтобы поднять сразу все сервисы и
+  инфраструктуру одной командой `docker compose up --build`. В продакшене аналогичную роль выполняет API-шлюз `gateway`,
+  маршрутизирующий внешние запросы к внутренним сервисам.【F:api_microservice/README.md†L32-L85】
+
+Такой подход позволяет включать только нужные сервисы, масштабировать их независимо и постепенно переносить функциональность
+из монолита в микросервисную архитектуру.
