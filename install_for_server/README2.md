@@ -1,6 +1,6 @@
-# Ручная установка Smart Closet API (каталог `api_services`)
+# Ручная установка Smart Closet API (каталог `api_microservice`)
 
-Этот документ описывает пошаговую установку серверной части Garderobus (FastAPI) на **чистую Ubuntu Server 22.04+** без использования автоматических скриптов. Все команды можно копировать и выполнять последовательно. Инструкции ориентированы на установку API, исходный код которого находится в каталоге `api_services` репозитория.
+Этот документ описывает пошаговую установку серверной части Garderobus (FastAPI) на **чистую Ubuntu Server 22.04+** без использования автоматических скриптов. Все команды можно копировать и выполнять последовательно. Инструкции ориентированы на установку API, исходный код которого находится в каталоге `api_microservice` репозитория.
 
 ## 1. Подготовка системы
 
@@ -64,10 +64,10 @@ sudo chown garderobus:garderobus /opt/garderobus_back
 sudo -u garderobus git clone https://github.com/vladnoskoff/garderobus_back.git /opt/garderobus_back
 ```
 
-Проверяем структуру и переходим в каталог `api_services`:
+Проверяем структуру и переходим в каталог `api_microservice`:
 
 ```bash
-cd /opt/garderobus_back/api_services
+cd /opt/garderobus_back/api_microservice
 ```
 
 ## 5. Создание виртуального окружения и установка зависимостей
@@ -76,7 +76,11 @@ cd /opt/garderobus_back/api_services
 python3 -m venv /opt/garderobus_back/.venv
 source /opt/garderobus_back/.venv/bin/activate
 pip install --upgrade pip
-pip install -r requirements.txt
+pip install -r gateway/requirements.txt \
+            -r auth_service/requirements.txt \
+            -r wardrobe_service/requirements.txt \
+            -r weather_service/requirements.txt \
+            -r ai_service/requirements.txt
 ```
 
 > При выполнении этих команд убедитесь, что активированное окружение отображается в приглашении (`(.venv)`).
@@ -89,61 +93,53 @@ pip install -r requirements.txt
 
 ## 6. Конфигурация окружения
 
-Создаём файл `.env` в корне репозитория. Можно начать с минимального шаблона:
+В каждом сервисе лежит файл `.env.example` с минимальным набором переменных. Скопируйте их и задайте реальные значения
+для подключения к базе данных, очередям и внешним API.
 
 ```bash
-cat <<'ENV' | sudo tee /opt/garderobus_back/api_services/.env.shared
-DATABASE_URL=postgresql://garderobus:strong_password@127.0.0.1:5432/smart_closet
-CLOTHES_IMAGE_DIR=clothes_images
-MANNEQUIN_IMAGE_DIR=mannequins
-CLOTHES_IMAGE_URL_PREFIX=http://127.0.0.1:8000/clothes_images
-MANNEQUIN_IMAGE_URL_PREFIX=http://127.0.0.1:8000/mannequins
-OPENAI_API_KEY=change_me
-OPENWEATHER_API_KEY=change_me
-HUGGINGFACE_API_KEY=change_me
-SEGMIND_API_KEY=change_me
-UPLOADCARE_PUBLIC_KEY=change_me
-UPLOADCARE_SECRET_KEY=change_me
-DEBUG=false
-ENV
+for service in gateway auth_service wardrobe_service weather_service ai_service; do
+  sudo -u garderobus cp /opt/garderobus_back/api_microservice/$service/.env.example \
+    /opt/garderobus_back/api_microservice/$service/.env
+done
 ```
 
-При необходимости добавьте дополнительные переменные, перечисленные в `api_services/settings.py`. Если отдельным сервисам
-нужны специфичные параметры (например, URL очередей или ключи), создайте для них файлы `.env` в соответствующих папках и
-подключите их в unit-файлах: `EnvironmentFile=/opt/garderobus_back/api_services/auth_service/.env` и т.д. Можно комбинировать
-общий файл `.env.shared` и частные файлы (см. шаблон в разделе 9.1).
+Отредактируйте `/opt/garderobus_back/api_microservice/<service>/.env`, чтобы вписать URL PostgreSQL (`DATABASE_URL`),
+доступы к брокеру задач (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` для `ai_service`), адреса соседних сервисов и ключи
+API. Подсмотреть полный перечень можно в `app/config.py` каждого микросервиса.
 
-Создаём каталоги для хранения изображений и выдаём права пользователю приложения:
+Для удобства эксплуатации создайте каталог с системными переменными окружения, которые будут подхватываться systemd:
 
 ```bash
-sudo mkdir -p /opt/garderobus_back/api_services/clothes_images /opt/garderobus_back/api_services/mannequins
+sudo mkdir -p /etc/garderobus
 sudo chown -R garderobus:garderobus /opt/garderobus_back
 ```
 
-## 7. Инициализация базы данных
+## 7. Инициализация баз данных
 
-На чистой базе достаточно один раз создать таблицы с помощью SQLAlchemy. Запустите Python внутри окружения и выполните команду:
+Каждый микросервис использует своё подключение к PostgreSQL. После заполнения `.env` создайте необходимые структуры.
+Для примера ниже показано, как инициализировать таблицы `auth_service`:
 
 ```bash
-cd /opt/garderobus_back/api_services
+cd /opt/garderobus_back/api_microservice
 source /opt/garderobus_back/.venv/bin/activate
-python -c "from models import Base; from database import engine; Base.metadata.create_all(bind=engine)"
+python -c "from sqlalchemy import create_engine; from auth_service.app.config import get_settings; from auth_service.app.models import Base; engine = create_engine(get_settings().database_url); Base.metadata.create_all(bind=engine)"
 ```
 
-Если в будущем будут добавляться новые поля, используйте SQL-скрипты из `api_services/README.md` (раздел «Миграции базы данных»).
+Остальные сервисы поставляются с заглушками и должны получить собственные миграции по мере переноса логики из монолита.
+Рекомендации по разбиению схем приведены в `api_microservice/README.md` (раздел «Porting Strategy»).
 
 ## 8. Локальный запуск API (uvicorn)
 
 Для проверки работоспособности можно запустить сервер вручную:
 
 ```bash
-cd /opt/garderobus_back/api_services/gateway
+cd /opt/garderobus_back/api_microservice/gateway
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-API-шлюз будет доступен по адресу `http://<ваш_IP>:8000`. Документация Swagger — `/docs`. Остальные сервисы запускаются аналогично,
-но на своих портах (см. раздел 13.1).
+API-шлюз будет доступен по адресу `http://<ваш_IP>:8000`. Документация Swagger — `/docs`, проверка здоровья — `/healthz`.
+Остальные сервисы запускаются аналогично, но на своих портах (см. раздел 13.1).
 
 ## 9. Настройка systemd-сервисов для микросервисов
 
@@ -162,11 +158,10 @@ After=network.target
 [Service]
 User=garderobus
 Group=garderobus
-WorkingDirectory=/opt/garderobus_back/api_services/%i
-EnvironmentFile=/opt/garderobus_back/api_services/.env.shared
+WorkingDirectory=/opt/garderobus_back/api_microservice/%i
 EnvironmentFile=-/etc/garderobus/%i.env
-# Если сервису требуется собственный файл `.env`, добавьте строку ниже и создайте его в каталоге сервиса
-# EnvironmentFile=-/opt/garderobus_back/api_services/%i/.env
+EnvironmentFile=/opt/garderobus_back/api_microservice/%i/.env
+Environment=PYTHONPATH=/opt/garderobus_back/api_microservice
 ExecStart=/opt/garderobus_back/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
 Restart=always
 RestartSec=5
@@ -223,9 +218,8 @@ After=network.target redis-server.service
 [Service]
 User=garderobus
 Group=garderobus
-WorkingDirectory=/opt/garderobus_back/api_services/ai_service
-EnvironmentFile=/opt/garderobus_back/api_services/.env.shared
-# EnvironmentFile=/opt/garderobus_back/api_services/ai_service/.env  # добавьте при необходимости
+WorkingDirectory=/opt/garderobus_back/api_microservice/ai_service
+EnvironmentFile=/opt/garderobus_back/api_microservice/ai_service/.env
 ExecStart=/opt/garderobus_back/.venv/bin/celery -A app.worker worker --loglevel=INFO
 Restart=always
 RestartSec=5
@@ -260,14 +254,6 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
-
-    location /clothes_images/ {
-        alias /opt/garderobus_back/api_services/clothes_images/;
-    }
-
-    location /mannequins/ {
-        alias /opt/garderobus_back/api_services/mannequins/;
-    }
 }
 NGINX
 ```
@@ -288,7 +274,7 @@ sudo systemctl reload nginx
 sudo systemctl status garderobus@gateway.service garderobus@auth_service.service \
   garderobus@wardrobe_service.service garderobus@weather_service.service \
   garderobus@ai_service.service garderobus-celery
-curl -f http://127.0.0.1:8000/health || curl -f http://127.0.0.1:8000/docs
+curl -f http://127.0.0.1:8000/healthz || curl -f http://127.0.0.1:8000/docs
 ```
 
 Логи сервисов и Celery находятся в `journalctl`:
@@ -306,11 +292,11 @@ sudo journalctl -u garderobus@gateway.service -u garderobus@auth_service.service
 - Настройте резервное копирование базы данных PostgreSQL.
 - Для HTTPS можно использовать Certbot (`sudo apt install certbot python3-certbot-nginx`).
 
-Готово! Теперь Smart Closet API из каталога `api_services` установлено и готово к работе на вашем сервере Ubuntu.
+Готово! Теперь Smart Closet API из каталога `api_microservice` установлено и готово к работе на вашем сервере Ubuntu.
 
-## 13. Что внутри `api_services` и как запускать микросервисы
+## 13. Что внутри `api_microservice` и как запускать микросервисы
 
-Каталог `api_services` повторяет структуру предлагаемой микросервисной архитектуры: в нём по отдельным подпапкам лежат сервисы
+Каталог `api_microservice` повторяет структуру предлагаемой микросервисной архитектуры: в нём по отдельным подпапкам лежат сервисы
 `gateway`, `auth_service`, `wardrobe_service`, `ai_service` и `weather_service`, а общие классы и утилиты вынесены в пакет
 `common`. Каждый сервис представляет собой самостоятельное приложение FastAPI со своей зависимостью и точкой входа в
 `app/main.py`, поэтому их можно запускать как индивидуально, так и в связке через API-шлюз.【F:api_microservice/README.md†L1-L61】
@@ -322,23 +308,24 @@ sudo journalctl -u garderobus@gateway.service -u garderobus@auth_service.service
 повторить значения из `docker-compose.yml`. Пример для основных компонентов:
 
 ```bash
+export PYTHONPATH=/opt/garderobus_back/api_microservice
 # API-шлюз, агрегирует запросы клиентов
-cd /opt/garderobus_back/api_services/gateway
+cd /opt/garderobus_back/api_microservice/gateway
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 # Auth Service: регистрация и авторизация пользователей
-cd /opt/garderobus_back/api_services/auth_service
+cd /opt/garderobus_back/api_microservice/auth_service
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8001
 
 # Wardrobe Service: одежда, образы и медиа-файлы
-cd /opt/garderobus_back/api_services/wardrobe_service
+cd /opt/garderobus_back/api_microservice/wardrobe_service
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8002
 
 # Weather Service: метео-данные
-cd /opt/garderobus_back/api_services/weather_service
+cd /opt/garderobus_back/api_microservice/weather_service
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8003
 ```
@@ -347,7 +334,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8003
 показано ниже, а воркер — отдельным процессом, аналогично тому, как мы создавали systemd unit в разделе 9.2.【F:api_microservice/README.md†L14-L51】
 
 ```bash
-cd /opt/garderobus_back/api_services/ai_service
+cd /opt/garderobus_back/api_microservice/ai_service
 source /opt/garderobus_back/.venv/bin/activate
 uvicorn app.main:app --host 0.0.0.0 --port 8004
 
@@ -361,8 +348,8 @@ celery -A app.worker worker --loglevel=INFO
   RabbitMQ). При установке по инструкции выше Redis уже установлен, его адрес настраивается переменными окружения.
 - **База данных.** Каждый сервис отвечает за свою схему в PostgreSQL. Создайте отдельные БД или схемы и пропишите подключения в
   соответствующих `.env` файлах сервисов.
-- **Общий код.** Пакет `common` содержит повторно используемые клиенты и DTO. Он подключается через `PYTHONPATH` при запуске или
-  устанавливается как editable-пакет (`pip install -e /opt/garderobus_back/api_services/common`).
+- **Общий код.** Пакет `common` содержит повторно используемые клиенты и DTO. Добавьте `/opt/garderobus_back/api_microservice`
+  в `PYTHONPATH`, чтобы сервисы видели общий код, или вынесите пакет в отдельный артефакт при дальнейшей разработке.
 - **Оркестрация.** Для локальной разработки можно воспользоваться `docker-compose.yml`, чтобы поднять сразу все сервисы и
   инфраструктуру одной командой `docker compose up --build`. В продакшене аналогичную роль выполняет API-шлюз `gateway`,
   маршрутизирующий внешние запросы к внутренним сервисам.【F:api_microservice/README.md†L32-L85】
