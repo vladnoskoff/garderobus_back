@@ -81,12 +81,18 @@ pip install -r requirements.txt
 
 > При выполнении этих команд убедитесь, что активированное окружение отображается в приглашении (`(.venv)`).
 
+Большинству проектов достаточно **одного** виртуального окружения, потому что все микросервисы используют одинаковые
+зависимости (FastAPI, SQLAlchemy, Celery и т.д.). Это упрощает обновление пакетов и развёртывание, а также позволяет
+перезапускать каждый сервис отдельно — systemd-сервисы (см. раздел 9) ссылаются на один и тот же интерпретатор, но
+каждый из них управляет только своим процессом. Если хотите полностью изолировать зависимости, создайте отдельные окружения
+по аналогии (например, `/opt/garderobus_back/.venv_gateway`, `.venv_auth` и т.д.) и пропишите соответствующие пути в unit-файлах.
+
 ## 6. Конфигурация окружения
 
 Создаём файл `.env` в корне репозитория. Можно начать с минимального шаблона:
 
 ```bash
-cat <<'ENV' | sudo tee /opt/garderobus_back/api_services/.env
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_services/.env.shared
 DATABASE_URL=postgresql://garderobus:strong_password@127.0.0.1:5432/smart_closet
 CLOTHES_IMAGE_DIR=clothes_images
 MANNEQUIN_IMAGE_DIR=mannequins
@@ -102,7 +108,10 @@ DEBUG=false
 ENV
 ```
 
-При необходимости добавьте дополнительные переменные, перечисленные в `api_services/settings.py`.
+При необходимости добавьте дополнительные переменные, перечисленные в `api_services/settings.py`. Если отдельным сервисам
+нужны специфичные параметры (например, URL очередей или ключи), создайте для них файлы `.env` в соответствующих папках и
+подключите их в unit-файлах: `EnvironmentFile=/opt/garderobus_back/api_services/auth_service/.env` и т.д. Можно комбинировать
+общий файл `.env.shared` и частные файлы (см. шаблон в разделе 9.1).
 
 Создаём каталоги для хранения изображений и выдаём права пользователю приложения:
 
@@ -128,31 +137,37 @@ python -c "from models import Base; from database import engine; Base.metadata.c
 Для проверки работоспособности можно запустить сервер вручную:
 
 ```bash
-cd /opt/garderobus_back/api_services
+cd /opt/garderobus_back/api_services/gateway
 source /opt/garderobus_back/.venv/bin/activate
-uvicorn main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-API будет доступно по адресу `http://<ваш_IP>:8000`. Документация Swagger — `/docs`.
+API-шлюз будет доступен по адресу `http://<ваш_IP>:8000`. Документация Swagger — `/docs`. Остальные сервисы запускаются аналогично,
+но на своих портах (см. раздел 13.1).
 
-## 9. Настройка systemd-сервисов
+## 9. Настройка systemd-сервисов для микросервисов
 
-Чтобы API и Celery-воркер запускались автоматически, создадим unit-файлы. Предполагается, что код и виртуальное окружение находятся в `/opt/garderobus_back`.
+Чтобы каждый компонент запускался автоматически и мог перезапускаться независимо, создадим отдельные unit-файлы. Все они
+используют общее виртуальное окружение, поэтому достаточно перезапускать только нужный сервис: например,
+`sudo systemctl restart garderobus@auth_service.service` не затронет `garderobus@gateway.service`.
 
-### 9.1 Uvicorn (FastAPI)
+### 9.1 Шаблон unit-файла
 
 ```bash
-sudo tee /etc/systemd/system/garderobus-api.service > /dev/null <<'SERVICE'
+sudo tee /etc/systemd/system/garderobus@.service > /dev/null <<'SERVICE'
 [Unit]
-Description=Garderobus FastAPI service
+Description=Garderobus microservice %i
 After=network.target
 
 [Service]
 User=garderobus
 Group=garderobus
-WorkingDirectory=/opt/garderobus_back/api_services
-EnvironmentFile=/opt/garderobus_back/api_services/.env
-ExecStart=/opt/garderobus_back/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+WorkingDirectory=/opt/garderobus_back/api_services/%i
+EnvironmentFile=/opt/garderobus_back/api_services/.env.shared
+EnvironmentFile=-/etc/garderobus/%i.env
+# Если сервису требуется собственный файл `.env`, добавьте строку ниже и создайте его в каталоге сервиса
+# EnvironmentFile=-/opt/garderobus_back/api_services/%i/.env
+ExecStart=/opt/garderobus_back/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port ${PORT}
 Restart=always
 RestartSec=5
 
@@ -161,7 +176,43 @@ WantedBy=multi-user.target
 SERVICE
 ```
 
-### 9.2 Celery worker (если используются фоновые задачи из `api_services`)
+В unit-шаблоне используется переменная окружения `PORT`, поэтому для каждого инстанса зададим собственный файл с портом.
+
+```bash
+sudo mkdir -p /etc/garderobus
+cat <<'ENV' | sudo tee /etc/garderobus/gateway.env
+PORT=8000
+ENV
+cat <<'ENV' | sudo tee /etc/garderobus/auth_service.env
+PORT=8001
+ENV
+cat <<'ENV' | sudo tee /etc/garderobus/wardrobe_service.env
+PORT=8002
+ENV
+cat <<'ENV' | sudo tee /etc/garderobus/weather_service.env
+PORT=8003
+ENV
+cat <<'ENV' | sudo tee /etc/garderobus/ai_service.env
+PORT=8004
+ENV
+```
+
+Теперь активируем и запускаем systemd-инстансы:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable garderobus@gateway.service garderobus@auth_service.service \
+  garderobus@wardrobe_service.service garderobus@weather_service.service \
+  garderobus@ai_service.service
+sudo systemctl start garderobus@gateway.service garderobus@auth_service.service \
+  garderobus@wardrobe_service.service garderobus@weather_service.service \
+  garderobus@ai_service.service
+```
+
+Теперь каждый микросервис можно обслуживать отдельно: `systemctl restart garderobus@weather_service.service`
+перезапустит только сервис погоды.
+
+### 9.2 Celery worker для `ai_service`
 
 ```bash
 sudo tee /etc/systemd/system/garderobus-celery.service > /dev/null <<'SERVICE'
@@ -172,9 +223,10 @@ After=network.target redis-server.service
 [Service]
 User=garderobus
 Group=garderobus
-WorkingDirectory=/opt/garderobus_back/api_services
-EnvironmentFile=/opt/garderobus_back/api_services/.env
-ExecStart=/opt/garderobus_back/.venv/bin/celery -A celery_app.app worker --loglevel=INFO
+WorkingDirectory=/opt/garderobus_back/api_services/ai_service
+EnvironmentFile=/opt/garderobus_back/api_services/.env.shared
+# EnvironmentFile=/opt/garderobus_back/api_services/ai_service/.env  # добавьте при необходимости
+ExecStart=/opt/garderobus_back/.venv/bin/celery -A app.worker worker --loglevel=INFO
 Restart=always
 RestartSec=5
 
@@ -183,13 +235,12 @@ WantedBy=multi-user.target
 SERVICE
 ```
 
-Применяем изменения и запускаем сервисы:
+Активируем и запускаем воркер:
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable garderobus-api garderobus-celery
-sudo systemctl start garderobus-api garderobus-celery
-sudo systemctl status garderobus-api garderobus-celery
+sudo systemctl enable garderobus-celery
+sudo systemctl start garderobus-celery
+sudo systemctl status garderobus-celery
 ```
 
 ## 10. Настройка Nginx (reverse proxy)
@@ -234,14 +285,18 @@ sudo systemctl reload nginx
 Убедитесь, что сервисы запущены и отвечают:
 
 ```bash
-sudo systemctl status garderobus-api garderobus-celery
+sudo systemctl status garderobus@gateway.service garderobus@auth_service.service \
+  garderobus@wardrobe_service.service garderobus@weather_service.service \
+  garderobus@ai_service.service garderobus-celery
 curl -f http://127.0.0.1:8000/health || curl -f http://127.0.0.1:8000/docs
 ```
 
-Логи API и Celery находятся в `journalctl`:
+Логи сервисов и Celery находятся в `journalctl`:
 
 ```bash
-sudo journalctl -u garderobus-api -u garderobus-celery -f
+sudo journalctl -u garderobus@gateway.service -u garderobus@auth_service.service \
+  -u garderobus@wardrobe_service.service -u garderobus@weather_service.service \
+  -u garderobus@ai_service.service -u garderobus-celery -f
 ```
 
 ## 12. Дополнительные шаги
