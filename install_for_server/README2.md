@@ -93,26 +93,298 @@ pip install -r gateway/requirements.txt \
 
 ## 6. Конфигурация окружения
 
-В каждом сервисе лежит файл `.env.example` с минимальным набором переменных. Скопируйте их и задайте реальные значения
-для подключения к базе данных, очередям и внешним API.
+В монолите (`api/settings.py`) использовалось много переменных окружения, и при переходе на микросервисы их важно
+сохранить. Ниже приведены полностью заполненные `.env`-файлы для каждого сервиса — их можно скопировать как есть и при
+необходимости заменить пароли/ключи на свои значения. Путь `/var/log/garderobus` будет использован для логов, поэтому
+создадим его сразу же:
 
 ```bash
-for service in gateway auth_service wardrobe_service weather_service ai_service; do
-  sudo -u garderobus cp /opt/garderobus_back/api_microservice/$service/.env.example \
-    /opt/garderobus_back/api_microservice/$service/.env
-done
-```
-
-Отредактируйте `/opt/garderobus_back/api_microservice/<service>/.env`, чтобы вписать URL PostgreSQL (`DATABASE_URL`),
-доступы к брокеру задач (`CELERY_BROKER_URL`, `CELERY_RESULT_BACKEND` для `ai_service`), адреса соседних сервисов и ключи
-API. Подсмотреть полный перечень можно в `app/config.py` каждого микросервиса.
-
-Для удобства эксплуатации создайте каталог с системными переменными окружения, которые будут подхватываться systemd:
-
-```bash
+sudo mkdir -p /var/log/garderobus
+sudo chown garderobus:garderobus /var/log/garderobus
 sudo mkdir -p /etc/garderobus
 sudo chown -R garderobus:garderobus /opt/garderobus_back
 ```
+
+> Параметры подключения к PostgreSQL и Redis в примерах ориентированы на локальные сервисы (127.0.0.1). Если вы
+> используете внешние узлы, замените адреса и порты.
+
+### 6.1 Gateway (`/opt/garderobus_back/api_microservice/gateway/.env`)
+
+```bash
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_microservice/gateway/.env
+# Основные настройки приложения
+APP_NAME=Garderobus API Gateway
+APP_ENV=production
+APP_VERSION=2024.05
+DEBUG=false
+
+# Логирование и управление
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/garderobus/gateway.log
+LOG_FILE_BACKUP_COUNT=7
+API_RATE_LIMIT=120/minute
+ADMIN_RESTART_COMMAND=
+ADMIN_ALLOW_RESTART=true
+ADMIN_MANAGED_CODE_ROOT=/opt/garderobus_back/api_microservice/gateway/managed_code
+ADMIN_MANAGED_CODE_MAX_SIZE=131072
+ADMIN_MANAGED_CODE_EXTENSIONS=.py,.txt,.json,.yaml,.yml,.sh
+
+# Сервисные URL
+AUTH_SERVICE_URL=http://127.0.0.1:8001
+WARDROBE_SERVICE_URL=http://127.0.0.1:8002
+WEATHER_SERVICE_URL=http://127.0.0.1:8003
+AI_SERVICE_URL=http://127.0.0.1:8004
+
+# Локация по умолчанию и интеграция с дисплеем
+DEFAULT_USER_LOCATION=55.755826,37.617299
+ESP_DISPLAY_IP=http://192.168.1.100
+
+# Настройки сети и прокси
+SOCKS_PROXY_URL=socks5://127.0.0.1:10808
+ENABLE_SOCKS_PROXY=false
+
+# Трассировка и метрики
+TRACING_ENABLED=true
+TRACING_SERVICE_NAME=garderobus-gateway
+JAEGER_AGENT_HOST=127.0.0.1
+JAEGER_AGENT_PORT=6831
+
+# HTTP-клиент
+HTTP_CLIENT_TIMEOUT=5.0
+HTTP_CLIENT_CIRCUIT_MAX_FAILURES=5
+HTTP_CLIENT_CIRCUIT_RESET_TIMEOUT=60
+HTTP_CLIENT_RATE_LIMIT=60
+HTTP_CLIENT_RATE_PERIOD=60
+
+# Кэширование
+CACHE_URL=redis://127.0.0.1:6379/0
+CACHE_BACKEND=redis
+CACHE_ENABLED=true
+CACHE_DEFAULT_TTL=300
+CACHE_TTL_CLOTHES=300
+CACHE_TTL_LOCATIONS=300
+CACHE_TTL_OUTFITS=300
+CACHE_TTL_WEATHER=900
+CACHE_SOCKET_TIMEOUT=1.5
+CACHE_KEY_PREFIX=garderobus
+CACHE_INVALIDATION_BATCH_SIZE=50
+STATIC_CACHE_CONTROL=public, max-age=604800, immutable
+CDN_CACHE_CONTROL=public, max-age=604800, immutable
+STATIC_ENABLE_ETAG=true
+
+# Очередь задач
+CELERY_BROKER_URL=amqp://guest:guest@127.0.0.1:5672//
+CELERY_RESULT_BACKEND=rpc://
+CELERY_DEFAULT_QUEUE=garderobus-tasks
+CELERY_RESULT_EXPIRES=3600
+CELERY_TASK_SOFT_TIME_LIMIT=120
+CELERY_TASK_HARD_TIME_LIMIT=180
+CELERY_WORKER_PREFETCH_MULTIPLIER=1
+ENV
+sudo chown garderobus:garderobus /opt/garderobus_back/api_microservice/gateway/.env
+```
+
+### 6.2 Auth Service (`/opt/garderobus_back/api_microservice/auth_service/.env`)
+
+```bash
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_microservice/auth_service/.env
+# Основные настройки
+APP_NAME=Auth Service
+APP_ENV=production
+DEBUG=false
+
+# Подключение к PostgreSQL
+DATABASE_URL=postgresql+psycopg2://garderobus:strong_password@127.0.0.1:5432/auth_service
+DATABASE_READ_REPLICAS=
+DATABASE_USE_REPLICAS=false
+DATABASE_POOL_SIZE=10
+DATABASE_MAX_OVERFLOW=20
+DATABASE_POOL_TIMEOUT=30
+DATABASE_POOL_RECYCLE=1800
+DATABASE_POOL_PRE_PING=true
+
+# Аутентификация
+JWT_SECRET=change-me-please
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# Логирование
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/garderobus/auth_service.log
+LOG_FILE_BACKUP_COUNT=7
+
+# Очередь задач (для фоновых операций, если появятся)
+CELERY_BROKER_URL=amqp://guest:guest@127.0.0.1:5672//
+CELERY_RESULT_BACKEND=rpc://
+CELERY_DEFAULT_QUEUE=garderobus-auth
+CELERY_RESULT_EXPIRES=3600
+CELERY_TASK_SOFT_TIME_LIMIT=120
+CELERY_TASK_HARD_TIME_LIMIT=180
+CELERY_WORKER_PREFETCH_MULTIPLIER=1
+
+# Общие параметры
+TRACING_ENABLED=true
+TRACING_SERVICE_NAME=garderobus-auth
+JAEGER_AGENT_HOST=127.0.0.1
+JAEGER_AGENT_PORT=6831
+ENV
+sudo chown garderobus:garderobus /opt/garderobus_back/api_microservice/auth_service/.env
+```
+
+### 6.3 Wardrobe Service (`/opt/garderobus_back/api_microservice/wardrobe_service/.env`)
+
+```bash
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_microservice/wardrobe_service/.env
+# Основные настройки
+APP_NAME=Wardrobe Service
+APP_ENV=production
+DEBUG=false
+
+# PostgreSQL
+DATABASE_URL=postgresql+psycopg2://garderobus:strong_password@127.0.0.1:5432/wardrobe_service
+DATABASE_READ_REPLICAS=
+DATABASE_USE_REPLICAS=false
+DATABASE_POOL_SIZE=10
+DATABASE_MAX_OVERFLOW=20
+DATABASE_POOL_TIMEOUT=30
+DATABASE_POOL_RECYCLE=1800
+DATABASE_POOL_PRE_PING=true
+
+# Медиа и статика
+MEDIA_BUCKET=wardrobe-media
+MINIO_ENDPOINT=http://127.0.0.1:9000
+MINIO_ROOT_USER=minio
+MINIO_ROOT_PASSWORD=minio123
+CLOTHES_IMAGE_DIR=/opt/garderobus_back/api_microservice/wardrobe_service/storage/clothes_images
+MANNEQUIN_IMAGE_DIR=/opt/garderobus_back/api_microservice/wardrobe_service/storage/mannequins
+CLOTHES_IMAGE_URL_PREFIX=http://cdn.garderobus.local/clothes_images
+MANNEQUIN_IMAGE_URL_PREFIX=http://cdn.garderobus.local/mannequins
+TEST_PERSON_IMAGE_URL=http://cdn.garderobus.local/static/test_mannequin.png
+UPLOADCARE_PUBLIC_KEY=9bbcfab1a72a8d1311ba
+UPLOADCARE_SECRET_KEY=0ac770a85532060f0ed9
+
+# Интеграции
+AUTH_SERVICE_URL=http://127.0.0.1:8001
+
+# Логирование и кэширование
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/garderobus/wardrobe_service.log
+LOG_FILE_BACKUP_COUNT=7
+CACHE_URL=redis://127.0.0.1:6379/0
+CACHE_BACKEND=redis
+CACHE_ENABLED=true
+CACHE_DEFAULT_TTL=300
+CACHE_TTL_CLOTHES=300
+CACHE_TTL_OUTFITS=300
+CACHE_SOCKET_TIMEOUT=1.5
+CACHE_KEY_PREFIX=garderobus-wardrobe
+
+# Очередь задач (для генерации контента)
+CELERY_BROKER_URL=amqp://guest:guest@127.0.0.1:5672//
+CELERY_RESULT_BACKEND=rpc://
+CELERY_DEFAULT_QUEUE=garderobus-wardrobe
+CELERY_RESULT_EXPIRES=3600
+CELERY_TASK_SOFT_TIME_LIMIT=120
+CELERY_TASK_HARD_TIME_LIMIT=180
+CELERY_WORKER_PREFETCH_MULTIPLIER=1
+
+# Трассировка
+TRACING_ENABLED=true
+TRACING_SERVICE_NAME=garderobus-wardrobe
+JAEGER_AGENT_HOST=127.0.0.1
+JAEGER_AGENT_PORT=6831
+ENV
+sudo chown garderobus:garderobus /opt/garderobus_back/api_microservice/wardrobe_service/.env
+```
+
+### 6.4 Weather Service (`/opt/garderobus_back/api_microservice/weather_service/.env`)
+
+```bash
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_microservice/weather_service/.env
+APP_NAME=Weather Service
+APP_ENV=production
+DEBUG=false
+
+# Погодный API
+OPENWEATHERMAP_API_KEY=b12505dfa3865989452161d336d8ee5c
+DEFAULT_USER_LOCATION=55.755826,37.617299
+
+# HTTP и кэш
+HTTP_TIMEOUT=5
+CACHE_TTL_SECONDS=900
+CACHE_URL=redis://127.0.0.1:6379/0
+CACHE_KEY_PREFIX=garderobus-weather
+CACHE_ENABLED=true
+
+# Логи и трассировка
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/garderobus/weather_service.log
+LOG_FILE_BACKUP_COUNT=7
+TRACING_ENABLED=true
+TRACING_SERVICE_NAME=garderobus-weather
+JAEGER_AGENT_HOST=127.0.0.1
+JAEGER_AGENT_PORT=6831
+ENV
+sudo chown garderobus:garderobus /opt/garderobus_back/api_microservice/weather_service/.env
+```
+
+### 6.5 AI Service (`/opt/garderobus_back/api_microservice/ai_service/.env`)
+
+```bash
+cat <<'ENV' | sudo tee /opt/garderobus_back/api_microservice/ai_service/.env
+# Основные настройки
+APP_NAME=AI Service
+APP_ENV=production
+DEBUG=false
+
+# PostgreSQL (для хранения результатов и очередей)
+DATABASE_URL=postgresql+psycopg2://garderobus:strong_password@127.0.0.1:5432/ai_service
+DATABASE_READ_REPLICAS=
+DATABASE_USE_REPLICAS=false
+DATABASE_POOL_SIZE=10
+DATABASE_MAX_OVERFLOW=20
+DATABASE_POOL_TIMEOUT=30
+DATABASE_POOL_RECYCLE=1800
+DATABASE_POOL_PRE_PING=true
+
+# Очереди Celery
+CELERY_BROKER_URL=amqp://guest:guest@127.0.0.1:5672//
+CELERY_RESULT_BACKEND=rpc://
+CELERY_DEFAULT_QUEUE=garderobus-ai
+CELERY_RESULT_EXPIRES=3600
+CELERY_TASK_SOFT_TIME_LIMIT=600
+CELERY_TASK_HARD_TIME_LIMIT=900
+CELERY_WORKER_PREFETCH_MULTIPLIER=1
+
+# Внешние AI-API
+OPENAI_API_KEY=sk-your-openai-key
+HUGGINGFACE_API_KEY=hf_your_huggingface_key
+SEGMIND_API_KEY=SG_your_segmind_key
+UPLOADCARE_PUBLIC_KEY=9bbcfab1a72a8d1311ba
+UPLOADCARE_SECRET_KEY=0ac770a85532060f0ed9
+
+# Доступ к Wardrobe для загрузки изображений
+WARDROBE_SERVICE_URL=http://127.0.0.1:8002
+
+# Прокси (если требуется доступ к внешним API через SOCKS)
+SOCKS_PROXY_URL=socks5://127.0.0.1:10808
+ENABLE_SOCKS_PROXY=false
+
+# Логи и трассировка
+LOG_LEVEL=INFO
+LOG_FILE=/var/log/garderobus/ai_service.log
+LOG_FILE_BACKUP_COUNT=7
+TRACING_ENABLED=true
+TRACING_SERVICE_NAME=garderobus-ai
+JAEGER_AGENT_HOST=127.0.0.1
+JAEGER_AGENT_PORT=6831
+ENV
+sudo chown garderobus:garderobus /opt/garderobus_back/api_microservice/ai_service/.env
+```
+
+> Замените `strong_password`, `sk-your-openai-key`, `hf_your_huggingface_key`, `SG_your_segmind_key` и другие чувствительные
+> значения на собственные секреты. Если используете MinIO, не забудьте создать бакет `wardrobe-media` и задать реальные
+> `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`.
 
 ## 7. Инициализация баз данных
 
