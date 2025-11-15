@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     openweathermap_api_key: str
     http_timeout: float = Field(default=5.0)
     cache_ttl_seconds: int = Field(default=900)
+    database_url: str
 
 
 @lru_cache
