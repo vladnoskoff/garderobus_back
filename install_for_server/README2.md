@@ -47,10 +47,10 @@ sudo systemctl start redis-server nginx php8.1-fpm
 sudo -u postgres psql
 ```
 
-Внутри `psql` выполните команды (подставьте свои значения пароля):
+Внутри `psql` выполните команды (пароль уже совпадает с тем, что указан в `.env`):
 
 ```sql
-CREATE USER garderobus WITH PASSWORD 'strong_password';
+CREATE USER garderobus WITH PASSWORD 'InoskoffStrelkov18';
 CREATE DATABASE smart_closet OWNER garderobus;
 GRANT ALL PRIVILEGES ON DATABASE smart_closet TO garderobus;
 \q
@@ -98,8 +98,11 @@ pip install -r gateway/requirements.txt \
 В монолите (`api/settings.py`) использовалось много переменных окружения, и при переходе на микросервисы их важно
 сохранить. Репозиторий уже содержит заполненные `.env`-файлы в каждой папке сервиса, поэтому сразу после клонирования
 у вас доступны конфигурации по умолчанию. Они настроены на локальные сервисы (PostgreSQL, Redis, RabbitMQ) и публичный
-домен `http://garderobus.tech` для конечных пользователей. Проверьте и, при необходимости, отредактируйте секреты,
-пароли и токены (`change-me-please`, `sk-your-openai-key` и т.п.) прежде чем запускать сервисы в продакшене.
+домен `http://garderobus.tech` для конечных пользователей. Значения `DATABASE_URL` уже указывают на
+`postgresql+psycopg2://garderobus:InoskoffStrelkov18@127.0.0.1:5432/`, а в AI-сервисе прописан рабочий
+`OPENAI_API_KEY=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`.
+Проверьте и, при необходимости, отредактируйте остальные секреты (`change-me-please`, `hf_your_huggingface_key`,
+`SG_your_segmind_key` и т.п.) прежде чем запускать сервисы в продакшене.
 
 Путь `/var/log/garderobus` используется для логов микросервисов, а Wardrobe хранит изображения в каталоге
 `/opt/garderobus_back/api_microservice/wardrobe_service/storage`. Подготовим директории заранее:
@@ -122,8 +125,10 @@ sudo chown -R garderobus:garderobus /opt/garderobus_back
 sudo -u garderobus nano /opt/garderobus_back/api_microservice/auth_service/.env
 ```
 
-> Замените `strong_password`, `change-me-please`, `sk-your-openai-key`, `hf_your_huggingface_key`, `SG_your_segmind_key` и
-> другие чувствительные значения на собственные секреты. Если используете MinIO, не забудьте создать бакет `wardrobe-media`
+> При желании замените пароль `InoskoffStrelkov18`, JWT-секрет `change-me-please`, OpenAI-ключ
+> `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`,
+> `hf_your_huggingface_key`, `SG_your_segmind_key` и другие чувствительные значения на собственные секреты.
+> Если используете MinIO, не забудьте создать бакет `wardrobe-media`
 > и задать реальные `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`.
 
 ## 7. Инициализация баз данных
