@@ -1,30 +1,16 @@
-"""Database utilities for the weather service."""
+"""Re-export shared database session helpers for the weather service."""
 
-from collections.abc import Generator
+from api_microservice.common.database import (
+    Base,
+    db_session,
+    engine,
+    get_db,
+    get_read_db,
+)
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
-
-from .config import get_settings
-from .models import Base
 from .schema import ensure_schema
 
+ensure_schema(engine)
+Base.metadata.create_all(bind=engine)
 
-def _create_engine():
-    settings = get_settings()
-    engine = create_engine(settings.database_url, future=True)
-    ensure_schema(engine)
-    Base.metadata.create_all(bind=engine)
-    return engine
-
-
-_engine = _create_engine()
-SessionLocal = sessionmaker(bind=_engine, expire_on_commit=False, class_=Session)
-
-
-def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+__all__ = ["Base", "db_session", "engine", "get_db", "get_read_db"]

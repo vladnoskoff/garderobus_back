@@ -1,146 +1,237 @@
-"""Endpoints providing weather data."""
-
-from __future__ import annotations
-
-import asyncio
 import hashlib
-from datetime import datetime, timedelta, timezone
-from functools import lru_cache
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
-from .config import get_settings
-from .database import get_db
-from .http_client import fetch_weather
-from .models import User, WardrobeLocation, Weather
+from api_microservice.common import models, schemas, settings
+from api_microservice.common.cache import cache
+from api_microservice.common.database import get_db
+from api_microservice.common.http_client import (
+    CircuitOpenError,
+    HTTPRequestError,
+    RateLimitExceededError,
+    http_client,
+)
+from api_microservice.wardrobe_service.app.routes.location_utils import (
+    resolve_location_and_coordinates,
+)
 
-
-router = APIRouter(prefix="/weather", tags=["weather"])
-
-
-@lru_cache
-def get_cache() -> dict[str, Any]:
-    return {}
-
+router = APIRouter(prefix="/weather", tags=["Weather"])
 
 def _weather_cache_key(lat: float, lon: float, api_key: str) -> str:
     hashed_key = hashlib.sha256(api_key.encode("utf-8")).hexdigest()[:16]
-    return f"weather:lat:{lat:.4f}:lon:{lon:.4f}:api:{hashed_key}"
-
-
-async def _fetch_weather_payload(lat: float, lon: float) -> dict[str, Any]:
-    current_data, forecast_data = await asyncio.gather(
-        fetch_weather("weather", lat=lat, lon=lon),
-        fetch_weather("forecast", lat=lat, lon=lon),
+    return cache.make_key(
+        "weather",
+        f"api:{hashed_key}",
+        f"lat:{lat:.4f}",
+        f"lon:{lon:.4f}",
     )
-
-    temperature = float(current_data["main"]["temp"])
-    humidity = int(current_data["main"]["humidity"])
-    condition = current_data["weather"][0]["description"]
-    wind_speed = float(current_data["wind"].get("speed", 0))
-
-    forecast: list[dict[str, Any]] = []
-    added_dates: set[str] = set()
-    for entry in forecast_data.get("list", []):
-        date = entry["dt_txt"].split()[0]
-        if date in added_dates:
-            continue
-        added_dates.add(date)
-        forecast.append(
-            {
-                "date": entry["dt_txt"],
-                "temp": entry["main"].get("temp"),
-                "condition": entry["weather"][0].get("description"),
-                "icon": entry["weather"][0].get("icon"),
-            }
-        )
-        if len(added_dates) >= 3:
-            break
-
-    return {
-        "temperature": temperature,
-        "humidity": humidity,
-        "condition": condition,
-        "wind_speed": wind_speed,
-        "forecast": forecast,
-    }
-
-
-async def _get_or_create_weather_entry(
-    lat: float,
-    lon: float,
-    cache: dict,
-) -> dict[str, Any]:
-    settings = get_settings()
-    cache_key = _weather_cache_key(lat, lon, settings.openweathermap_api_key)
-    entry = cache.get(cache_key)
-    now = datetime.now(timezone.utc)
-    if entry and entry["expires_at"] > now:
-        return entry["data"]
-
-    payload = await _fetch_weather_payload(lat, lon)
-    cache[cache_key] = {
-        "data": payload,
-        "expires_at": now + timedelta(seconds=settings.cache_ttl_seconds),
-    }
-    return payload
 
 
 @router.get("/coordinates")
-async def get_weather_by_coordinates(
+def get_weather_by_coordinates(
     lat: float,
     lon: float,
-    cache: dict = Depends(get_cache),
     db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    payload = await _get_or_create_weather_entry(lat, lon, cache)
+    api_key: Optional[str] = None,
+):
+    resolved_key = api_key or settings.OPENWEATHER_API_KEY
+    if not resolved_key:
+        raise HTTPException(status_code=500, detail="Не настроен API-ключ погоды")
 
-    weather_model = Weather(
-        temperature=int(payload["temperature"]),
-        humidity=int(payload["humidity"]),
-        condition=str(payload["condition"]),
-        wind_speed=float(payload.get("wind_speed", 0) or 0),
+    cache_key = _weather_cache_key(lat, lon, resolved_key)
+    cached = cache.get_json(cache_key, resource="weather")
+    if cached is not None:
+        return cached
+
+    base_url = "http://api.openweathermap.org/data/2.5"
+
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "appid": resolved_key,
+        "units": "metric",
+        "lang": "ru"
+    }
+
+    try:
+        current_response = http_client.get(
+            f"{base_url}/weather", params=params, service_name="openweather"
+        )
+        current_response.raise_for_status()
+        current_data = current_response.json()
+
+        forecast_response = http_client.get(
+            f"{base_url}/forecast", params=params, service_name="openweather"
+        )
+        forecast_response.raise_for_status()
+        forecast_data = forecast_response.json()
+    except RateLimitExceededError as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except (CircuitOpenError, HTTPRequestError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Ошибка при получении данных погоды") from exc
+
+    # Сохраняем текущую погоду в БД
+    temperature = float(current_data["main"]["temp"])
+    humidity = int(current_data["main"]["humidity"])
+    condition = current_data["weather"][0]["description"]
+    wind_speed = float(current_data["wind"]["speed"])
+    pressure = int(current_data["main"]["pressure"])
+    icon = current_data["weather"][0]["icon"]
+
+    weather_model = models.Weather(
+        temperature=temperature,
+        humidity=humidity,
+        condition=condition,
+        wind_speed=wind_speed,
     )
     db.add(weather_model)
     db.commit()
     db.refresh(weather_model)
 
-    response = {"id": weather_model.id, **payload}
-    return response
+    # Формируем прогноз
+    forecast = []
+    added_dates = set()
+    for entry in forecast_data.get("list", []):
+        date = entry["dt_txt"].split()[0]
+        if date not in added_dates:
+            added_dates.add(date)
+            forecast.append({
+                "date": entry["dt_txt"],
+                "temp": entry["main"]["temp"],
+                "condition": entry["weather"][0]["description"],
+                "icon": entry["weather"][0]["icon"]
+            })
+        if len(added_dates) >= 3:
+            break
 
+    payload = {
+        "id": weather_model.id,
+        "temperature": temperature,
+        "humidity": humidity,
+        "condition": condition,
+        "wind_speed": wind_speed,
+        "pressure": pressure,
+        "icon": icon,
+        "forecast": forecast
+    }
+
+    cache.set_json(
+        cache_key,
+        jsonable_encoder(payload),
+        ttl=settings.CACHE_TTL_WEATHER,
+        resource="weather",
+    )
+
+    return payload
 
 @router.get("/user/{user_id}")
-async def get_weather_for_user(
+def get_weather_for_user(
     user_id: int,
-    cache: dict = Depends(get_cache),
+    location_id: Optional[int] = Query(default=None, description="Локация гардероба"),
     db: Session = Depends(get_db),
-    location_id: Optional[int] = Query(default=None, description="Wardrobe location identifier"),
-) -> dict[str, Any]:
-    user = db.get(User, user_id)
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
-    if location_id is None:
-        if not user.location:
-            raise HTTPException(status_code=400, detail="Для пользователя не заданы координаты")
-        try:
-            lat, lon = map(float, user.location.split(","))
-        except Exception as exc:  # pragma: no cover - defensive parsing
-            raise HTTPException(status_code=400, detail="Некорректный формат координат пользователя") from exc
-    else:
-        location = (
-            db.query(WardrobeLocation)
-            .filter(WardrobeLocation.id == location_id, WardrobeLocation.user_id == user_id)
-            .first()
-        )
-        if not location:
-            raise HTTPException(status_code=404, detail="Локация не найдена для пользователя")
-        if location.latitude is None or location.longitude is None:
-            raise HTTPException(status_code=400, detail="Для выбранной локации не заданы координаты")
-        lat, lon = float(location.latitude), float(location.longitude)
+    _, lat, lon = resolve_location_and_coordinates(db, user, location_id)
 
-    payload = await _get_or_create_weather_entry(lat, lon, cache)
-    return jsonable_encoder(payload)
+    user_key = cache.make_key(
+        "weather",
+        f"user:{user_id}",
+        f"location:{location_id}" if location_id is not None else "location:all",
+    )
+    cached = cache.get_json(user_key, resource="weather")
+    if cached is not None:
+        return cached
+
+    payload = get_weather_by_coordinates(
+        lat=lat,
+        lon=lon,
+        db=db,
+    )
+
+    cache.set_json(
+        user_key,
+        jsonable_encoder(payload),
+        ttl=settings.CACHE_TTL_WEATHER,
+        resource="weather",
+    )
+
+    return payload
+
+
+# @router.get("/{city}")
+# def get_weather(city: str, db: Session = Depends(get_db)):
+#     """
+#     Получение текущей погоды и прогноза на 3 дня из OpenWeather API (без One Call 3.0)
+#     """
+#     API_KEY = settings.OPENWEATHER_API_KEY
+#     base_url = "http://api.openweathermap.org/data/2.5"
+
+#     # Текущая погода
+#     current_params = {
+#         "q": city,
+#         "appid": API_KEY,
+#         "units": "metric",
+#         "lang": "ru"
+#     }
+#     current_response = requests.get(f"{base_url}/weather", params=current_params)
+#     if current_response.status_code != 200:
+#         raise HTTPException(status_code=400, detail="Ошибка при получении текущей погоды")
+#     current_data = current_response.json()
+
+#     # Прогноз на 5 дней (каждые 3 часа)
+#     forecast_response = requests.get(f"{base_url}/forecast", params=current_params)
+#     if forecast_response.status_code != 200:
+#         raise HTTPException(status_code=400, detail="Ошибка при получении прогноза")
+#     forecast_data = forecast_response.json()
+
+#     # Сохраняем текущую погоду в БД
+#     temperature = float(current_data["main"]["temp"])
+#     humidity = int(current_data["main"]["humidity"])
+#     condition = current_data["weather"][0]["description"]
+#     wind_speed = float(current_data["wind"]["speed"])
+
+#     weather_model = models.Weather(
+#         temperature=temperature,
+#         humidity=humidity,
+#         condition=condition,
+#         wind_speed=wind_speed
+#     )
+#     db.add(weather_model)
+#     db.commit()
+#     db.refresh(weather_model)
+
+#     result = {
+#         "temperature": temperature,
+#         "humidity": humidity,
+#         "condition": condition,
+#         "wind_speed": wind_speed,
+#         "pressure": int(current_data["main"]["pressure"]),  # <--- добавляем
+#         "icon": current_data["weather"][0]["icon"],
+#         "forecast": []
+#     }
+
+#     # Берём прогноз на ближайшие 3 дня (с шагом 1 день)
+#     added_dates = set()
+#     for entry in forecast_data.get("list", []):
+#         date = entry["dt_txt"].split()[0]
+#         if date not in added_dates:
+#             added_dates.add(date)
+#             result["forecast"].append({
+#                 "date": entry["dt_txt"],
+#                 "temp": entry["main"]["temp"],
+#                 "condition": entry["weather"][0]["description"],
+#                 "icon": entry["weather"][0]["icon"]
+#             })
+#         if len(added_dates) >= 3:
+#             break
+
+#     return JSONResponse(content=result, media_type="application/json; charset=utf-8")
+
