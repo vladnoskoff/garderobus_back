@@ -99,7 +99,7 @@ pip install -r gateway/requirements.txt \
 сохранить. Репозиторий уже содержит заполненные `.env`-файлы в каждой папке сервиса, поэтому сразу после клонирования
 у вас доступны конфигурации по умолчанию. Они настроены на локальные сервисы (PostgreSQL, Redis, RabbitMQ) и публичный
 домен `http://garderobus.tech` для конечных пользователей. Значения `DATABASE_URL` уже указывают на
-`postgresql+psycopg2://garderobus:InoskoffStrelkov18@127.0.0.1:5432/`, а в AI-сервисе прописан рабочий
+`postgresql+psycopg2://garderobus:InoskoffStrelkov18@127.0.0.1:5432/garderobus`, а в AI-сервисе прописан рабочий
 `OPENAI_API_KEY=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`.
 Проверьте и, при необходимости, отредактируйте остальные секреты (`change-me-please`, `hf_your_huggingface_key`,
 `SG_your_segmind_key` и т.п.) прежде чем запускать сервисы в продакшене.
@@ -134,7 +134,13 @@ sudo -u garderobus nano /opt/garderobus_back/api_microservice/auth_service/.env
 ## 7. Инициализация баз данных
 
 Каждый микросервис использует своё подключение к PostgreSQL. После заполнения `.env` создайте необходимые структуры.
-Для примера ниже показано, как инициализировать таблицы `auth_service`:
+Для примера ниже показано, как создать саму базу данных и инициализировать таблицы `auth_service`:
+
+```bash
+sudo -u postgres psql -c "CREATE DATABASE garderobus OWNER garderobus"
+```
+
+Команда выполнится успешно только один раз. Если база уже создана, PostgreSQL сообщит `ERROR:  database "garderobus" already exists` — это нормально и можно переходить к миграциям/созданию таблиц.
 
 ```bash
 cd /opt/garderobus_back/api_microservice
