@@ -1,24 +1,71 @@
 """Pydantic schemas for the auth service."""
 
-from datetime import datetime
-from pydantic import BaseModel, EmailStr
+from typing import Optional
+
+from pydantic import AliasChoices, BaseModel, EmailStr, Field, model_validator
 
 
-class UserBase(BaseModel):
+class UserCreate(BaseModel):
+    name: str
     email: EmailStr
-    full_name: str | None = None
+    password: str
+    phone: Optional[str] = None
+    style_preference: Optional[str] = None
+    gender: Optional[str] = None
+    theme_preference: Optional[str] = None
+    pin_code: Optional[str] = Field(default=None, validation_alias=AliasChoices("pin_code", "pinCode"))
+    language_preference: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _alias_pin_code(cls, values: object) -> object:
+        if isinstance(values, dict) and "pin_code" not in values and "pinCode" in values:
+            values = {**values, "pin_code": values["pinCode"]}
+        return values
 
 
-class UserCreate(UserBase):
+class UserLogin(BaseModel):
+    email: EmailStr
     password: str
 
 
-class UserRead(UserBase):
+class UserResponse(BaseModel):
     id: int
-    created_at: datetime
+    name: str
+    email: EmailStr
+    phone: Optional[str] = None
+    style_preference: Optional[str] = None
+    location: Optional[str] = None
+    gender: Optional[str] = None
+    theme_preference: Optional[str] = None
+    has_pin: bool = False
+    language_preference: Optional[str] = Field(default="ru")
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+    password: Optional[str] = None
+    location: Optional[str] = None
+    gender: Optional[str] = None
+    theme_preference: Optional[str] = None
+    style_preference: Optional[str] = None
+    pin_code: Optional[str] = Field(default=None, validation_alias=AliasChoices("pin_code", "pinCode"))
+    language_preference: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _alias_pin_code(cls, values: object) -> object:
+        if isinstance(values, dict) and "pin_code" not in values and "pinCode" in values:
+            values = {**values, "pin_code": values["pinCode"]}
+        return values
+
+
+class PinVerificationRequest(BaseModel):
+    pin_code: str
 
 
 class Token(BaseModel):
