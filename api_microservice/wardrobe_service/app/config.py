@@ -1,16 +1,23 @@
 from functools import lru_cache
-from pydantic import BaseSettings, Field, HttpUrl
+from pathlib import Path
+
+from pydantic import Field, HttpUrl
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="Wardrobe Service", env="APP_NAME")
-    database_url: str = Field(env="DATABASE_URL")
-    media_bucket: str = Field(env="MEDIA_BUCKET")
-    minio_endpoint: HttpUrl = Field(env="MINIO_ENDPOINT")
-    auth_service_url: HttpUrl = Field(env="AUTH_SERVICE_URL")
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"), env_file_encoding="utf-8", extra="ignore"
+    )
 
-    class Config:
-        env_file = ".env"
+    app_name: str = Field(default="Wardrobe Service")
+    database_url: str
+    media_bucket: str
+    minio_endpoint: HttpUrl
+    auth_service_url: HttpUrl
 
 
 @lru_cache

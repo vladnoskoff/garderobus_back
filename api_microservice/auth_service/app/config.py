@@ -1,16 +1,23 @@
 from functools import lru_cache
-from pydantic import BaseSettings, Field
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="Auth Service", env="APP_NAME")
-    database_url: str = Field(env="DATABASE_URL")
-    jwt_secret: str = Field(env="JWT_SECRET")
-    jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
-    access_token_expire_minutes: int = Field(default=60, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"), env_file_encoding="utf-8", extra="ignore"
+    )
 
-    class Config:
-        env_file = ".env"
+    app_name: str = Field(default="Auth Service")
+    database_url: str
+    jwt_secret: str
+    jwt_algorithm: str = Field(default="HS256")
+    access_token_expire_minutes: int = Field(default=60)
 
 
 @lru_cache

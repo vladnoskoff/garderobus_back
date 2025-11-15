@@ -1,16 +1,29 @@
 from functools import lru_cache
-from pydantic import BaseSettings, Field, HttpUrl
+from pathlib import Path
+
+from pydantic import Field, HttpUrl
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="AI Service", env="APP_NAME")
-    database_url: str = Field(env="DATABASE_URL")
-    celery_broker_url: str = Field(env="CELERY_BROKER_URL")
-    celery_result_backend: str = Field(env="CELERY_RESULT_BACKEND")
-    wardrobe_service_url: HttpUrl = Field(env="WARDROBE_SERVICE_URL")
+    model_config = SettingsConfigDict(
+        env_file=str(BASE_DIR / ".env"), env_file_encoding="utf-8", extra="ignore"
+    )
 
-    class Config:
-        env_file = ".env"
+    app_name: str = Field(default="AI Service")
+    database_url: str
+    celery_broker_url: str
+    celery_result_backend: str
+    wardrobe_service_url: HttpUrl
+    openai_api_key: str = Field(
+        default=(
+            "sk-proj-meOKTsNkP_Gp17p9tWbHCNBT8Y2qidUHCQFkrZ6bRB_R0yUB3qi0OIvILCAs-"
+            "SobJ5yqq8nr2lT3BlbkFJ4j5ALz62zsZLzf0m2q97QoMbSt_RZWUpBtCG7jh7f4yFfQSpxWgsuX42dizTtDpiiymu0ID0kA"
+        )
+    )
 
 
 @lru_cache
