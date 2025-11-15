@@ -41,8 +41,6 @@ async def _fetch_weather_payload(lat: float, lon: float) -> dict[str, Any]:
     humidity = int(current_data["main"]["humidity"])
     condition = current_data["weather"][0]["description"]
     wind_speed = float(current_data["wind"].get("speed", 0))
-    pressure = int(current_data["main"].get("pressure", 0))
-    icon = current_data["weather"][0].get("icon")
 
     forecast: list[dict[str, Any]] = []
     added_dates: set[str] = set()
@@ -67,8 +65,6 @@ async def _fetch_weather_payload(lat: float, lon: float) -> dict[str, Any]:
         "humidity": humidity,
         "condition": condition,
         "wind_speed": wind_speed,
-        "pressure": pressure,
-        "icon": icon,
         "forecast": forecast,
     }
 
@@ -107,8 +103,6 @@ async def get_weather_by_coordinates(
         humidity=int(payload["humidity"]),
         condition=str(payload["condition"]),
         wind_speed=float(payload.get("wind_speed", 0) or 0),
-        pressure=int(payload.get("pressure", 0) or 0),
-        icon=payload.get("icon"),
     )
     db.add(weather_model)
     db.commit()

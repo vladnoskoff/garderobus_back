@@ -1,4 +1,6 @@
-"""Database utilities for the weather service."""
+"""Database session helpers for the wardrobe service."""
+
+from __future__ import annotations
 
 from collections.abc import Generator
 
