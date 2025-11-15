@@ -278,6 +278,37 @@ def update_user(user_id: int, updates: schemas.UserUpdate, db: Session = Depends
     return user
 
 
+@router.post("/{user_id}/pin", status_code=204)
+def set_pin(user_id: int, payload: schemas.PinVerificationRequest, db: Session = Depends(get_db)) -> None:
+    """Создание или обновление PIN-кода пользователя."""
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    normalized_pin = _normalize_pin(payload.pin_code)
+    if normalized_pin is None:
+        raise HTTPException(status_code=400, detail="PIN-код должен содержать цифры")
+
+    user.pin_hash = _hash_pin(normalized_pin)
+    db.commit()
+
+
+@router.delete("/{user_id}/pin", status_code=204)
+def clear_pin(user_id: int, db: Session = Depends(get_db)) -> None:
+    """Удаление существующего PIN-кода пользователя."""
+
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if not user.pin_hash:
+        raise HTTPException(status_code=400, detail="PIN-код не установлен")
+
+    user.pin_hash = None
+    db.commit()
+
+
 @router.put("/{user_id}/style")
 def update_style(user_id: int, style: str, db: Session = Depends(get_db)) -> dict:
     user = db.query(models.User).filter(models.User.id == user_id).first()
