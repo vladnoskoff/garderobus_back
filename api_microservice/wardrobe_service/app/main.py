@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import router as wardrobe_router
+from .routes import router as wardrobe_router
 
 
 settings = get_settings()
