@@ -1,16 +1,16 @@
 from functools import lru_cache
-from pydantic import BaseSettings, Field, HttpUrl
+from pydantic import Field, HttpUrl
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    app_name: str = Field(default="Garderobus API Gateway", env="APP_NAME")
-    auth_service_url: HttpUrl = Field(env="AUTH_SERVICE_URL")
-    wardrobe_service_url: HttpUrl = Field(env="WARDROBE_SERVICE_URL")
-    weather_service_url: HttpUrl = Field(env="WEATHER_SERVICE_URL")
-    ai_service_url: HttpUrl = Field(env="AI_SERVICE_URL")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    class Config:
-        env_file = ".env"
+    app_name: str = Field(default="Garderobus API Gateway")
+    auth_service_url: HttpUrl
+    wardrobe_service_url: HttpUrl
+    weather_service_url: HttpUrl
+    ai_service_url: HttpUrl
 
 
 @lru_cache
