@@ -316,6 +316,12 @@ class AdminSystemEventList(BaseModel):
     limit: int = 50
 
 
+class AdminActivityMetrics(BaseModel):
+    active_now: int = 0
+    active_24h: int = 0
+    platform_breakdown: dict[str, int] = Field(default_factory=dict)
+
+
 class WardrobeLocationUpdate(BaseModel):
     name: Optional[str] = None
     latitude: Optional[float] = None

@@ -314,6 +314,55 @@ def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUser
     return details
 
 
+def _build_activity_metrics(db: Session) -> schemas.AdminActivityMetrics:
+    now = datetime.utcnow()
+    active_threshold = now - timedelta(minutes=30)
+    day_threshold = now - timedelta(days=1)
+
+    session_query = db.query(models.UserSession).filter(
+        models.UserSession.last_seen >= day_threshold
+    )
+
+    active_sessions_day = session_query.count()
+    active_sessions_now = session_query.filter(
+        models.UserSession.last_seen >= active_threshold
+    ).count()
+
+    platform_rows = (
+        db.query(models.UserSession.platform, func.count(models.UserSession.id))
+        .filter(models.UserSession.last_seen >= active_threshold)
+        .group_by(models.UserSession.platform)
+        .all()
+    )
+    platform_breakdown = {
+        (platform or "unknown"): count for platform, count in platform_rows
+    }
+
+    recent_wear = (
+        db.query(models.WearHistory.user_id, func.max(models.WearHistory.worn_at))
+        .filter(models.WearHistory.worn_at >= day_threshold)
+        .group_by(models.WearHistory.user_id)
+        .all()
+    )
+    wear_active_now = sum(
+        1 for _, last_seen in recent_wear if last_seen and last_seen >= active_threshold
+    )
+
+    if active_sessions_day == 0:
+        active_sessions_day = len(recent_wear)
+
+    if active_sessions_now == 0:
+        active_sessions_now = wear_active_now
+
+    if not platform_breakdown and (active_sessions_now > 0 or active_sessions_day > 0):
+        platform_breakdown = {"unknown": active_sessions_now or active_sessions_day}
+
+    return schemas.AdminActivityMetrics(
+        active_now=active_sessions_now,
+        active_24h=active_sessions_day,
+        platform_breakdown=platform_breakdown,
+    )
+
 
 @router.get("/system/status", response_model=schemas.AdminSystemStatus)
 def get_system_status(
@@ -392,6 +441,14 @@ def send_test_webhook_endpoint(
     current_user: models.User = Depends(_get_current_user),
 ) -> schemas.AdminActionResponse:
     return system_tools.send_test_webhook(requested_by=current_user)
+
+
+@router.get("/activity/metrics", response_model=schemas.AdminActivityMetrics)
+def get_activity_metrics(
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_read_db),
+) -> schemas.AdminActivityMetrics:
+    return _build_activity_metrics(db)
 
 
 @router.post("/login")

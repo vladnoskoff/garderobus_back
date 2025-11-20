@@ -238,6 +238,22 @@ class WearHistory(Base):
     worn_at = Column(TIMESTAMP, default=func.now())
 
 
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+    __table_args__ = (
+        Index("ix_user_sessions_last_seen", "last_seen"),
+        Index("ix_user_sessions_platform", "platform"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    platform = Column(String, nullable=False, default="unknown", server_default="unknown")
+    started_at = Column(TIMESTAMP, server_default=func.now())
+    last_seen = Column(TIMESTAMP, server_default=func.now())
+
+
 class ClothesMetadata(Base):
     __tablename__ = "clothes_metadata"
 
