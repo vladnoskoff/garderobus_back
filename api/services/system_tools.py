@@ -1,11 +1,10 @@
-from __future__ import annotations
-
+import json
 import logging
 import subprocess
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, status
 
@@ -16,7 +15,9 @@ import schemas
 logger = logging.getLogger(__name__)
 
 _START_TIME = time.time()
-_LAST_RESTART_REQUEST: datetime | None = None
+_LAST_RESTART_REQUEST: Optional[datetime] = None
+
+LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
 
 def _humanize_duration(seconds: float) -> str:
@@ -138,8 +139,8 @@ def write_managed_file(
     relative_path: str,
     content: str,
     *,
-    message: str | None = None,
-    actor: models.User | None = None,
+    message: Optional[str] = None,
+    actor: Optional[models.User] = None,
 ) -> schemas.AdminCodeFile:
     full_path = _ensure_within_root(relative_path)
     if not full_path.exists() or not full_path.is_file():
@@ -170,7 +171,7 @@ def is_restart_supported() -> bool:
     return bool(settings.ADMIN_ALLOW_RESTART and settings.ADMIN_RESTART_COMMAND)
 
 
-def restart_api(*, requested_by: models.User | None = None) -> schemas.AdminRestartResponse:
+def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminRestartResponse:
     if not is_restart_supported():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -212,4 +213,120 @@ def restart_api(*, requested_by: models.User | None = None) -> schemas.AdminRest
     return schemas.AdminRestartResponse(
         detail="Перезапуск API инициирован",
         pid=getattr(process, "pid", None),
+    )
+
+
+def _parse_timestamp(raw: Optional[str]) -> Optional[datetime]:
+    if not raw:
+        return None
+
+    for fmt in LOG_DATE_FORMATS:
+        try:
+            parsed = datetime.strptime(raw, fmt)
+            return parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
+    timestamp = _parse_timestamp(
+        payload.get("asctime")
+        or payload.get("timestamp")
+        or payload.get("time")
+        or payload.get("@timestamp")
+    )
+    if timestamp is None:
+        return None
+
+    level = str(
+        payload.get("level") or payload.get("levelname") or payload.get("severity", "info")
+    ).lower()
+    message = str(payload.get("message") or payload.get("msg") or "").strip()
+
+    known_keys = {
+        "asctime",
+        "timestamp",
+        "time",
+        "@timestamp",
+        "level",
+        "levelname",
+        "severity",
+        "message",
+        "msg",
+        "logger",
+        "name",
+        "service",
+    }
+
+    context = {key: value for key, value in payload.items() if key not in known_keys}
+
+    return schemas.AdminSystemEvent(
+        timestamp=timestamp,
+        level=level,
+        message=message or "—",
+        logger=payload.get("logger") or payload.get("name"),
+        service=payload.get("service"),
+        context=context,
+    )
+
+
+def get_system_events(
+    *,
+    level: Optional[str] = None,
+    hours: Optional[int] = None,
+    limit: int = 50,
+    page: int = 1,
+) -> schemas.AdminSystemEventList:
+    log_path = Path(settings.LOG_FILE)
+    if not log_path.exists() or not log_path.is_file():
+        return schemas.AdminSystemEventList(events=[], total=0, page=page, limit=limit)
+
+    cutoff = None
+    if hours is not None and hours > 0:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    desired_level = level.lower() if level else None
+    events: list[schemas.AdminSystemEvent] = []
+
+    with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
+        for line in handle:
+            if not line.strip():
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            event = _build_event(payload)
+            if event is None:
+                continue
+
+            if desired_level and event.level != desired_level:
+                continue
+
+            if cutoff and event.timestamp < cutoff:
+                continue
+
+            events.append(event)
+
+    events.sort(key=lambda item: item.timestamp, reverse=True)
+
+    start = max(0, (page - 1) * limit)
+    end = start + limit
+    paginated = events[start:end]
+
+    return schemas.AdminSystemEventList(
+        events=paginated,
+        total=len(events),
+        page=page,
+        limit=limit,
     )

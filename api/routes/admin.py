@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Sequence
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -320,6 +320,17 @@ def get_system_status(
     _: models.User = Depends(_get_current_user),
 ) -> schemas.AdminSystemStatus:
     return system_tools.get_system_status()
+
+
+@router.get("/system/events", response_model=schemas.AdminSystemEventList)
+def get_system_events(
+    level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),
+    hours: Optional[int] = Query(None, ge=1, le=24 * 30),
+    limit: int = Query(50, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    _: models.User = Depends(_get_current_user),
+) -> schemas.AdminSystemEventList:
+    return system_tools.get_system_events(level=level, hours=hours, limit=limit, page=page)
 
 
 @router.get("/system/files", response_model=schemas.AdminManagedFileList)
