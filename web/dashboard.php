@@ -37,9 +37,39 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
 
         <section class="card">
           <div class="flex-between" style="margin-bottom: 20px;">
-            <h3 style="margin: 0;">Статистика пользователей</h3>
-            <span class="text-muted">Отсортировано по идентификатору</span>
+            <div>
+              <h3 style="margin: 0;">Статистика пользователей</h3>
+              <span class="text-muted">Отсортировано по идентификатору</span>
+            </div>
+            <div class="flex gap-sm">
+              <button class="secondary" type="button" id="export-csv-button">Экспорт CSV</button>
+            </div>
           </div>
+
+          <div class="activity-metrics" aria-live="polite">
+            <div class="metrics-grid">
+              <div class="metric-card">
+                <div class="metric-card-header">Активные сессии</div>
+                <div class="metric-values">
+                  <div class="metric-value">
+                    <span class="metric-label">Сейчас</span>
+                    <strong id="metrics-active-now">—</strong>
+                  </div>
+                  <div class="metric-value">
+                    <span class="metric-label">За 24 часа</span>
+                    <strong id="metrics-active-day">—</strong>
+                  </div>
+                </div>
+                <p class="metric-hint">Данные обновляются каждые 30 секунд.</p>
+              </div>
+              <div class="metric-card">
+                <div class="metric-card-header">Активность по платформам</div>
+                <ul class="platform-breakdown" id="metrics-platforms"></ul>
+              </div>
+            </div>
+            <div id="metrics-error" class="alert hidden" role="status"></div>
+          </div>
+
           <div id="load-error" class="alert hidden" style="margin-bottom: 16px;"></div>
           <p id="loading-indicator" class="text-muted">Загрузка...</p>
           <p id="empty-state" class="text-muted hidden">Пользователи пока не добавлены.</p>

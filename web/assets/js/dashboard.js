@@ -18,6 +18,11 @@
     tableWrapper: document.getElementById("users-table-wrapper"),
     tableBody: document.getElementById("users-table-body"),
     emptyState: document.getElementById("empty-state"),
+    activityNow: document.getElementById("metrics-active-now"),
+    activityDay: document.getElementById("metrics-active-day"),
+    activityPlatforms: document.getElementById("metrics-platforms"),
+    activityError: document.getElementById("metrics-error"),
+    exportCsvButton: document.getElementById("export-csv-button"),
     statUsers: document.getElementById("stat-users"),
     statActiveUsers: document.getElementById("stat-active-users"),
     statClothes: document.getElementById("stat-clothes"),
@@ -112,6 +117,9 @@
     systemRefreshInterval: null,
     systemLoadedOnce: false,
     systemActionInProgress: false,
+    users: [],
+    activityInterval: null,
+    activityLoadedOnce: false,
     systemEvents: {
       page: 1,
       limit: 20,
@@ -1221,6 +1229,204 @@
     setText(elements.statWearEvents, totals.wearEvents.toString());
   }
 
+  function renderPlatformBreakdown(breakdown) {
+    if (!elements.activityPlatforms) {
+      return;
+    }
+
+    elements.activityPlatforms.innerHTML = "";
+    const entries = Object.entries(breakdown || {});
+
+    if (entries.length === 0) {
+      const emptyItem = document.createElement("li");
+      emptyItem.className = "platform-item";
+      emptyItem.textContent = "Нет активных сессий";
+      elements.activityPlatforms.appendChild(emptyItem);
+      return;
+    }
+
+    entries
+      .sort((a, b) => b[1] - a[1])
+      .forEach(([platform, count]) => {
+        const item = document.createElement("li");
+        item.className = "platform-item";
+
+        const name = document.createElement("span");
+        name.className = "platform-name";
+        name.textContent = platform || "unknown";
+
+        const value = document.createElement("span");
+        value.className = "platform-count";
+        value.textContent = String(count ?? 0);
+
+        item.appendChild(name);
+        item.appendChild(value);
+        elements.activityPlatforms?.appendChild(item);
+      });
+  }
+
+  function renderActivityMetrics(metrics) {
+    const activityNow = metrics?.active_now ?? 0;
+    const activityDay = metrics?.active_24h ?? 0;
+
+    setText(elements.activityNow, activityNow);
+    setText(elements.activityDay, activityDay);
+    renderPlatformBreakdown(metrics?.platform_breakdown);
+
+    toggleHidden(elements.activityError, true);
+    state.activityLoadedOnce = true;
+  }
+
+  async function refreshActivityMetrics(options) {
+    const silent = options?.silent ?? false;
+    if (!elements.activityNow || pageType !== "users") {
+      return;
+    }
+
+    if (!silent && elements.activityError) {
+      toggleHidden(elements.activityError, true);
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/activity/metrics`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+
+      const data = await response.json();
+      renderActivityMetrics(data);
+    } catch (error) {
+      console.error(error);
+      if (elements.activityError) {
+        elements.activityError.textContent = "Не удалось загрузить метрики активности.";
+        toggleHidden(elements.activityError, false);
+      }
+      if (!state.activityLoadedOnce) {
+        renderPlatformBreakdown({});
+      }
+    }
+  }
+
+  function stopActivityPolling() {
+    if (state.activityInterval) {
+      window.clearInterval(state.activityInterval);
+      state.activityInterval = null;
+    }
+  }
+
+  function startActivityPolling() {
+    if (pageType !== "users") {
+      stopActivityPolling();
+      return;
+    }
+
+    stopActivityPolling();
+    void refreshActivityMetrics({ silent: false });
+    state.activityInterval = window.setInterval(() => {
+      void refreshActivityMetrics({ silent: true });
+    }, 30000);
+  }
+
+  function formatCsvValue(value) {
+    if (value === null || value === undefined) {
+      return "";
+    }
+    const stringValue = String(value);
+    if (/[",\n]/.test(stringValue)) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  }
+
+  function formatDateForCsv(value) {
+    if (!value) {
+      return "";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toISOString();
+  }
+
+  function buildTopItemsCsv(user) {
+    const items = Array.isArray(user.top_worn_items) ? user.top_worn_items : [];
+    if (items.length === 0) {
+      return "";
+    }
+    return items
+      .map((item) => `${item.name || "Без названия"} (${item.usage_count || 0})`)
+      .join("; ");
+  }
+
+  function downloadUsersCsv() {
+    const users = Array.isArray(state.users) ? state.users : [];
+    if (users.length === 0) {
+      window.alert("Нет данных для экспорта. Сначала загрузите пользователей.");
+      return;
+    }
+
+    const headers = [
+      "ID",
+      "Имя",
+      "Email",
+      "Телефон",
+      "Вещи",
+      "Фотографии",
+      "Манекены",
+      "Примерки 30 дней",
+      "Всего примерок",
+      "Новые вещи 30 дней",
+      "Очередь",
+      "Локации",
+      "Последняя примерка",
+      "Последний манекен",
+      "Популярные вещи",
+    ];
+
+    const rows = users
+      .slice()
+      .sort((a, b) => a.id - b.id)
+      .map((user) => [
+        formatCsvValue(user.id),
+        formatCsvValue(user.name || ""),
+        formatCsvValue(user.email || ""),
+        formatCsvValue(user.phone || ""),
+        formatCsvValue(user.total_clothes ?? 0),
+        formatCsvValue(user.total_clothes_images ?? 0),
+        formatCsvValue(user.total_mannequins ?? 0),
+        formatCsvValue(user.wear_events_last_30_days ?? 0),
+        formatCsvValue(user.total_wear_events ?? 0),
+        formatCsvValue(user.new_clothes_last_30_days ?? 0),
+        formatCsvValue(user.pending_metadata_items ?? 0),
+        formatCsvValue(user.locations_count ?? 0),
+        formatCsvValue(formatDateForCsv(user.last_wear_at)),
+        formatCsvValue(formatDateForCsv(user.last_mannequin_at)),
+        formatCsvValue(buildTopItemsCsv(user)),
+      ]);
+
+    const csvContent = [headers, ...rows]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `users-${new Date().toISOString()}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
   async function deleteUser(userId) {
     toggleHidden(elements.loadError, true);
     try {
@@ -1345,6 +1551,7 @@
       }
       const data = await response.json();
       const users = Array.isArray(data) ? data : [];
+      state.users = users;
       updateStats(users);
       renderUsers(users);
       if (users.length === 0) {
@@ -1380,6 +1587,15 @@
   if (elements.refreshButton) {
     elements.refreshButton.addEventListener("click", () => {
       void loadUsers();
+      if (pageType === "users") {
+        void refreshActivityMetrics({ silent: false });
+      }
+    });
+  }
+
+  if (elements.exportCsvButton) {
+    elements.exportCsvButton.addEventListener("click", () => {
+      downloadUsersCsv();
     });
   }
 
@@ -1519,6 +1735,12 @@
       });
     }
     void loadUsers();
+  }
+
+  if (pageType === "users") {
+    startActivityPolling();
+  } else {
+    stopActivityPolling();
   }
 
   if (pageType !== "users" && elements.createUserButton) {
