@@ -643,6 +643,11 @@ button.link {
   color: #047857;
 }
 
+.status-badge.info {
+  background-color: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
+}
+
 .status-badge.warning {
   background-color: rgba(234, 179, 8, 0.18);
   color: #b45309;
@@ -708,6 +713,34 @@ button.link {
 .status-dot.fail {
   background-color: #ef4444;
   box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.14);
+}
+
+.system-events .filter-control {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.system-events .filter-control select {
+  min-width: 140px;
+}
+
+#system-events-wrapper table td:nth-child(3) {
+  max-width: 420px;
+  white-space: normal;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.pagination button {
+  min-width: 90px;
 }
 
 .location-card .status-badge {

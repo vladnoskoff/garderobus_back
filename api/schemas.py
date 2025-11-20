@@ -285,6 +285,22 @@ class AdminRestartResponse(BaseModel):
     pid: Optional[int] = None
 
 
+class AdminSystemEvent(BaseModel):
+    timestamp: datetime
+    level: str
+    message: str
+    logger: Optional[str] = None
+    service: Optional[str] = None
+    context: dict[str, Any] = Field(default_factory=dict)
+
+
+class AdminSystemEventList(BaseModel):
+    events: List[AdminSystemEvent] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    limit: int = 50
+
+
 class WardrobeLocationUpdate(BaseModel):
     name: Optional[str] = None
     latitude: Optional[float] = None
