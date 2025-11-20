@@ -375,3 +375,84 @@ class WearHistoryResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class NotificationChannelBase(BaseModel):
+    name: str
+    channel_type: str
+    config: Dict[str, Any] = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class NotificationChannelCreate(NotificationChannelBase):
+    pass
+
+
+class NotificationChannelUpdate(BaseModel):
+    name: Optional[str] = None
+    channel_type: Optional[str] = None
+    config: Optional[Dict[str, Any]] = None
+    is_active: Optional[bool] = None
+    status: Optional[str] = None
+
+
+class NotificationChannelResponse(NotificationChannelBase):
+    id: int
+    status: str = "disconnected"
+    last_tested_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationTemplateBase(BaseModel):
+    name: str
+    content: str
+    channel_type: Optional[str] = None
+    variables: Optional[Dict[str, Any]] = None
+
+
+class NotificationTemplateCreate(NotificationTemplateBase):
+    pass
+
+
+class NotificationTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    content: Optional[str] = None
+    channel_type: Optional[str] = None
+    variables: Optional[Dict[str, Any]] = None
+
+
+class NotificationTemplateResponse(NotificationTemplateBase):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationRuleBase(BaseModel):
+    event: str
+    priority: int = 0
+    channel_ids: List[int] = Field(default_factory=list)
+    template_id: Optional[int] = None
+    filters: Optional[Dict[str, Any]] = None
+
+
+class NotificationRuleCreate(NotificationRuleBase):
+    pass
+
+
+class NotificationRuleUpdate(BaseModel):
+    event: Optional[str] = None
+    priority: Optional[int] = None
+    channel_ids: Optional[List[int]] = None
+    template_id: Optional[int] = None
+    filters: Optional[Dict[str, Any]] = None
+
+
+class NotificationRuleResponse(NotificationRuleBase):
+    id: int
+
+    class Config:
+        from_attributes = True
