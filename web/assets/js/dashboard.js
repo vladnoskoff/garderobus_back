@@ -76,6 +76,17 @@
     systemRefreshButton: document.getElementById("system-refresh-button"),
     openCodeEditorButton: document.getElementById("open-code-editor-button"),
     restartApiButton: document.getElementById("restart-api-button"),
+    systemEventsWrapper: document.getElementById("system-events-wrapper"),
+    systemEventsBody: document.getElementById("system-events-body"),
+    systemEventsLoading: document.getElementById("system-events-loading"),
+    systemEventsEmpty: document.getElementById("system-events-empty"),
+    systemEventsError: document.getElementById("system-events-error"),
+    systemEventsLevel: document.getElementById("system-events-level"),
+    systemEventsPeriod: document.getElementById("system-events-period"),
+    systemEventsLimit: document.getElementById("system-events-limit"),
+    systemEventsPrev: document.getElementById("system-events-prev"),
+    systemEventsNext: document.getElementById("system-events-next"),
+    systemEventsPageInfo: document.getElementById("system-events-page-info"),
     overviewTabButtons: Array.from(
       document.querySelectorAll("[data-overview-tab]")
     ),
@@ -108,6 +119,14 @@
     activeOverviewTab: "stats",
     systemRefreshInterval: null,
     systemLoadedOnce: false,
+    systemEvents: {
+      page: 1,
+      limit: 20,
+      level: "",
+      hours: "",
+      total: 0,
+      loadedOnce: false,
+    },
   };
 
   function handleUnauthorized() {
@@ -296,6 +315,9 @@
     toggleSystemActions(showSystem);
     if (showSystem) {
       startSystemAutoRefresh();
+      if (!state.systemEvents.loadedOnce) {
+        void loadSystemEvents({ resetPage: true });
+      }
     } else {
       stopSystemAutoRefresh();
     }
@@ -319,6 +341,133 @@
       return `${day}.${month}.${year} ${hours}:${minutes}`;
     }
     return `${day}.${month}.${year}`;
+  }
+
+  function formatEventLevel(level) {
+    const normalized = (level || "info").toLowerCase();
+    const map = {
+      info: "Инфо",
+      warning: "Внимание",
+      error: "Ошибка",
+    };
+    return map[normalized] || normalized;
+  }
+
+  function renderSystemEvents(events) {
+    if (!elements.systemEventsBody) {
+      return;
+    }
+    elements.systemEventsBody.innerHTML = "";
+
+    if (!events || !events.length) {
+      toggleHidden(elements.systemEventsWrapper, true);
+      toggleHidden(elements.systemEventsEmpty, false);
+      return;
+    }
+
+    toggleHidden(elements.systemEventsWrapper, false);
+    toggleHidden(elements.systemEventsEmpty, true);
+
+    events.forEach((event) => {
+      const row = document.createElement("tr");
+
+      const timeCell = document.createElement("td");
+      timeCell.textContent = formatDate(event.timestamp, true);
+      row.appendChild(timeCell);
+
+      const levelCell = document.createElement("td");
+      const badge = document.createElement("span");
+      const levelClass =
+        event.level === "error"
+          ? "error"
+          : event.level === "warning"
+            ? "warning"
+            : "info";
+      badge.className = `status-badge ${levelClass}`;
+      badge.textContent = formatEventLevel(event.level);
+      levelCell.appendChild(badge);
+      row.appendChild(levelCell);
+
+      const messageCell = document.createElement("td");
+      messageCell.textContent = event.message || "—";
+      row.appendChild(messageCell);
+
+      const sourceCell = document.createElement("td");
+      const parts = [event.service, event.logger].filter(Boolean);
+      sourceCell.textContent = parts.join(" · ") || "—";
+      row.appendChild(sourceCell);
+
+      elements.systemEventsBody.appendChild(row);
+    });
+  }
+
+  function updateSystemEventsPagination() {
+    if (!elements.systemEventsPageInfo) {
+      return;
+    }
+    const totalPages = Math.max(1, Math.ceil(state.systemEvents.total / state.systemEvents.limit));
+    const currentPage = Math.min(state.systemEvents.page, totalPages);
+    state.systemEvents.page = currentPage;
+    elements.systemEventsPageInfo.textContent = `Страница ${currentPage} из ${totalPages}`;
+
+    if (elements.systemEventsPrev) {
+      elements.systemEventsPrev.disabled = currentPage <= 1;
+    }
+    if (elements.systemEventsNext) {
+      elements.systemEventsNext.disabled = currentPage >= totalPages;
+    }
+  }
+
+  async function loadSystemEvents(options = {}) {
+    const { resetPage = false } = options;
+    if (resetPage) {
+      state.systemEvents.page = 1;
+    }
+
+    toggleHidden(elements.systemEventsError, true);
+    toggleHidden(elements.systemEventsEmpty, true);
+    if (elements.systemEventsLoading) {
+      elements.systemEventsLoading.textContent = "Загрузка событий...";
+      toggleHidden(elements.systemEventsLoading, false);
+    }
+
+    const params = new URLSearchParams();
+    params.set("limit", state.systemEvents.limit);
+    params.set("page", state.systemEvents.page);
+    if (state.systemEvents.level) {
+      params.set("level", state.systemEvents.level);
+    }
+    if (state.systemEvents.hours) {
+      params.set("hours", state.systemEvents.hours);
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/events?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const payload = await response.json();
+      state.systemEvents.total = payload.total || 0;
+      state.systemEvents.loadedOnce = true;
+      renderSystemEvents(payload.events || []);
+      updateSystemEventsPagination();
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        elements.systemEventsError,
+        "Не удалось загрузить события. Проверьте подключение или логи сервера.",
+      );
+    } finally {
+      if (elements.systemEventsLoading) {
+        toggleHidden(elements.systemEventsLoading, true);
+      }
+    }
   }
 
   function formatTopItems(user) {
@@ -1098,6 +1247,48 @@
   if (elements.systemRefreshButton) {
     elements.systemRefreshButton.addEventListener("click", () => {
       void refreshSystemMetrics({ showLoader: true });
+      void loadSystemEvents({ resetPage: true });
+    });
+  }
+
+  if (elements.systemEventsLevel) {
+    elements.systemEventsLevel.addEventListener("change", () => {
+      state.systemEvents.level = elements.systemEventsLevel.value;
+      void loadSystemEvents({ resetPage: true });
+    });
+  }
+
+  if (elements.systemEventsPeriod) {
+    elements.systemEventsPeriod.addEventListener("change", () => {
+      state.systemEvents.hours = elements.systemEventsPeriod.value;
+      void loadSystemEvents({ resetPage: true });
+    });
+  }
+
+  if (elements.systemEventsLimit) {
+    elements.systemEventsLimit.addEventListener("change", () => {
+      const value = Number(elements.systemEventsLimit.value) || 20;
+      state.systemEvents.limit = value;
+      void loadSystemEvents({ resetPage: true });
+    });
+  }
+
+  if (elements.systemEventsPrev) {
+    elements.systemEventsPrev.addEventListener("click", () => {
+      if (state.systemEvents.page > 1) {
+        state.systemEvents.page -= 1;
+        void loadSystemEvents();
+      }
+    });
+  }
+
+  if (elements.systemEventsNext) {
+    elements.systemEventsNext.addEventListener("click", () => {
+      const totalPages = Math.max(1, Math.ceil(state.systemEvents.total / state.systemEvents.limit));
+      if (state.systemEvents.page < totalPages) {
+        state.systemEvents.page += 1;
+        void loadSystemEvents();
+      }
     });
   }
 

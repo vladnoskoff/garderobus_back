@@ -137,6 +137,68 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
                   <div id="system-service-statuses" class="service-status-list"></div>
                 </div>
               </div>
+
+              <div class="system-events" id="system-events-block">
+                <div class="flex-between" style="margin: 16px 0; align-items: center; gap: 12px; flex-wrap: wrap;">
+                  <div>
+                    <h3 style="margin: 0;">События и логи</h3>
+                    <p class="text-muted" style="margin: 4px 0 0;">Отображаются последние системные записи.</p>
+                  </div>
+                  <div class="flex gap-sm" style="flex-wrap: wrap;">
+                    <label class="filter-control">
+                      <span class="text-muted">Тип события</span>
+                      <select id="system-events-level">
+                        <option value="">Все</option>
+                        <option value="info">Информация</option>
+                        <option value="warning">Предупреждения</option>
+                        <option value="error">Ошибки</option>
+                      </select>
+                    </label>
+                    <label class="filter-control">
+                      <span class="text-muted">Период</span>
+                      <select id="system-events-period">
+                        <option value="">Весь</option>
+                        <option value="24">24 часа</option>
+                        <option value="72">3 дня</option>
+                        <option value="168">7 дней</option>
+                      </select>
+                    </label>
+                    <label class="filter-control">
+                      <span class="text-muted">На странице</span>
+                      <select id="system-events-limit">
+                        <option value="10">10</option>
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+
+                <div id="system-events-error" class="alert hidden" style="margin-bottom: 12px;"></div>
+                <p id="system-events-loading" class="text-muted">Загрузка событий...</p>
+                <p id="system-events-empty" class="text-muted hidden">Событий не найдено за выбранный период.</p>
+
+                <div class="table-wrapper hidden" id="system-events-wrapper">
+                  <table class="table">
+                    <thead>
+                      <tr>
+                        <th>Время</th>
+                        <th>Уровень</th>
+                        <th>Сообщение</th>
+                        <th>Источник</th>
+                      </tr>
+                    </thead>
+                    <tbody id="system-events-body"></tbody>
+                  </table>
+                </div>
+
+                <div class="pagination" id="system-events-pagination">
+                  <button class="secondary" type="button" id="system-events-prev">Назад</button>
+                  <span class="text-muted" id="system-events-page-info">Страница 1</span>
+                  <button class="secondary" type="button" id="system-events-next">Вперед</button>
+                </div>
+              </div>
             </div>
           </div>
         </section>
