@@ -263,11 +263,15 @@ class AdminSystemStatus(BaseModel):
     uptime_seconds: float = Field(..., ge=0)
     uptime_human: str
     restart_supported: bool
+    worker_restart_supported: bool = False
     last_restart_requested_at: Optional[datetime] = None
     managed_files: List[str] = Field(default_factory=list)
     app_name: str
     app_version: str
     environment: str
+    maintenance_enabled: bool = False
+    maintenance_supported: bool = False
+    test_webhook_configured: bool = False
 
 
 class AdminCodeFile(BaseModel):
@@ -281,8 +285,19 @@ class AdminCodeUpdateRequest(BaseModel):
 
 
 class AdminRestartResponse(BaseModel):
+    success: bool = True
     detail: str
     pid: Optional[int] = None
+
+
+class AdminActionResponse(BaseModel):
+    success: bool = True
+    detail: str
+    error: Optional[str] = None
+
+
+class AdminMaintenanceRequest(BaseModel):
+    enabled: bool
 
 
 class AdminSystemEvent(BaseModel):

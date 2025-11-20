@@ -194,12 +194,82 @@ button.danger:hover {
   opacity: 0.85;
 }
 
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  margin-right: 8px;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 button.link {
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   color: #4f46e5;
+}
+
+.action-menu {
+  position: relative;
+}
+
+.action-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-menu .chevron {
+  font-size: 12px;
+}
+
+.action-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.12);
+  z-index: 10;
+}
+
+.action-menu-item {
+  border: none;
+  background: #f3f4f6;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: left;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.action-menu-item:hover {
+  background-color: #e5e7eb;
+  transform: translateY(-1px);
+}
+
+.action-menu-item:disabled,
+.action-menu-item.muted {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .layout {
@@ -316,6 +386,34 @@ button.link {
 
 .text-muted {
   color: #6b7280;
+}
+
+.status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background-color: #e5e7eb;
+  color: #1f2937;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.status-pill.success {
+  background-color: #ecfdf3;
+  color: #0f766e;
+}
+
+.status-pill.danger {
+  background-color: #fef2f2;
+  color: #b91c1c;
 }
 
 .table tr:hover {

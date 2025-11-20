@@ -76,7 +76,9 @@
     systemServiceStatuses: document.getElementById("system-service-statuses"),
     systemRefreshButton: document.getElementById("system-refresh-button"),
     openCodeEditorButton: document.getElementById("open-code-editor-button"),
-    restartApiButton: document.getElementById("restart-api-button"),
+    maintenanceStatusPill: document.getElementById("maintenance-status-pill"),
+    systemActionsToggle: document.getElementById("system-actions-toggle"),
+    systemActionsList: document.getElementById("system-actions-list"),
     systemEventsWrapper: document.getElementById("system-events-wrapper"),
     systemEventsBody: document.getElementById("system-events-body"),
     systemEventsLoading: document.getElementById("system-events-loading"),
@@ -109,6 +111,7 @@
     activeCodeFile: null,
     systemRefreshInterval: null,
     systemLoadedOnce: false,
+    systemActionInProgress: false,
     systemEvents: {
       page: 1,
       limit: 20,
@@ -262,6 +265,44 @@
   function setText(element, value) {
     if (element) {
       element.textContent = value;
+    }
+  }
+
+  function setMaintenanceState(enabled) {
+    if (!elements.maintenanceStatusPill) {
+      return;
+    }
+    elements.maintenanceStatusPill.textContent = enabled
+      ? "Maintenance: включен"
+      : "Maintenance: выключен";
+    elements.maintenanceStatusPill.classList.toggle("danger", enabled);
+    elements.maintenanceStatusPill.classList.toggle("success", !enabled);
+  }
+
+  function setSystemActionBusy(isBusy, label = "Выполнение...") {
+    state.systemActionInProgress = isBusy;
+    if (elements.systemActionsToggle) {
+      if (isBusy) {
+        if (!elements.systemActionsToggle.dataset.originalHtml) {
+          elements.systemActionsToggle.dataset.originalHtml =
+            elements.systemActionsToggle.innerHTML;
+        }
+        elements.systemActionsToggle.innerHTML = `<span class="spinner"></span>${label}`;
+      } else if (elements.systemActionsToggle.dataset.originalHtml) {
+        elements.systemActionsToggle.innerHTML =
+          elements.systemActionsToggle.dataset.originalHtml;
+        delete elements.systemActionsToggle.dataset.originalHtml;
+      }
+      elements.systemActionsToggle.disabled = isBusy;
+      elements.systemActionsToggle.classList.toggle("loading", isBusy);
+      elements.systemActionsToggle.dataset.loadingLabel = label;
+    }
+    if (elements.systemActionsList) {
+      elements.systemActionsList
+        .querySelectorAll("button")
+        .forEach((button) => {
+          button.disabled = isBusy;
+        });
     }
   }
 
@@ -595,11 +636,167 @@
         ? formatDate(status.last_restart_requested_at, true)
         : "—"
     );
+    setMaintenanceState(Boolean(status.maintenance_enabled));
     setText(elements.systemFilesCount, files.length);
     renderManagedFiles(files);
     renderServiceStatuses(status.services || status.service_statuses);
     if (state.drawerMode === "code") {
       updateCodeEditorFileList(files);
+    }
+    updateSystemActionsAvailability(status);
+  }
+
+  function updateSystemActionsAvailability(status = {}) {
+    if (!elements.systemActionsList) {
+      return;
+    }
+    const disableButton = (action, reason = "") => {
+      const button = elements.systemActionsList.querySelector(
+        `[data-action="${action}"]`
+      );
+      if (button) {
+        button.disabled = true;
+        button.title = reason;
+        button.classList.add("muted");
+      }
+    };
+
+    elements.systemActionsList.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.disabled = false;
+      btn.title = "";
+      btn.classList.remove("muted");
+    });
+
+    if (!status.restart_supported) {
+      disableButton("restart-api", "Перезапуск недоступен для окружения");
+    }
+    if (!status.worker_restart_supported) {
+      disableButton("restart-workers", "Нет команды перезапуска воркеров");
+    }
+    if (!status.maintenance_supported) {
+      disableButton("enable-maintenance", "Maintenance не настроен");
+      disableButton("disable-maintenance", "Maintenance не настроен");
+    } else if (status.maintenance_enabled) {
+      disableButton("enable-maintenance", "Уже включен");
+    } else {
+      disableButton("disable-maintenance", "Уже выключен");
+    }
+    if (!status.test_webhook_configured) {
+      disableButton("send-test-webhook", "Webhook не настроен");
+    }
+
+    if (state.systemActionInProgress) {
+      setSystemActionBusy(true, elements.systemActionsToggle?.dataset.loadingLabel);
+    }
+  }
+
+  const SYSTEM_ACTIONS = {
+    "restart-api": {
+      url: "/admin/system/restart",
+      confirm:
+        "Перезапустить API сейчас? Активные соединения будут прерваны.",
+      loadingLabel: "Перезапуск...",
+      successMessage: "Перезапуск API инициирован.",
+    },
+    "restart-workers": {
+      url: "/admin/system/workers/restart",
+      confirm:
+        "Перезапустить фоновых воркеров? Текущие задачи могут быть перезапущены.",
+      loadingLabel: "Перезапуск воркеров...",
+      successMessage: "Перезапуск воркеров инициирован.",
+    },
+    "enable-maintenance": {
+      url: "/admin/system/maintenance",
+      confirm:
+        "Включить maintenance режим? Пользовательский доступ будет ограничен.",
+      loadingLabel: "Включение maintenance...",
+      successMessage: "Maintenance режим включен.",
+      body: { enabled: true },
+    },
+    "disable-maintenance": {
+      url: "/admin/system/maintenance",
+      confirm: "Выключить maintenance режим и вернуть доступ пользователям?",
+      loadingLabel: "Выключение maintenance...",
+      successMessage: "Maintenance режим выключен.",
+      body: { enabled: false },
+    },
+    "send-test-webhook": {
+      url: "/admin/system/test-webhook",
+      confirm: "Отправить тестовый webhook/ping?",
+      loadingLabel: "Отправка webhook...",
+      successMessage: "Тестовый webhook отправлен.",
+    },
+  };
+
+  function closeSystemActionsMenu() {
+    if (elements.systemActionsList) {
+      elements.systemActionsList.classList.add("hidden");
+    }
+    if (elements.systemActionsToggle) {
+      elements.systemActionsToggle.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  function toggleSystemActionsMenu() {
+    if (!elements.systemActionsList) {
+      return;
+    }
+    const isOpen = !elements.systemActionsList.classList.contains("hidden");
+    if (isOpen) {
+      closeSystemActionsMenu();
+    } else {
+      elements.systemActionsList.classList.remove("hidden");
+      if (elements.systemActionsToggle) {
+        elements.systemActionsToggle.setAttribute("aria-expanded", "true");
+      }
+    }
+  }
+
+  async function performSystemAction(actionKey) {
+    const action = SYSTEM_ACTIONS[actionKey];
+    if (!action || state.systemActionInProgress) {
+      return;
+    }
+    if (action.confirm && !window.confirm(action.confirm)) {
+      closeSystemActionsMenu();
+      return;
+    }
+    showAlert(elements.systemStatusError, "");
+    showAlert(elements.systemStatusFeedback, "");
+    setSystemActionBusy(true, action.loadingLabel || "Выполнение...");
+    closeSystemActionsMenu();
+    try {
+      const response = await fetch(`${apiBaseUrl}${action.url}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
+        body: action.body ? JSON.stringify(action.body) : undefined,
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const errorMessage = payload?.detail || payload?.error || "Произошла ошибка";
+        throw new Error(errorMessage);
+      }
+      showAlert(
+        elements.systemStatusFeedback,
+        payload?.detail || action.successMessage || "Успешно выполнено.",
+        "success"
+      );
+      void refreshSystemMetrics({ showLoader: false, silent: true });
+    } catch (error) {
+      console.error(error);
+      showAlert(
+        elements.systemStatusError,
+        error?.message || "Не удалось выполнить действие. Попробуйте позже."
+      );
+    } finally {
+      setSystemActionBusy(false);
     }
   }
 
@@ -1241,51 +1438,32 @@
     });
   }
 
-  if (elements.restartApiButton) {
-    elements.restartApiButton.addEventListener("click", async () => {
-      const confirmed = window.confirm(
-        "Перезапустить API сейчас? Активные соединения будут прерваны."
-      );
-      if (!confirmed) {
-        return;
-      }
-      showAlert(elements.systemStatusError, "");
-      showAlert(elements.systemStatusFeedback, "");
-      elements.restartApiButton.disabled = true;
-      elements.restartApiButton.textContent = "Перезапуск...";
-      try {
-        const response = await fetch(`${apiBaseUrl}/admin/system/restart`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("authToken")}`,
-          },
-        });
-        if (response.status === 401) {
-          handleUnauthorized();
-          return;
-        }
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(errorText || "Request failed");
-        }
-        showAlert(
-          elements.systemStatusFeedback,
-          "Перезапуск API инициирован.",
-          "success"
-        );
-        void refreshSystemMetrics({ showLoader: false, silent: true });
-      } catch (error) {
-        console.error(error);
-        showAlert(
-          elements.systemStatusError,
-          "Не удалось инициировать перезапуск. Проверьте настройки сервера."
-        );
-      } finally {
-        elements.restartApiButton.disabled = false;
-        elements.restartApiButton.textContent = "Перезапустить API";
+  if (elements.systemActionsToggle) {
+    elements.systemActionsToggle.addEventListener("click", () => {
+      toggleSystemActionsMenu();
+    });
+  }
+
+  if (elements.systemActionsList) {
+    elements.systemActionsList.addEventListener("click", (event) => {
+      const target = event.target;
+      if (target?.dataset?.action) {
+        event.stopPropagation();
+        void performSystemAction(target.dataset.action);
       }
     });
   }
+
+  document.addEventListener("click", (event) => {
+    if (!elements.systemActionsList || !elements.systemActionsToggle) {
+      return;
+    }
+    const isToggle = elements.systemActionsToggle.contains(event.target);
+    const isMenu = elements.systemActionsList.contains(event.target);
+    if (!isToggle && !isMenu) {
+      closeSystemActionsMenu();
+    }
+  });
 
   if (elements.codeEditorSelect) {
     elements.codeEditorSelect.addEventListener("change", (event) => {
