@@ -72,9 +72,21 @@
     systemLastRestart: document.getElementById("system-last-restart"),
     systemFilesCount: document.getElementById("system-files-count"),
     systemFilesList: document.getElementById("system-files-list"),
+    systemServiceStatuses: document.getElementById("system-service-statuses"),
     systemRefreshButton: document.getElementById("system-refresh-button"),
     openCodeEditorButton: document.getElementById("open-code-editor-button"),
     restartApiButton: document.getElementById("restart-api-button"),
+    overviewTabButtons: Array.from(
+      document.querySelectorAll("[data-overview-tab]")
+    ),
+    overviewTabPanels: {
+      stats: document.getElementById("tab-stats"),
+      system: document.getElementById("tab-system"),
+    },
+    systemTabActions: document.getElementById("system-tab-actions"),
+    tabOpenLinks: Array.from(
+      document.querySelectorAll("[data-open-overview-tab]")
+    ),
     codeEditorSelect: document.getElementById("code-editor-file-select"),
     codeEditorEmpty: document.getElementById("code-editor-empty"),
     codeEditorRefresh: document.getElementById("code-editor-refresh"),
@@ -93,6 +105,9 @@
     systemStatus: null,
     managedFiles: [],
     activeCodeFile: null,
+    activeOverviewTab: "stats",
+    systemRefreshInterval: null,
+    systemLoadedOnce: false,
   };
 
   function handleUnauthorized() {
@@ -241,6 +256,51 @@
     }
   }
 
+  function toggleSystemActions(visible) {
+    const controls = [
+      elements.systemRefreshButton,
+      elements.openCodeEditorButton,
+      elements.restartApiButton,
+    ];
+    controls.forEach((button) => {
+      if (!button) {
+        return;
+      }
+      toggleHidden(button, !visible);
+    });
+  }
+
+  function setActiveOverviewTab(tabKey) {
+    const target = tabKey === "system" ? "system" : "stats";
+    state.activeOverviewTab = target;
+
+    elements.overviewTabButtons.forEach((button) => {
+      const isActive = button.dataset.overviewTab === target;
+      button.classList.toggle("active", isActive);
+      button.setAttribute("aria-selected", isActive ? "true" : "false");
+      if (isActive && elements.overviewTabPanels[target]) {
+        elements.overviewTabPanels[target].setAttribute("tabindex", "0");
+      }
+    });
+
+    Object.entries(elements.overviewTabPanels).forEach(([key, panel]) => {
+      if (!panel) {
+        return;
+      }
+      const isActive = key === target;
+      toggleHidden(panel, !isActive);
+      panel.classList.toggle("active", isActive);
+    });
+
+    const showSystem = target === "system";
+    toggleSystemActions(showSystem);
+    if (showSystem) {
+      startSystemAutoRefresh();
+    } else {
+      stopSystemAutoRefresh();
+    }
+  }
+
   function formatDate(value, withTime) {
     if (!value) {
       return "—";
@@ -354,10 +414,72 @@
     setCodeEditorEnabled(true);
   }
 
+  function getServiceStatusMeta(status) {
+    const normalized = (status || "").toLowerCase();
+    if (normalized === "warning") {
+      return { label: "Warning", badge: "warning", dot: "warning" };
+    }
+    if (normalized === "fail" || normalized === "error") {
+      return { label: "Fail", badge: "error", dot: "fail" };
+    }
+    return { label: "OK", badge: "success", dot: "ok" };
+  }
+
+  function renderServiceStatuses(services) {
+    if (!elements.systemServiceStatuses) {
+      return;
+    }
+    elements.systemServiceStatuses.innerHTML = "";
+    const items = Array.isArray(services) ? services : [];
+    if (!items.length) {
+      const empty = document.createElement("span");
+      empty.className = "text-muted";
+      empty.textContent = "Нет данных о сервисах";
+      elements.systemServiceStatuses.appendChild(empty);
+      return;
+    }
+
+    items.forEach((service) => {
+      const meta = getServiceStatusMeta(service.status);
+      const wrapper = document.createElement("div");
+      wrapper.className = "service-status-item";
+
+      const topRow = document.createElement("div");
+      topRow.className = "service-status-top";
+      const info = document.createElement("div");
+      info.className = "service-status-info";
+
+      const dot = document.createElement("span");
+      dot.className = `status-dot ${meta.dot}`;
+
+      const name = document.createElement("strong");
+      name.textContent = service.name || "Сервис";
+
+      info.appendChild(dot);
+      info.appendChild(name);
+
+      const badge = document.createElement("span");
+      badge.className = `status-badge ${meta.badge}`;
+      badge.textContent = meta.label;
+
+      topRow.appendChild(info);
+      topRow.appendChild(badge);
+
+      const message = document.createElement("span");
+      message.className = "text-muted";
+      message.textContent = service.message || "Работает стабильно";
+
+      wrapper.appendChild(topRow);
+      wrapper.appendChild(message);
+      elements.systemServiceStatuses.appendChild(wrapper);
+    });
+  }
+
   function updateSystemStatus(status) {
     if (!status) {
       return;
     }
+    state.systemLoadedOnce = true;
     state.systemStatus = status;
     const files = Array.isArray(status.managed_files) ? status.managed_files : [];
     state.managedFiles = files;
@@ -384,12 +506,13 @@
     );
     setText(elements.systemFilesCount, files.length);
     renderManagedFiles(files);
+    renderServiceStatuses(status.services || status.service_statuses);
     if (state.drawerMode === "code") {
       updateCodeEditorFileList(files);
     }
   }
 
-  async function loadSystemStatus(options = {}) {
+  async function fetchSystemMetrics(options = {}) {
     const { showLoader = true, silent = false } = options;
     if (showLoader && elements.systemStatusLoading) {
       elements.systemStatusLoading.textContent = "Загрузка состояния сервиса...";
@@ -413,7 +536,6 @@
         throw new Error("Request failed");
       }
       const data = await response.json();
-      updateSystemStatus(data);
       return data;
     } catch (error) {
       console.error(error);
@@ -428,6 +550,33 @@
       if (elements.systemStatusLoading) {
         toggleHidden(elements.systemStatusLoading, true);
       }
+    }
+  }
+
+  async function refreshSystemMetrics(options = {}) {
+    const data = await fetchSystemMetrics(options);
+    if (data) {
+      updateSystemStatus(data);
+    }
+    return data;
+  }
+
+  function startSystemAutoRefresh() {
+    if (!state.systemLoadedOnce) {
+      void refreshSystemMetrics({ showLoader: true });
+    }
+    if (state.systemRefreshInterval) {
+      return;
+    }
+    state.systemRefreshInterval = window.setInterval(() => {
+      void refreshSystemMetrics({ showLoader: false, silent: true });
+    }, 30000);
+  }
+
+  function stopSystemAutoRefresh() {
+    if (state.systemRefreshInterval) {
+      window.clearInterval(state.systemRefreshInterval);
+      state.systemRefreshInterval = null;
     }
   }
 
@@ -482,7 +631,7 @@
     showAlert(elements.codeEditorStatus, "");
     try {
       if (!state.systemStatus) {
-        await loadSystemStatus({ showLoader: false, silent: true });
+        await refreshSystemMetrics({ showLoader: false, silent: true });
       }
     } catch (error) {
       // уведомление уже показано
@@ -536,7 +685,7 @@
       }
       await response.json();
       showAlert(elements.codeEditorStatus, "Файл успешно сохранён.", "success");
-      void loadSystemStatus({ showLoader: false, silent: true });
+      void refreshSystemMetrics({ showLoader: false, silent: true });
     } catch (error) {
       console.error(error);
       showAlert(
@@ -948,7 +1097,7 @@
 
   if (elements.systemRefreshButton) {
     elements.systemRefreshButton.addEventListener("click", () => {
-      void loadSystemStatus({ showLoader: true });
+      void refreshSystemMetrics({ showLoader: true });
     });
   }
 
@@ -991,7 +1140,7 @@
           "Перезапуск API инициирован.",
           "success"
         );
-        void loadSystemStatus({ showLoader: false, silent: true });
+        void refreshSystemMetrics({ showLoader: false, silent: true });
       } catch (error) {
         console.error(error);
         showAlert(
@@ -1042,7 +1191,30 @@
     });
   }
 
-  void loadSystemStatus({ showLoader: true, silent: true });
+  elements.overviewTabButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const tab = button.dataset.overviewTab;
+      setActiveOverviewTab(tab);
+    });
+  });
+
+  elements.tabOpenLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      const tab = link.dataset.openOverviewTab;
+      if (tab) {
+        event.preventDefault();
+        setActiveOverviewTab(tab);
+        const panel = elements.overviewTabPanels[tab];
+        if (panel) {
+          panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    });
+  });
+
+  setActiveOverviewTab(state.activeOverviewTab);
+
+  void refreshSystemMetrics({ showLoader: true, silent: true });
 
 
 
