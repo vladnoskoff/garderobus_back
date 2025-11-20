@@ -1,5 +1,7 @@
 import json
 import logging
+import os
+import requests
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
@@ -16,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 _START_TIME = time.time()
 _LAST_RESTART_REQUEST: Optional[datetime] = None
+_LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
+_MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 
 LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
@@ -109,11 +113,15 @@ def get_system_status() -> schemas.AdminSystemStatus:
         uptime_seconds=uptime_seconds,
         uptime_human=_humanize_duration(uptime_seconds),
         restart_supported=is_restart_supported(),
+        worker_restart_supported=is_worker_restart_supported(),
         last_restart_requested_at=_LAST_RESTART_REQUEST,
         managed_files=list_managed_files(),
         app_name=settings.APP_NAME,
         app_version=settings.APP_VERSION,
         environment=settings.APP_ENV,
+        maintenance_enabled=_MAINTENANCE_ENABLED,
+        maintenance_supported=is_maintenance_supported(),
+        test_webhook_configured=bool(settings.ADMIN_TEST_WEBHOOK_URL),
     )
 
 
@@ -173,6 +181,10 @@ def is_restart_supported() -> bool:
     return bool(settings.ADMIN_ALLOW_RESTART and settings.ADMIN_RESTART_COMMAND)
 
 
+def is_worker_restart_supported() -> bool:
+    return bool(settings.ADMIN_ALLOW_WORKER_RESTART and settings.ADMIN_WORKER_RESTART_COMMAND)
+
+
 def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminRestartResponse:
     if not is_restart_supported():
         raise HTTPException(
@@ -215,6 +227,159 @@ def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminR
     return schemas.AdminRestartResponse(
         detail="Перезапуск API инициирован",
         pid=getattr(process, "pid", None),
+    )
+
+
+def restart_workers(*, requested_by: Optional[models.User] = None) -> schemas.AdminActionResponse:
+    if not is_worker_restart_supported():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Перезапуск воркеров не настроен",
+        )
+
+    command = settings.ADMIN_WORKER_RESTART_COMMAND
+    logger.info(
+        "Worker restart requested",
+        extra={
+            "actor_id": getattr(requested_by, "id", None),
+            "actor_email": getattr(requested_by, "email", None),
+            "command": command,
+        },
+    )
+
+    try:
+        result = subprocess.run(  # noqa: S603 - administrative action
+            command,  # noqa: S607 - command from environment
+            shell=True,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+        )
+    except OSError as exc:  # pragma: no cover - system-specific failure
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось выполнить команду перезапуска воркеров",
+        ) from exc
+
+    if result.returncode != 0:
+        detail = result.stderr or result.stdout or "Команда завершилась с ошибкой"
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+        )
+
+    return schemas.AdminActionResponse(
+        detail="Перезапуск фоновых воркеров инициирован",
+        success=True,
+    )
+
+
+def is_maintenance_supported() -> bool:
+    return bool(
+        settings.ADMIN_MAINTENANCE_ENABLE_COMMAND
+        and settings.ADMIN_MAINTENANCE_DISABLE_COMMAND
+    )
+
+
+def set_maintenance_mode(
+    *, enabled: bool, requested_by: Optional[models.User] = None
+) -> schemas.AdminActionResponse:
+    if not is_maintenance_supported():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Команды maintenance не настроены",
+        )
+
+    command = (
+        settings.ADMIN_MAINTENANCE_ENABLE_COMMAND
+        if enabled
+        else settings.ADMIN_MAINTENANCE_DISABLE_COMMAND
+    )
+
+    logger.info(
+        "Maintenance toggle requested",
+        extra={
+            "actor_id": getattr(requested_by, "id", None),
+            "actor_email": getattr(requested_by, "email", None),
+            "enabled": enabled,
+            "command": command,
+        },
+    )
+
+    try:
+        result = subprocess.run(  # noqa: S603 - administrative action
+            command,  # noqa: S607 - command from environment
+            shell=True,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+        )
+    except OSError as exc:  # pragma: no cover - system-specific failure
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось применить maintenance режим",
+        ) from exc
+
+    if result.returncode != 0:
+        detail = result.stderr or result.stdout or "Команда завершилась с ошибкой"
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+        )
+
+    global _MAINTENANCE_ENABLED, _LAST_MAINTENANCE_CHANGE
+    _MAINTENANCE_ENABLED = enabled
+    _LAST_MAINTENANCE_CHANGE = datetime.now(timezone.utc)
+
+    return schemas.AdminActionResponse(
+        detail=(
+            "Maintenance режим включен" if enabled else "Maintenance режим выключен"
+        ),
+        success=True,
+    )
+
+
+def send_test_webhook(
+    *, requested_by: Optional[models.User] = None
+) -> schemas.AdminActionResponse:
+    if not settings.ADMIN_TEST_WEBHOOK_URL:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="URL тестового webhook не настроен",
+        )
+
+    payload = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "event": "admin_test_ping",
+        "actor_id": getattr(requested_by, "id", None),
+        "actor_email": getattr(requested_by, "email", None),
+        "message": "Тестовый webhook от панели администратора",
+    }
+
+    try:
+        response = requests.post(
+            settings.ADMIN_TEST_WEBHOOK_URL,
+            json=payload,
+            timeout=10,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Не удалось отправить тестовый webhook",
+        ) from exc
+
+    if response.status_code >= 400:
+        detail = response.text or f"Webhook ответил со статусом {response.status_code}"
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+        )
+
+    return schemas.AdminActionResponse(
+        detail="Тестовый webhook успешно отправлен",
+        success=True,
     )
 
 

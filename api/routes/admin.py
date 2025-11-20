@@ -369,6 +369,31 @@ def restart_api_endpoint(
     return system_tools.restart_api(requested_by=current_user)
 
 
+@router.post("/system/workers/restart", response_model=schemas.AdminActionResponse)
+def restart_workers_endpoint(
+    current_user: models.User = Depends(_get_current_user),
+) -> schemas.AdminActionResponse:
+    return system_tools.restart_workers(requested_by=current_user)
+
+
+@router.post("/system/maintenance", response_model=schemas.AdminActionResponse)
+def maintenance_toggle_endpoint(
+    payload: schemas.AdminMaintenanceRequest,
+    current_user: models.User = Depends(_get_current_user),
+) -> schemas.AdminActionResponse:
+    return system_tools.set_maintenance_mode(
+        enabled=payload.enabled,
+        requested_by=current_user,
+    )
+
+
+@router.post("/system/test-webhook", response_model=schemas.AdminActionResponse)
+def send_test_webhook_endpoint(
+    current_user: models.User = Depends(_get_current_user),
+) -> schemas.AdminActionResponse:
+    return system_tools.send_test_webhook(requested_by=current_user)
+
+
 @router.post("/login")
 def admin_login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
     """Делегируем авторизацию стандартному пользовательскому логину."""

@@ -24,17 +24,32 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
         <button class="link" type="button" id="logout-button">Выйти</button>
       </aside>
       <main class="content">
-        <div class="flex-between" style="margin-bottom: 24px; align-items: center; gap: 12px; flex-wrap: wrap;">
-          <div>
-            <h2 class="page-title">Система</h2>
-            <p class="text-muted">Мониторинг API, версии и состояния сервисов.</p>
+          <div class="flex-between" style="margin-bottom: 24px; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <div class="flex-column gap-xs">
+              <h2 class="page-title">Система</h2>
+              <p class="text-muted" style="margin: 0;">Мониторинг API, версии и состояния сервисов.</p>
+              <div class="status-badges">
+                <span class="status-pill" id="maintenance-status-pill">Maintenance: неизвестно</span>
+              </div>
+            </div>
+            <div class="flex gap-sm" id="system-tab-actions">
+              <button class="secondary" type="button" id="system-refresh-button">Обновить</button>
+              <button class="secondary" type="button" id="open-code-editor-button">Редактировать код</button>
+              <div class="action-menu" id="system-actions-menu">
+                <button class="primary action-toggle" type="button" id="system-actions-toggle">
+                  Действия
+                  <span class="chevron" aria-hidden="true">▾</span>
+                </button>
+                <div class="action-menu-list hidden" id="system-actions-list" role="menu">
+                  <button type="button" class="action-menu-item" data-action="restart-api">Перезапустить API</button>
+                  <button type="button" class="action-menu-item" data-action="restart-workers">Перезапустить воркеры</button>
+                  <button type="button" class="action-menu-item" data-action="enable-maintenance">Включить maintenance</button>
+                  <button type="button" class="action-menu-item" data-action="disable-maintenance">Выключить maintenance</button>
+                  <button type="button" class="action-menu-item" data-action="send-test-webhook">Отправить тестовый webhook</button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div class="flex gap-sm" id="system-tab-actions">
-            <button class="secondary" type="button" id="system-refresh-button">Обновить</button>
-            <button class="secondary" type="button" id="open-code-editor-button">Редактировать код</button>
-            <button class="danger" type="button" id="restart-api-button">Перезапустить API</button>
-          </div>
-        </div>
 
         <section class="card" aria-live="polite">
           <div id="system-status-error" class="alert hidden" style="margin-bottom: 16px;"></div>
