@@ -58,6 +58,49 @@ button {
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08);
 }
 
+.tabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.tabs {
+  display: inline-flex;
+  gap: 8px;
+  background-color: #f3f4f6;
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.tab-button {
+  border: none;
+  background: none;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.tab-button.active {
+  background-color: #fff;
+  color: #111827;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.tab-panel {
+  margin-top: 16px;
+}
+
+.tab-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .card + .card {
   margin-top: 16px;
 }
@@ -605,6 +648,68 @@ button.link {
   color: #b45309;
 }
 
+.status-badge.error {
+  background-color: rgba(239, 68, 68, 0.14);
+  color: #b91c1c;
+}
+
+.service-status-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.service-status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background-color: #f9fafb;
+}
+
+.service-status-top {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.service-status-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.service-status-item strong {
+  font-size: 14px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.status-dot.ok {
+  background-color: #10b981;
+  box-shadow: 0 0 0 6px rgba(16, 185, 129, 0.1);
+}
+
+.status-dot.warning {
+  background-color: #f59e0b;
+  box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.12);
+}
+
+.status-dot.fail {
+  background-color: #ef4444;
+  box-shadow: 0 0 0 6px rgba(239, 68, 68, 0.14);
+}
+
 .location-card .status-badge {
   align-self: flex-start;
 }
@@ -644,8 +749,20 @@ textarea:focus {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
-.system-status-grid {
-  margin-top: 12px;
+.system-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.system-card {
+  background-color: #f8fafc;
+  border: 1px solid #e5e7eb;
+}
+
+.system-card strong {
+  color: #0f172a;
 }
 
 .system-files-list {
