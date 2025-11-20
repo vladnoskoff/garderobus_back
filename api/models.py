@@ -298,3 +298,41 @@ class MannequinImage(Base):
 
     user = relationship("User", backref="mannequin_images")
     location = relationship("WardrobeLocation")
+
+
+class NotificationChannel(Base):
+    __tablename__ = "notification_channels"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    channel_type = Column(String(50), nullable=False)
+    config = Column(JSON, nullable=False, default=dict, server_default="{}")
+    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
+    status = Column(String(50), nullable=False, default="disconnected", server_default="disconnected")
+    last_tested_at = Column(TIMESTAMP, nullable=True)
+
+
+class NotificationTemplate(Base):
+    __tablename__ = "notification_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    channel_type = Column(String(50), nullable=True)
+    content = Column(Text, nullable=False)
+    variables = Column(JSON, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+
+
+class NotificationRule(Base):
+    __tablename__ = "notification_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event = Column(String(255), nullable=False, index=True)
+    priority = Column(Integer, nullable=False, default=0, server_default="0")
+    channel_ids = Column(JSON, nullable=False, default=list, server_default="[]")
+    template_id = Column(
+        Integer,
+        ForeignKey("notification_templates.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    filters = Column(JSON, nullable=True)

@@ -20,6 +20,7 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
           <a href="dashboard.php">Пользователи</a>
           <a href="stats.php" class="active">Статистика</a>
           <a href="system.php">Система</a>
+          <a href="notifications.php">Уведомления</a>
         </nav>
         <button class="link" type="button" id="logout-button">Выйти</button>
       </aside>

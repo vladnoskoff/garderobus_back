@@ -20,6 +20,7 @@ from routes import (
     clothes,
     esp_display,
     locations,
+    notifications,
     outfits,
     testgpt,
     users,
@@ -75,6 +76,7 @@ app.include_router(wardrobe_analytics.router)
 app.include_router(esp_display.router)
 app.include_router(testgpt.router)
 app.include_router(locations.router)
+app.include_router(notifications.router)
 
 configure_observability(app)
 
