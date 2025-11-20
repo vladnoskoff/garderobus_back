@@ -1,6 +1,7 @@
 (function () {
   const config = window.APP_CONFIG || {};
   const apiBaseUrl = config.apiBaseUrl || "http://aapanel-api.noksovsteam.ru";
+  const pageType = document.body?.dataset.page || "users";
 
   const token = localStorage.getItem("authToken");
   if (!token) {
@@ -87,17 +88,7 @@
     systemEventsPrev: document.getElementById("system-events-prev"),
     systemEventsNext: document.getElementById("system-events-next"),
     systemEventsPageInfo: document.getElementById("system-events-page-info"),
-    overviewTabButtons: Array.from(
-      document.querySelectorAll("[data-overview-tab]")
-    ),
-    overviewTabPanels: {
-      stats: document.getElementById("tab-stats"),
-      system: document.getElementById("tab-system"),
-    },
     systemTabActions: document.getElementById("system-tab-actions"),
-    tabOpenLinks: Array.from(
-      document.querySelectorAll("[data-open-overview-tab]")
-    ),
     codeEditorSelect: document.getElementById("code-editor-file-select"),
     codeEditorEmpty: document.getElementById("code-editor-empty"),
     codeEditorRefresh: document.getElementById("code-editor-refresh"),
@@ -116,7 +107,6 @@
     systemStatus: null,
     managedFiles: [],
     activeCodeFile: null,
-    activeOverviewTab: "stats",
     systemRefreshInterval: null,
     systemLoadedOnce: false,
     systemEvents: {
@@ -272,54 +262,6 @@
   function setText(element, value) {
     if (element) {
       element.textContent = value;
-    }
-  }
-
-  function toggleSystemActions(visible) {
-    const controls = [
-      elements.systemRefreshButton,
-      elements.openCodeEditorButton,
-      elements.restartApiButton,
-    ];
-    controls.forEach((button) => {
-      if (!button) {
-        return;
-      }
-      toggleHidden(button, !visible);
-    });
-  }
-
-  function setActiveOverviewTab(tabKey) {
-    const target = tabKey === "system" ? "system" : "stats";
-    state.activeOverviewTab = target;
-
-    elements.overviewTabButtons.forEach((button) => {
-      const isActive = button.dataset.overviewTab === target;
-      button.classList.toggle("active", isActive);
-      button.setAttribute("aria-selected", isActive ? "true" : "false");
-      if (isActive && elements.overviewTabPanels[target]) {
-        elements.overviewTabPanels[target].setAttribute("tabindex", "0");
-      }
-    });
-
-    Object.entries(elements.overviewTabPanels).forEach(([key, panel]) => {
-      if (!panel) {
-        return;
-      }
-      const isActive = key === target;
-      toggleHidden(panel, !isActive);
-      panel.classList.toggle("active", isActive);
-    });
-
-    const showSystem = target === "system";
-    toggleSystemActions(showSystem);
-    if (showSystem) {
-      startSystemAutoRefresh();
-      if (!state.systemEvents.loadedOnce) {
-        void loadSystemEvents({ resetPage: true });
-      }
-    } else {
-      stopSystemAutoRefresh();
     }
   }
 
@@ -1382,37 +1324,27 @@
     });
   }
 
-  elements.overviewTabButtons.forEach((button) => {
-    button.addEventListener("click", () => {
-      const tab = button.dataset.overviewTab;
-      setActiveOverviewTab(tab);
-    });
-  });
-
-  elements.tabOpenLinks.forEach((link) => {
-    link.addEventListener("click", (event) => {
-      const tab = link.dataset.openOverviewTab;
-      if (tab) {
-        event.preventDefault();
-        setActiveOverviewTab(tab);
-        const panel = elements.overviewTabPanels[tab];
-        if (panel) {
-          panel.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }
-    });
-  });
-
-  setActiveOverviewTab(state.activeOverviewTab);
-
-  void refreshSystemMetrics({ showLoader: true, silent: true });
 
 
+  if (pageType === "system") {
+    startSystemAutoRefresh();
+    void refreshSystemMetrics({ showLoader: true, silent: true });
+    void loadSystemEvents({ resetPage: true });
+  } else {
+    stopSystemAutoRefresh();
+  }
 
-  if (elements.createUserButton) {
-    elements.createUserButton.addEventListener("click", () => {
-      openDrawer("create");
-    });
+  if (pageType === "users" || pageType === "stats") {
+    if (elements.createUserButton) {
+      elements.createUserButton.addEventListener("click", () => {
+        openDrawer("create");
+      });
+    }
+    void loadUsers();
+  }
+
+  if (pageType !== "users" && elements.createUserButton) {
+    toggleHidden(elements.createUserButton, true);
   }
 
   if (elements.drawerClose) {
@@ -1499,5 +1431,4 @@
     });
   }
 
-  void loadUsers();
 })();

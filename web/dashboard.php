@@ -9,7 +9,7 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
     <title>Garderobus Admin — Пользователи</title>
     <link rel="stylesheet" href="assets/css/styles.css" />
   </head>
-  <body>
+  <body data-page="users">
     <div class="layout">
       <aside class="sidebar">
         <div class="flex-column gap-sm">
@@ -18,190 +18,22 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
         </div>
         <nav>
           <a href="dashboard.php" class="active">Пользователи</a>
-          <a href="#tab-system" data-open-overview-tab="system">Система</a>
+          <a href="stats.php">Статистика</a>
+          <a href="system.php">Система</a>
         </nav>
         <button class="link" type="button" id="logout-button">Выйти</button>
       </aside>
       <main class="content">
         <div class="flex-between" style="margin-bottom: 32px;">
           <div>
-            <h2 class="page-title">Пользователи и статистика</h2>
-            <p class="text-muted">Обзор активности гардероба по всем учетным записям.</p>
+            <h2 class="page-title">Пользователи</h2>
+            <p class="text-muted">Управление учетными записями и обзор активности гардероба.</p>
           </div>
           <div class="flex gap-sm">
             <button class="secondary" type="button" id="refresh-button">Обновить</button>
             <button class="primary" type="button" id="create-user-button">Добавить пользователя</button>
           </div>
         </div>
-
-        <section class="card" id="overview-tabs">
-          <div class="tabs-header flex-between">
-            <div class="tabs" role="tablist" aria-label="Переключатель панелей">
-              <button
-                class="tab-button active"
-                type="button"
-                role="tab"
-                aria-selected="true"
-                aria-controls="tab-stats"
-                id="tab-button-stats"
-                data-overview-tab="stats"
-              >
-                Статистика
-              </button>
-              <button
-                class="tab-button"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                aria-controls="tab-system"
-                id="tab-button-system"
-                data-overview-tab="system"
-              >
-                Система
-              </button>
-            </div>
-            <div class="flex gap-sm" id="system-tab-actions">
-              <button class="secondary hidden" type="button" id="system-refresh-button">Обновить</button>
-              <button class="secondary hidden" type="button" id="open-code-editor-button">Редактировать код</button>
-              <button class="danger hidden" type="button" id="restart-api-button">Перезапустить API</button>
-            </div>
-          </div>
-
-          <div id="tab-stats" class="tab-panel active" role="tabpanel" aria-labelledby="tab-button-stats">
-            <div class="grid" style="margin-top: 16px;">
-              <div class="stat-card">
-                <h3>Всего пользователей</h3>
-                <strong id="stat-users">0</strong>
-                <span>Активные (30 дней): <span id="stat-active-users">0</span></span>
-              </div>
-              <div class="stat-card">
-                <h3>Вещей в гардеробах</h3>
-                <strong id="stat-clothes">0</strong>
-                <span>Новые за 30 дней: <span id="stat-new-clothes">0</span></span>
-              </div>
-              <div class="stat-card">
-                <h3>Фотографии</h3>
-                <strong id="stat-photos">0</strong>
-                <span>Манекены: <span id="stat-mannequins">0</span></span>
-              </div>
-              <div class="stat-card">
-                <h3>Образы и использование</h3>
-                <strong id="stat-outfits">0</strong>
-                <span>Примерок за все время: <span id="stat-wear-events">0</span></span>
-              </div>
-            </div>
-          </div>
-
-          <div
-            id="tab-system"
-            class="tab-panel hidden"
-            role="tabpanel"
-            aria-labelledby="tab-button-system"
-            aria-live="polite"
-          >
-            <div class="tab-panel-body">
-              <div class="flex-between" style="margin-bottom: 16px;">
-                <div>
-                  <h3 style="margin: 0;">Сервис и инфраструктура</h3>
-                  <p class="text-muted" style="margin: 4px 0 0;">
-                    Мониторинг API, версии и состояния сервисов.
-                  </p>
-                </div>
-              </div>
-              <div id="system-status-error" class="alert hidden" style="margin-bottom: 16px;"></div>
-              <div id="system-status-feedback" class="alert success hidden" style="margin-bottom: 16px;"></div>
-              <p id="system-status-loading" class="text-muted">Загрузка состояния сервиса...</p>
-              <div class="system-metrics-grid hidden" id="system-status-grid">
-                <div class="stat-card system-card">
-                  <h3>Аптайм сервиса</h3>
-                  <strong id="system-uptime">—</strong>
-                  <span>В секундах: <span id="system-uptime-seconds">0</span></span>
-                </div>
-                <div class="stat-card system-card">
-                  <h3>Версия и окружение</h3>
-                  <strong id="system-app-name">—</strong>
-                  <span>Версия: <span id="system-app-version">—</span> · Окружение: <span id="system-environment">—</span></span>
-                </div>
-                <div class="stat-card system-card">
-                  <h3>Перезапуск API</h3>
-                  <strong id="system-restart-state">Недоступно</strong>
-                  <span>Последний запрос: <span id="system-last-restart">—</span></span>
-                </div>
-                <div class="stat-card system-card">
-                  <h3>Редактируемые файлы</h3>
-                  <strong id="system-files-count">0</strong>
-                  <div id="system-files-list" class="system-files-list tag-list"></div>
-                </div>
-                <div class="stat-card system-card">
-                  <h3>Статусы сервисов</h3>
-                  <div id="system-service-statuses" class="service-status-list"></div>
-                </div>
-              </div>
-
-              <div class="system-events" id="system-events-block">
-                <div class="flex-between" style="margin: 16px 0; align-items: center; gap: 12px; flex-wrap: wrap;">
-                  <div>
-                    <h3 style="margin: 0;">События и логи</h3>
-                    <p class="text-muted" style="margin: 4px 0 0;">Отображаются последние системные записи.</p>
-                  </div>
-                  <div class="flex gap-sm" style="flex-wrap: wrap;">
-                    <label class="filter-control">
-                      <span class="text-muted">Тип события</span>
-                      <select id="system-events-level">
-                        <option value="">Все</option>
-                        <option value="info">Информация</option>
-                        <option value="warning">Предупреждения</option>
-                        <option value="error">Ошибки</option>
-                      </select>
-                    </label>
-                    <label class="filter-control">
-                      <span class="text-muted">Период</span>
-                      <select id="system-events-period">
-                        <option value="">Весь</option>
-                        <option value="24">24 часа</option>
-                        <option value="72">3 дня</option>
-                        <option value="168">7 дней</option>
-                      </select>
-                    </label>
-                    <label class="filter-control">
-                      <span class="text-muted">На странице</span>
-                      <select id="system-events-limit">
-                        <option value="10">10</option>
-                        <option value="20" selected>20</option>
-                        <option value="50">50</option>
-                        <option value="100">100</option>
-                      </select>
-                    </label>
-                  </div>
-                </div>
-
-                <div id="system-events-error" class="alert hidden" style="margin-bottom: 12px;"></div>
-                <p id="system-events-loading" class="text-muted">Загрузка событий...</p>
-                <p id="system-events-empty" class="text-muted hidden">Событий не найдено за выбранный период.</p>
-
-                <div class="table-wrapper hidden" id="system-events-wrapper">
-                  <table class="table">
-                    <thead>
-                      <tr>
-                        <th>Время</th>
-                        <th>Уровень</th>
-                        <th>Сообщение</th>
-                        <th>Источник</th>
-                      </tr>
-                    </thead>
-                    <tbody id="system-events-body"></tbody>
-                  </table>
-                </div>
-
-                <div class="pagination" id="system-events-pagination">
-                  <button class="secondary" type="button" id="system-events-prev">Назад</button>
-                  <span class="text-muted" id="system-events-page-info">Страница 1</span>
-                  <button class="secondary" type="button" id="system-events-next">Вперед</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
 
         <section class="card">
           <div class="flex-between" style="margin-bottom: 20px;">
