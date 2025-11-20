@@ -324,8 +324,8 @@ def get_system_status(
 
 @router.get("/system/events", response_model=schemas.AdminSystemEventList)
 def get_system_events(
-    level: str | None = Query(None, pattern=r"^(info|warning|error)$"),
-    hours: int | None = Query(None, ge=1, le=24 * 30),
+    level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),
+    hours: Optional[int] = Query(None, ge=1, le=24 * 30),
     limit: int = Query(50, ge=1, le=200),
     page: int = Query(1, ge=1),
     _: models.User = Depends(_get_current_user),

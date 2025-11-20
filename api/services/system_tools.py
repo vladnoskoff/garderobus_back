@@ -1,12 +1,10 @@
-from __future__ import annotations
-
 import json
 import logging
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import HTTPException, status
 
@@ -17,7 +15,9 @@ import schemas
 logger = logging.getLogger(__name__)
 
 _START_TIME = time.time()
-_LAST_RESTART_REQUEST: datetime | None = None
+_LAST_RESTART_REQUEST: Optional[datetime] = None
+
+LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
 LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
@@ -141,8 +141,8 @@ def write_managed_file(
     relative_path: str,
     content: str,
     *,
-    message: str | None = None,
-    actor: models.User | None = None,
+    message: Optional[str] = None,
+    actor: Optional[models.User] = None,
 ) -> schemas.AdminCodeFile:
     full_path = _ensure_within_root(relative_path)
     if not full_path.exists() or not full_path.is_file():
@@ -173,7 +173,7 @@ def is_restart_supported() -> bool:
     return bool(settings.ADMIN_ALLOW_RESTART and settings.ADMIN_RESTART_COMMAND)
 
 
-def restart_api(*, requested_by: models.User | None = None) -> schemas.AdminRestartResponse:
+def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminRestartResponse:
     if not is_restart_supported():
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -218,7 +218,7 @@ def restart_api(*, requested_by: models.User | None = None) -> schemas.AdminRest
     )
 
 
-def _parse_timestamp(raw: str | None) -> datetime | None:
+def _parse_timestamp(raw: Optional[str]) -> Optional[datetime]:
     if not raw:
         return None
 
@@ -239,7 +239,7 @@ def _parse_timestamp(raw: str | None) -> datetime | None:
     return parsed
 
 
-def _build_event(payload: dict) -> schemas.AdminSystemEvent | None:
+def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
     timestamp = _parse_timestamp(
         payload.get("asctime")
         or payload.get("timestamp")
@@ -283,8 +283,8 @@ def _build_event(payload: dict) -> schemas.AdminSystemEvent | None:
 
 def get_system_events(
     *,
-    level: str | None = None,
-    hours: int | None = None,
+    level: Optional[str] = None,
+    hours: Optional[int] = None,
     limit: int = 50,
     page: int = 1,
 ) -> schemas.AdminSystemEventList:
