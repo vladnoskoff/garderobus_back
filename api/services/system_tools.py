@@ -19,6 +19,8 @@ _LAST_RESTART_REQUEST: Optional[datetime] = None
 
 LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
+LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
+
 
 def _humanize_duration(seconds: float) -> str:
     seconds = max(0, int(seconds))
