@@ -736,6 +736,17 @@ button.link {
   font-weight: 600;
 }
 
+.queue-badge-trigger {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+}
+
+.queue-badge-trigger:focus-visible {
+  outline: 2px solid #1d4ed8;
+  outline-offset: 2px;
+}
+
 .status-badge.success {
   background-color: rgba(16, 185, 129, 0.12);
   color: #047857;

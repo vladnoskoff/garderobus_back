@@ -500,7 +500,7 @@
   }
 
   async function loadQueueSnapshot({ showLoader = true, silent = false } = {}) {
-    if (!elements.queueButton) {
+    if (!elements.queueDrawerSection) {
       return;
     }
     state.queueLoading = true;
@@ -713,9 +713,20 @@
   }
 
   function renderQueueBadge(count) {
-    const badge = document.createElement("span");
-    badge.className = "status-badge " + (count > 0 ? "warning" : "success");
+    const badge = document.createElement("button");
+    badge.type = "button";
+    badge.className =
+      "status-badge " + (count > 0 ? "warning queue-badge-trigger" : "success");
     badge.textContent = count > 0 ? `${count} в очереди` : "Очередь пуста";
+
+    if (count > 0 && elements.queueDrawerSection) {
+      badge.title = "Посмотреть очередь задач";
+      badge.addEventListener("click", () => {
+        openDrawer("queue");
+        void loadQueueSnapshot({ showLoader: true });
+      });
+    }
+
     return badge;
   }
 
