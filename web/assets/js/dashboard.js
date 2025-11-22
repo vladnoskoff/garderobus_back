@@ -105,6 +105,17 @@
     codeEditorSave: document.getElementById("code-editor-save"),
     codeEditorStatus: document.getElementById("code-editor-status"),
     codeEditorLoading: document.getElementById("code-editor-loading"),
+    queueButton: document.getElementById("queue-button"),
+    queueCount: document.getElementById("queue-count"),
+    queueDrawerSection: document.getElementById("drawer-queue"),
+    queueList: document.getElementById("queue-list"),
+    queueEmpty: document.getElementById("queue-empty"),
+    queueError: document.getElementById("queue-error"),
+    queueLoading: document.getElementById("queue-loading"),
+    queueRefresh: document.getElementById("queue-refresh"),
+    queueTotalPill: document.getElementById("queue-total-pill"),
+    queueStateBadges: document.getElementById("queue-state-badges"),
+    queueUpdatedAt: document.getElementById("queue-updated-at"),
   };
 
   const state = {
@@ -128,6 +139,9 @@
       total: 0,
       loadedOnce: false,
     },
+    queueSnapshot: null,
+    queueLoadedOnce: false,
+    queueLoading: false,
   };
 
   function handleUnauthorized() {
@@ -165,6 +179,7 @@
       elements.drawerCreateSection,
       elements.drawerDetailSection,
       elements.drawerCodeEditorSection,
+      elements.queueDrawerSection,
     ];
     sections.forEach((item) => {
       if (item) {
@@ -181,6 +196,8 @@
         title = "Создание пользователя";
       } else if (mode === "code") {
         title = "Редактор кода";
+      } else if (mode === "queue") {
+        title = "Очередь задач";
       }
       elements.drawerTitle.textContent = title;
     }
@@ -194,6 +211,8 @@
       if (elements.codeEditorStatus) {
         toggleHidden(elements.codeEditorStatus, true);
       }
+    } else if (mode === "queue") {
+      showDrawerSection(elements.queueDrawerSection);
     } else {
       showDrawerSection(elements.drawerDetailSection);
     }
@@ -311,6 +330,220 @@
         .forEach((button) => {
           button.disabled = isBusy;
         });
+    }
+  }
+
+  function setQueueButtonBusy(isBusy) {
+    if (!elements.queueButton) {
+      return;
+    }
+    elements.queueButton.disabled = isBusy;
+    elements.queueButton.classList.toggle("loading", isBusy);
+  }
+
+  function formatQueueState(state) {
+    const map = {
+      active: "В работе",
+      reserved: "В очереди",
+      scheduled: "Запланировано",
+    };
+    return map[state] || state;
+  }
+
+  function updateQueueButtonCount(total) {
+    if (!elements.queueCount) {
+      return;
+    }
+    elements.queueCount.textContent = typeof total === "number" ? total : "—";
+    elements.queueCount.classList.toggle("danger", Number(total) > 0);
+  }
+
+  function renderQueueStateBadges(byState) {
+    if (!elements.queueStateBadges) {
+      return;
+    }
+    elements.queueStateBadges.innerHTML = "";
+    const entries = Object.entries(byState || {});
+    if (!entries.length) {
+      const badge = document.createElement("span");
+      badge.className = "badge";
+      badge.textContent = "Нет данных";
+      elements.queueStateBadges.appendChild(badge);
+      return;
+    }
+    entries
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([state, count]) => {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = `${formatQueueState(state)}: ${count}`;
+        elements.queueStateBadges.appendChild(badge);
+      });
+  }
+
+  function renderQueueList(tasks) {
+    if (!elements.queueList) {
+      return;
+    }
+    elements.queueList.innerHTML = "";
+
+    const items = Array.isArray(tasks) ? [...tasks] : [];
+    const stateOrder = { active: 0, reserved: 1, scheduled: 2 };
+    items.sort((a, b) => {
+      const aOrder = stateOrder[a.state] ?? 99;
+      const bOrder = stateOrder[b.state] ?? 99;
+      if (aOrder !== bOrder) return aOrder - bOrder;
+      return (a.eta || "").localeCompare(b.eta || "");
+    });
+
+    if (!items.length) {
+      toggleHidden(elements.queueEmpty, false);
+      return;
+    }
+    toggleHidden(elements.queueEmpty, true);
+
+    items.forEach((task) => {
+      const details = document.createElement("details");
+      details.className = "queue-item";
+
+      const summary = document.createElement("summary");
+      summary.className = "queue-item-header";
+
+      const title = document.createElement("div");
+      title.className = "queue-item-title";
+
+      const name = document.createElement("strong");
+      name.textContent = task.name || "Задача";
+      title.appendChild(name);
+
+      const idSpan = document.createElement("span");
+      idSpan.className = "text-muted";
+      idSpan.textContent = `ID: ${task.id}`;
+      title.appendChild(idSpan);
+
+      const meta = document.createElement("div");
+      meta.className = "queue-item-meta";
+      const stateMeta = document.createElement("span");
+      stateMeta.textContent = formatQueueState(task.state || "") || "Статус";
+      meta.appendChild(stateMeta);
+
+      if (task.queue) {
+        const queueMeta = document.createElement("span");
+        queueMeta.textContent = `Очередь: ${task.queue}`;
+        meta.appendChild(queueMeta);
+      }
+
+      if (task.worker) {
+        const workerMeta = document.createElement("span");
+        workerMeta.textContent = `Воркер: ${task.worker}`;
+        meta.appendChild(workerMeta);
+      }
+
+      if (task.eta) {
+        const etaMeta = document.createElement("span");
+        etaMeta.textContent = `ETA: ${formatDate(task.eta, true)}`;
+        meta.appendChild(etaMeta);
+      }
+
+      summary.appendChild(title);
+      summary.appendChild(meta);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "queue-item-details";
+
+      const argsLabel = document.createElement("div");
+      argsLabel.className = "text-muted";
+      argsLabel.textContent = "Аргументы";
+      const argsPre = document.createElement("pre");
+      argsPre.className = "queue-args";
+      argsPre.textContent = task.args || "—";
+
+      const kwargsLabel = document.createElement("div");
+      kwargsLabel.className = "text-muted";
+      kwargsLabel.style.marginTop = "8px";
+      kwargsLabel.textContent = "Параметры";
+      const kwargsPre = document.createElement("pre");
+      kwargsPre.className = "queue-args";
+      kwargsPre.textContent = task.kwargs || "—";
+
+      body.appendChild(argsLabel);
+      body.appendChild(argsPre);
+      body.appendChild(kwargsLabel);
+      body.appendChild(kwargsPre);
+
+      details.appendChild(body);
+      elements.queueList.appendChild(details);
+    });
+  }
+
+  function renderQueueSnapshot(snapshot) {
+    const total = snapshot?.total ?? 0;
+    updateQueueButtonCount(total);
+
+    if (elements.queueTotalPill) {
+      elements.queueTotalPill.textContent = `Всего: ${total}`;
+      elements.queueTotalPill.classList.toggle("success", total === 0);
+      elements.queueTotalPill.classList.toggle("danger", total > 0);
+    }
+
+    renderQueueStateBadges(snapshot?.by_state || {});
+    renderQueueList(snapshot?.tasks || []);
+
+    if (elements.queueUpdatedAt) {
+      elements.queueUpdatedAt.textContent = `Обновлено: ${new Date().toLocaleString("ru-RU")}`;
+    }
+
+    if (elements.queueLoading) {
+      toggleHidden(elements.queueLoading, true);
+    }
+  }
+
+  async function loadQueueSnapshot({ showLoader = true, silent = false } = {}) {
+    if (!elements.queueButton) {
+      return;
+    }
+    state.queueLoading = true;
+    setQueueButtonBusy(showLoader && !silent);
+    toggleHidden(elements.queueEmpty, true);
+    showAlert(elements.queueError, "");
+    if (elements.queueList) {
+      elements.queueList.innerHTML = "";
+    }
+    if (elements.queueLoading) {
+      elements.queueLoading.textContent = "Загрузка очереди...";
+      toggleHidden(elements.queueLoading, !showLoader);
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/queue`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Queue request failed with status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      state.queueSnapshot = payload;
+      state.queueLoadedOnce = true;
+      renderQueueSnapshot(payload);
+    } catch (error) {
+      console.error(error);
+      showAlert(elements.queueError, "Не удалось загрузить очередь. Попробуйте позже.");
+    } finally {
+      setQueueButtonBusy(false);
+      state.queueLoading = false;
+      if (elements.queueLoading) {
+        toggleHidden(elements.queueLoading, true);
+      }
     }
   }
 
@@ -1603,6 +1836,20 @@
     elements.systemRefreshButton.addEventListener("click", () => {
       void refreshSystemMetrics({ showLoader: true });
       void loadSystemEvents({ resetPage: true });
+      void loadQueueSnapshot({ showLoader: false, silent: true });
+    });
+  }
+
+  if (elements.queueButton) {
+    elements.queueButton.addEventListener("click", () => {
+      openDrawer("queue");
+      void loadQueueSnapshot({ showLoader: true });
+    });
+  }
+
+  if (elements.queueRefresh) {
+    elements.queueRefresh.addEventListener("click", () => {
+      void loadQueueSnapshot({ showLoader: true });
     });
   }
 
@@ -1724,6 +1971,7 @@
     startSystemAutoRefresh();
     void refreshSystemMetrics({ showLoader: true, silent: true });
     void loadSystemEvents({ resetPage: true });
+    void loadQueueSnapshot({ showLoader: false, silent: true });
   } else {
     stopSystemAutoRefresh();
   }

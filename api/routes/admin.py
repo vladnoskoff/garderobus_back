@@ -371,6 +371,13 @@ def get_system_status(
     return system_tools.get_system_status()
 
 
+@router.get("/system/queue", response_model=schemas.AdminQueueSnapshot)
+def get_queue_snapshot(
+    _: models.User = Depends(_get_current_user),
+) -> schemas.AdminQueueSnapshot:
+    return system_tools.get_queue_snapshot()
+
+
 @router.get("/system/events", response_model=schemas.AdminSystemEventList)
 def get_system_events(
     level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),

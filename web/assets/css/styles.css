@@ -1005,3 +1005,58 @@ textarea:focus {
 .system-actions .danger {
   white-space: nowrap;
 }
+
+.queue-summary {
+  gap: 12px;
+}
+
+.queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.queue-item {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background-color: #f8fafc;
+}
+
+.queue-item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.queue-item-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.queue-item-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.queue-item-details {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.queue-args {
+  font-family: "JetBrains Mono", "Fira Code", "Menlo", monospace;
+  font-size: 13px;
+  color: #0f172a;
+  background-color: #eef2ff;
+  padding: 8px;
+  border-radius: 8px;
+  overflow: auto;
+}
