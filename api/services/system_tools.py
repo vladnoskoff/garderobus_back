@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from celery.exceptions import CeleryError
+from kombu.exceptions import OperationalError
 from fastapi import HTTPException, status
 
 from celery_app import celery_app
@@ -215,7 +216,8 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
         active = inspector.active() or {}
         reserved = inspector.reserved() or {}
         scheduled = inspector.scheduled() or {}
-    except CeleryError as exc:  # pragma: no cover - network / broker issues
+    except (CeleryError, OperationalError, ConnectionError) as exc:  # pragma: no cover - network / broker issues
+        logger.warning("Failed to fetch Celery queue snapshot: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Не удалось получить состояние очереди Celery",
