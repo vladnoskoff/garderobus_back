@@ -8,11 +8,11 @@ class NetworkService {
 
   static final ValueNotifier<bool> isOnline = ValueNotifier<bool>(true);
   static final Connectivity _connectivity = Connectivity();
-  static StreamSubscription<ConnectivityResult>? _subscription;
+  static StreamSubscription<List<ConnectivityResult>>? _subscription;
 
   static Future<void> initialize() async {
-    final status = await _connectivity.checkConnectivity();
-    _updateStatus(status);
+    final statuses = await _connectivity.checkConnectivity();
+    _updateStatus(statuses);
     _subscription ??= _connectivity.onConnectivityChanged.listen(_updateStatus);
   }
 
@@ -22,12 +22,12 @@ class NetworkService {
   }
 
   static Future<bool> isConnected() async {
-    final status = await _connectivity.checkConnectivity();
-    return status != ConnectivityResult.none;
+    final statuses = await _connectivity.checkConnectivity();
+    return statuses.any((status) => status != ConnectivityResult.none);
   }
 
-  static void _updateStatus(ConnectivityResult result) {
-    final online = result != ConnectivityResult.none;
+  static void _updateStatus(List<ConnectivityResult> results) {
+    final online = results.any((status) => status != ConnectivityResult.none);
     if (isOnline.value != online) {
       isOnline.value = online;
     } else {

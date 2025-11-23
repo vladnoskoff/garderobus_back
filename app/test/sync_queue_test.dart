@@ -17,8 +17,11 @@ void main() {
   });
 
   tearDown(() async {
-    for (final box in Hive.boxes.values) {
-      await box.clear();
+    if (Hive.isBoxOpen('clothes_box')) {
+      await Hive.box('clothes_box').clear();
+    }
+    if (Hive.isBoxOpen('outfits_box')) {
+      await Hive.box('outfits_box').clear();
     }
   });
 
