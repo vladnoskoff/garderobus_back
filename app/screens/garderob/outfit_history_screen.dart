@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../services/api_service.dart';
+import '../../services/image_cache_service.dart';
 import '../../widgets/rounded_back_button.dart';
+import '../../widgets/skeletons.dart';
 
 class OutfitHistoryScreen extends StatefulWidget {
   final int? locationId;
@@ -237,12 +239,16 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
             onTap: () => _openImageViewer(context, imageUrl.toString()),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
-              child: Image.network(
+              child: ImageCacheService.cached(
                 imageUrl.toString(),
                 height: 200,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
+                placeholder: const ShimmerSkeleton(
+                  height: 200,
+                  borderRadius: 0,
+                ),
+                errorWidget: Container(
                   height: 200,
                   color: colorScheme.surfaceVariant.withOpacity(
                     brightness == Brightness.dark ? 0.4 : 0.8,
@@ -255,6 +261,7 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                     ),
                   ),
                 ),
+                borderRadius: 0,
               ),
             ),
           )
@@ -427,10 +434,14 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
             child: InteractiveViewer(
               minScale: 0.5,
               maxScale: 4,
-              child: Image.network(
+              child: ImageCacheService.cached(
                 imageUrl,
                 fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => SizedBox(
+                placeholder: const SizedBox(
+                  height: 320,
+                  child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                ),
+                errorWidget: SizedBox(
                   height: 320,
                   child: Center(
                     child: Text(
@@ -439,6 +450,7 @@ class _OutfitHistoryScreenState extends State<OutfitHistoryScreen> {
                     ),
                   ),
                 ),
+                borderRadius: 0,
               ),
             ),
           ),

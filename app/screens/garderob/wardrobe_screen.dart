@@ -5,6 +5,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
+import '../../services/image_cache_service.dart';
+import '../../services/startup_service.dart';
+import '../../widgets/skeletons.dart';
 import 'add_clothes_screen.dart';
 import 'clothes_detail_screen.dart';
 import 'outfit_history_screen.dart';
@@ -28,11 +31,12 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   String? _error;
   String? _selectedCategoryFilter;
   String? _selectedSeasonFilter;
+  late Future<void> _initializationFuture;
 
   @override
   void initState() {
     super.initState();
-    _initialise();
+    _initializationFuture = _initialise();
   }
 
   Future<void> _initialise() async {
@@ -70,7 +74,16 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       isLocationsLoading = true;
     });
     try {
+      final cachedLocations = await StartupService.getCachedLocations(_userId!);
+      if (cachedLocations.isNotEmpty && mounted) {
+        setState(() {
+          wardrobeLocations = cachedLocations;
+          selectedLocationId ??= _extractLocationId(cachedLocations.first['id']);
+        });
+      }
+
       final locations = await ApiService.getWardrobeLocations(_userId!);
+      await StartupService.cacheLocations(_userId!, locations);
       final storedLocationIdString = await storage.read(key: 'selected_location_id');
       int? storedLocationId = storedLocationIdString != null
           ? int.tryParse(storedLocationIdString)
@@ -646,6 +659,18 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     );
   }
 
+  Widget _buildWardrobeSkeleton() {
+    return SafeArea(
+      child: ListView.separated(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.all(24),
+        itemBuilder: (_, __) => const ListTileSkeleton(),
+        separatorBuilder: (_, __) => const SizedBox(height: 16),
+        itemCount: 6,
+      ),
+    );
+  }
+
   Widget _buildClothesCard(Clothes item) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -688,16 +713,22 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                   Container(
                     color: colorScheme.surfaceVariant.withOpacity(0.25),
                     child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                        ? Image.network(
+                        ? ImageCacheService.cached(
                             item.imageUrl!,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Center(
+                            placeholder: const ShimmerSkeleton(
+                              height: double.infinity,
+                              width: double.infinity,
+                              borderRadius: 0,
+                            ),
+                            errorWidget: Center(
                               child: Icon(
                                 Icons.broken_image_outlined,
                                 color: colorScheme.onSurfaceVariant,
                                 size: 40,
                               ),
                             ),
+                            borderRadius: 0,
                           )
                         : Center(
                             child: Icon(
@@ -835,96 +866,109 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         title: Text('Гардероб${!isLoading ? ' ${clothes.length}' : ''}'),
         centerTitle: true,
       ),
-      body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final targetWidth = math.min(constraints.maxWidth, 980.0);
-            final horizontalPadding = math.max(20.0, (constraints.maxWidth - targetWidth) / 2);
+      body: FutureBuilder<void>(
+        future: _initializationFuture,
+        builder: (context, snapshot) {
+          final isStartupLoading = snapshot.connectionState != ConnectionState.done;
 
-            return RefreshIndicator(
-              onRefresh: fetchClothes,
-              child: CustomScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                slivers: [
-                  SliverPadding(
-                    padding: EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 0),
-                    sliver: SliverToBoxAdapter(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildWardrobeHeader(context, locationDropdownItems, filtersAreActive),
-                          if (filtersAreActive) ...[
-                            const SizedBox(height: 20),
-                            _buildFilterSummary(colorScheme),
-                          ],
-                        ],
+          if (isStartupLoading && clothes.isEmpty) {
+            return _buildWardrobeSkeleton();
+          }
+
+          return SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final targetWidth = math.min(constraints.maxWidth, 980.0);
+                final horizontalPadding =
+                    math.max(20.0, (constraints.maxWidth - targetWidth) / 2);
+
+                return RefreshIndicator(
+                  onRefresh: fetchClothes,
+                  child: CustomScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    slivers: [
+                      SliverPadding(
+                        padding:
+                            EdgeInsets.fromLTRB(horizontalPadding, 24, horizontalPadding, 0),
+                        sliver: SliverToBoxAdapter(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildWardrobeHeader(context, locationDropdownItems, filtersAreActive),
+                              if (filtersAreActive) ...[
+                                const SizedBox(height: 20),
+                                _buildFilterSummary(colorScheme),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
+                      if (isLoading)
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(child: CircularProgressIndicator()),
+                        )
+                      else if (_error != null)
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 32),
+                              child: Text(
+                                _error!,
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (clothes.isEmpty)
+                        const SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Center(
+                            child: Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 32),
+                              child: Text(
+                                'В этом гардеробе пока нет вещей. Добавьте новые элементы, чтобы увидеть их здесь.',
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        SliverPadding(
+                          padding: EdgeInsets.fromLTRB(
+                            horizontalPadding,
+                            24,
+                            horizontalPadding,
+                            24 + MediaQuery.of(context).padding.bottom,
+                          ),
+                          sliver: SliverGrid(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                final item = clothes[index];
+                                return _buildClothesCard(item);
+                              },
+                              childCount: clothes.length,
+                            ),
+                            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: constraints.maxWidth >= 1200
+                                  ? 4
+                                  : constraints.maxWidth >= 900
+                                      ? 3
+                                      : 2,
+                              crossAxisSpacing: 20,
+                              mainAxisSpacing: 20,
+                              childAspectRatio: 0.65,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  if (isLoading)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (_error != null)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            _error!,
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    )
-                  else if (clothes.isEmpty)
-                    const SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 32),
-                          child: Text(
-                            'В этом гардеробе пока нет вещей. Добавьте новые элементы, чтобы увидеть их здесь.',
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    SliverPadding(
-                      padding: EdgeInsets.fromLTRB(
-                        horizontalPadding,
-                        24,
-                        horizontalPadding,
-                        24 + MediaQuery.of(context).padding.bottom,
-                      ),
-                      sliver: SliverGrid(
-                        delegate: SliverChildBuilderDelegate(
-                          (context, index) {
-                            final item = clothes[index];
-                            return _buildClothesCard(item);
-                          },
-                          childCount: clothes.length,
-                        ),
-                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: constraints.maxWidth >= 1200
-                              ? 4
-                              : constraints.maxWidth >= 900
-                                  ? 3
-                                  : 2,
-                          crossAxisSpacing: 20,
-                          mainAxisSpacing: 20,
-                          childAspectRatio: 0.65,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            );
-          },
-        ),
+                );
+              },
+            ),
+          );
+        },
       ),
     );
   }
