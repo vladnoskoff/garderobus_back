@@ -177,6 +177,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int? selectedLocationId;
   bool isLocationsLoading = false;
   bool isMannequinsLoading = false;
+  double mannequinProgress = 0;
+  String mannequinStatusText = 'Готовим образ...';
   String? mannequinsError;
   Timer? _weatherTimer;
   late Future<void> _initialLoadFuture;
@@ -484,23 +486,36 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         isMannequinsLoading = true;
         mannequinsError = null;
+        mannequinProgress = 0.05;
+        mannequinStatusText = 'Запускаем генерацию...';
       });
 
       final locationIdForRequest = _locationIdForRequests();
       final mannequin = await ApiService.generateMannequin(
         userId!,
         locationId: locationIdForRequest,
+        onProgress: (progress, status) {
+          if (!mounted) return;
+          setState(() {
+            mannequinProgress = progress;
+            mannequinStatusText = _resolveMannequinStatusText(status);
+          });
+        },
       );
 
       if (!mounted) return;
       setState(() {
         mannequins = [mannequin];
+        mannequinProgress = 1;
+        mannequinStatusText = 'Готово';
       });
     } catch (e) {
       debugPrint('Ошибка при генерации манекена: $e');
       if (!mounted) return;
       setState(() {
         mannequinsError = 'Не удалось создать манекен. Попробуйте снова.';
+        mannequinStatusText = 'Ошибка';
+        mannequinProgress = 0;
       });
     } finally {
       if (mounted) {
@@ -1389,7 +1404,24 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
         const SizedBox(height: 20),
         if (isMannequinsLoading)
-          const Center(child: CircularProgressIndicator())
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LinearProgressIndicator(
+                value: mannequinProgress > 0 && mannequinProgress < 1
+                    ? mannequinProgress
+                    : null,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '${(mannequinProgress * 100).clamp(0, 100).round()}% — $mannequinStatusText',
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          )
         else if (mannequins.isEmpty)
           _buildEmptyState(
             context,
@@ -1447,6 +1479,24 @@ class _HomeScreenState extends State<HomeScreen> {
       return isWhole ? parsed.toInt().toString() : parsed.toStringAsFixed(1);
     }
     return value.toString();
+  }
+
+  String _resolveMannequinStatusText(String status) {
+    switch (status) {
+      case 'started':
+        return 'Подбираем вещи...';
+      case 'pending':
+      case 'queued':
+        return 'Задача в очереди';
+      case 'progress':
+        return 'Генерируем изображение';
+      case 'success':
+        return 'Готово';
+      case 'failure':
+        return 'Ошибка генерации';
+      default:
+        return 'Готовим образ...';
+    }
   }
 
   Widget _buildEmptyState(BuildContext context, String message) {
