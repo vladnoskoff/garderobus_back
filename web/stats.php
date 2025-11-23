@@ -1,6 +1,5 @@
 <?php
-$rawApiBaseUrl = getenv('API_BASE_URL') ?: 'https://aapanel-api.noksovsteam.ru';
-$apiBaseUrl = preg_replace('/^http:\\/\\//i', 'https://', $rawApiBaseUrl);
+$apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
 ?>
 <!DOCTYPE html>
 <html lang="ru">
