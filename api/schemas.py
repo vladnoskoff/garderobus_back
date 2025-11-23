@@ -289,6 +289,8 @@ class AdminQueueSnapshot(BaseModel):
     total: int = 0
     by_state: Dict[str, int] = Field(default_factory=dict)
     tasks: List[AdminQueueTask] = Field(default_factory=list)
+    broker_available: bool = True
+    error: Optional[str] = None
 
 
 class AdminCodeFile(BaseModel):

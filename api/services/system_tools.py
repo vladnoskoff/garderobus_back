@@ -218,10 +218,13 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
         scheduled = inspector.scheduled() or {}
     except (CeleryError, OperationalError, ConnectionError) as exc:  # pragma: no cover - network / broker issues
         logger.warning("Failed to fetch Celery queue snapshot: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Не удалось получить состояние очереди Celery",
-        ) from exc
+        return schemas.AdminQueueSnapshot(
+            total=0,
+            by_state={"active": 0, "reserved": 0, "scheduled": 0},
+            tasks=[],
+            broker_available=False,
+            error="Не удалось получить состояние очереди Celery",
+        )
 
     active_tasks = _collect_tasks(active, "active")
     reserved_tasks = _collect_tasks(reserved, "reserved")
@@ -234,7 +237,12 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
         "scheduled": len(scheduled_tasks),
     }
 
-    return schemas.AdminQueueSnapshot(total=sum(by_state.values()), by_state=by_state, tasks=all_tasks)
+    return schemas.AdminQueueSnapshot(
+        total=sum(by_state.values()),
+        by_state=by_state,
+        tasks=all_tasks,
+        broker_available=True,
+    )
 
 
 def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:
