@@ -6,7 +6,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../services/api_service.dart';
 import '../services/clothes.dart';
 import '../services/image_cache_service.dart';
+import '../services/network_service.dart';
 import '../services/startup_service.dart';
+import '../services/sync_service.dart';
 import '../widgets/rounded_back_button.dart';
 import '../widgets/skeletons.dart';
 import 'garderob/clothes_detail_screen.dart';
@@ -705,6 +707,59 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildStatusBanner(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return ValueListenableBuilder<bool>(
+      valueListenable: NetworkService.isOnline,
+      builder: (context, isOnline, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: SyncService.instance.isSyncing,
+          builder: (context, isSyncing, __) {
+            if (isOnline && !isSyncing) {
+              return const SizedBox.shrink();
+            }
+
+            final background = isOnline
+                ? colorScheme.tertiaryContainer
+                : colorScheme.errorContainer;
+            final foreground = isOnline
+                ? colorScheme.onTertiaryContainer
+                : colorScheme.onErrorContainer;
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isOnline ? Icons.sync : Icons.wifi_off,
+                    color: foreground,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isOnline
+                          ? 'Идет синхронизация локальных данных'
+                          : 'Вы офлайн — изменения будут отправлены при появлении связи',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: foreground),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -744,6 +799,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        _buildStatusBanner(context),
+                        const SizedBox(height: 12),
                         _buildLocationSection(context),
                         const SizedBox(height: 20),
                         _buildWeatherSection(

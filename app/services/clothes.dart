@@ -14,6 +14,7 @@ class Clothes {
   final String? careInstructions;
   final int? temperatureMin;
   final int? temperatureMax;
+  final bool isPending;
 
   Clothes({
     required this.id,
@@ -31,6 +32,7 @@ class Clothes {
     this.careInstructions,
     this.temperatureMin,
     this.temperatureMax,
+    this.isPending = false,
   });
 
   factory Clothes.fromJson(Map<String, dynamic> json) {
@@ -99,7 +101,29 @@ class Clothes {
       careInstructions: json['care_instructions']?.toString(),
       temperatureMin: minTemperature,
       temperatureMax: maxTemperature,
+      isPending: json['is_pending'] == true,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'user_id': userId,
+      'name': name,
+      'category': category,
+      'season': season,
+      'color': color,
+      'material': material,
+      'image_url': imageUrl,
+      'image_gallery': imageGallery,
+      'created_at': createdAt.toIso8601String(),
+      'location_id': locationId,
+      'prompt_description': promptDescription,
+      'care_instructions': careInstructions,
+      'temperature_min': temperatureMin,
+      'temperature_max': temperatureMax,
+      'is_pending': isPending,
+    };
   }
 
   Clothes copyWith({
@@ -116,6 +140,7 @@ class Clothes {
     String? careInstructions,
     int? temperatureMin,
     int? temperatureMax,
+    bool? isPending,
   }) {
     return Clothes(
       id: id,
@@ -133,6 +158,7 @@ class Clothes {
       careInstructions: careInstructions ?? this.careInstructions,
       temperatureMin: temperatureMin ?? this.temperatureMin,
       temperatureMax: temperatureMax ?? this.temperatureMax,
+      isPending: isPending ?? this.isPending,
     );
   }
 }

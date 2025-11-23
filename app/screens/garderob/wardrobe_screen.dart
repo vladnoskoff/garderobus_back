@@ -6,7 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
 import '../../services/image_cache_service.dart';
+import '../../services/network_service.dart';
 import '../../services/startup_service.dart';
+import '../../services/sync_service.dart';
 import '../../widgets/skeletons.dart';
 import 'add_clothes_screen.dart';
 import 'clothes_detail_screen.dart';
@@ -133,6 +135,53 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
   }
 
+  Widget _buildStatusBanner() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<bool>(
+      valueListenable: NetworkService.isOnline,
+      builder: (context, isOnline, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: SyncService.instance.isSyncing,
+          builder: (context, isSyncing, __) {
+            if (isOnline && !isSyncing) return const SizedBox.shrink();
+
+            final background = isOnline
+                ? colorScheme.tertiaryContainer
+                : colorScheme.errorContainer;
+            final foreground = isOnline
+                ? colorScheme.onTertiaryContainer
+                : colorScheme.onErrorContainer;
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(isOnline ? Icons.sync : Icons.cloud_off, color: foreground),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isOnline
+                          ? 'Синхронизация очереди действий'
+                          : 'Офлайн-режим: новые изменения помечены как ожидающие',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: foreground),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> fetchClothes() async {
     if (_userId == null) return;
     if (mounted) {
@@ -143,15 +192,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     }
 
     try {
-      final response = await ApiService.getUserClothes(
+      final parsed = await ApiService.getUserClothes(
         _userId!,
         locationId: selectedLocationId,
       );
-      if (!mounted) return;
-      final parsed = response
-          .whereType<Map<String, dynamic>>()
-          .map((json) => Clothes.fromJson(json))
-          .toList();
       setState(() {
         _allClothes = parsed;
         clothes = _filterClothes(parsed);
@@ -728,8 +772,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                                 size: 40,
                               ),
                             ),
-                            borderRadius: 0,
-                          )
+                          borderRadius: 0,
+                        )
                         : Center(
                             child: Icon(
                               Icons.image_outlined,
@@ -738,6 +782,32 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                             ),
                           ),
                   ),
+                  if (item.isPending)
+                    Positioned(
+                      top: 12,
+                      left: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.errorContainer.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.schedule, size: 16, color: colorScheme.onErrorContainer),
+                            const SizedBox(width: 6),
+                            Text(
+                              'PENDING',
+                              style: theme.textTheme.labelMedium?.copyWith(
+                                color: colorScheme.onErrorContainer,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   Positioned(
                     top: 12,
                     right: 12,
@@ -895,6 +965,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               _buildWardrobeHeader(context, locationDropdownItems, filtersAreActive),
+                              const SizedBox(height: 12),
+                              _buildStatusBanner(),
                               if (filtersAreActive) ...[
                                 const SizedBox(height: 20),
                                 _buildFilterSummary(colorScheme),
