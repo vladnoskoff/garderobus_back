@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
+import '../../services/image_cache_service.dart';
+import '../../widgets/skeletons.dart';
 
 Future<bool?> showClothesDetailSheet(BuildContext context, Clothes clothes) {
   return showModalBottomSheet<bool>(
@@ -207,15 +209,21 @@ class _ClothesDetailSheetState extends State<_ClothesDetailSheet> {
                   decoration: BoxDecoration(
                     color: colorScheme.surfaceVariant.withOpacity(0.6),
                   ),
-                  child: Image.network(
+                  child: ImageCacheService.cached(
                     url,
                     fit: BoxFit.cover,
                     alignment: Alignment.center,
-                    errorBuilder: (context, error, stackTrace) => Icon(
+                    placeholder: const ShimmerSkeleton(
+                      height: double.infinity,
+                      width: double.infinity,
+                      borderRadius: 0,
+                    ),
+                    errorWidget: Icon(
                       Icons.broken_image_outlined,
                       size: 56,
                       color: colorScheme.onSurfaceVariant,
                     ),
+                    borderRadius: 0,
                   ),
                 );
               },

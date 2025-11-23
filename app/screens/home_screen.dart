@@ -1,9 +1,14 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+
 import '../services/api_service.dart';
 import '../services/clothes.dart';
+import '../services/image_cache_service.dart';
+import '../services/startup_service.dart';
 import '../widgets/rounded_back_button.dart';
+import '../widgets/skeletons.dart';
 import 'garderob/clothes_detail_screen.dart';
 import 'settings/home_settings/home_screen_settings.dart';
 
@@ -139,10 +144,14 @@ class _MannequinImageViewer extends StatelessWidget {
         child: InteractiveViewer(
           child: Hero(
             tag: imageUrl,
-            child: Image.network(
+            child: ImageCacheService.cached(
               imageUrl,
               fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
+              borderRadius: 0,
+              placeholder: const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              errorWidget: const Icon(
                 Icons.broken_image_outlined,
                 color: Colors.white54,
                 size: 48,
@@ -168,14 +177,12 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isMannequinsLoading = false;
   String? mannequinsError;
   Timer? _weatherTimer;
+  late Future<void> _initialLoadFuture;
 
   @override
   void initState() {
     super.initState();
-    loadUserId();
-    fetchWeather();
-    fetchMannequins();
-    _loadLocations();
+    _initialLoadFuture = _initializeHome();
 
     _weatherTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
       if (mounted) {
@@ -192,27 +199,78 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  Future<void> loadUserId() async {
+  Future<void> _initializeHome() async {
+    await _loadUserId();
+    if (userId == null) return;
+
+    setState(() {
+      isLocationsLoading = true;
+      isMannequinsLoading = true;
+    });
+
+    try {
+      await checkInitialSettings();
+      final preferredLocationId = await _readStoredLocationId();
+      final startup = await StartupService.loadHomeStartup(
+        userId: userId!,
+        preferredLocationId: preferredLocationId,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        wardrobeLocations = startup.locations;
+        selectedLocationId = startup.selectedLocationId;
+        weather = startup.weather;
+        weatherIconUrl = startup.weather != null
+            ? "https://openweathermap.org/img/wn/${startup.weather!['icon']}@2x.png"
+            : null;
+        weatherComment = startup.weather != null
+            ? generateWeatherComment(startup.weather!)
+            : null;
+        mannequins = startup.mannequins;
+      });
+      await _persistSelectedLocation(startup.selectedLocationId);
+    } catch (e) {
+      debugPrint('Ошибка инициализации: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLocationsLoading = false;
+          isMannequinsLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadUserId() async {
     final idString = await storage.read(key: 'user_id');
     if (idString != null) {
       setState(() {
         userId = int.tryParse(idString);
       });
-      await checkInitialSettings();
-      fetchWeather();
-      fetchMannequins();
-      _loadLocations();
     }
+  }
+
+  Future<int?> _readStoredLocationId() async {
+    final storedLocationIdString = await storage.read(key: 'selected_location_id');
+    return storedLocationIdString != null ? int.tryParse(storedLocationIdString) : null;
   }
 
   Future<void> _loadLocations() async {
     if (userId == null) return;
     setState(() => isLocationsLoading = true);
     try {
+      final cachedLocations = await StartupService.getCachedLocations(userId!);
+      if (cachedLocations.isNotEmpty && mounted) {
+        setState(() {
+          wardrobeLocations = cachedLocations;
+          selectedLocationId ??= _deriveDefaultLocation(cachedLocations);
+        });
+      }
+
       final locations = await ApiService.getWardrobeLocations(userId!);
-      final storedLocationIdString = await storage.read(key: 'selected_location_id');
-      final storedLocationId =
-          storedLocationIdString != null ? int.tryParse(storedLocationIdString) : null;
+      await StartupService.cacheLocations(userId!, locations);
+      final storedLocationId = await _readStoredLocationId();
       int? resolvedLocationId = storedLocationId;
       if (resolvedLocationId != null &&
           !locations.any((loc) =>
@@ -225,8 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedLocationId = resolvedLocationId;
       });
       await _persistSelectedLocation(resolvedLocationId);
-      fetchWeather();
-      fetchMannequins();
+      await _refreshDashboardBatch(preferredLocationId: resolvedLocationId);
     } catch (e) {
       debugPrint('Ошибка загрузки локаций: $e');
     } finally {
@@ -252,8 +309,50 @@ class _HomeScreenState extends State<HomeScreen> {
       selectedLocationId = value;
     });
     await _persistSelectedLocation(value);
-    fetchWeather();
-    fetchMannequins();
+    await _refreshDashboardBatch(preferredLocationId: value);
+  }
+
+  Future<void> _refreshDashboardBatch({int? preferredLocationId}) async {
+    if (userId == null) return;
+    setState(() {
+      isMannequinsLoading = true;
+      mannequinsError = null;
+    });
+    try {
+      final bundle = await StartupService.loadDashboardData(
+        userId: userId!,
+        locationId: preferredLocationId ?? _locationIdForRequests(),
+        knownLocations: wardrobeLocations,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        wardrobeLocations = bundle.locations;
+        selectedLocationId = bundle.selectedLocationId ?? preferredLocationId;
+        weather = bundle.weather;
+        weatherIconUrl = bundle.weather != null
+            ? "https://openweathermap.org/img/wn/${bundle.weather!['icon']}@2x.png"
+            : null;
+        weatherComment = bundle.weather != null
+            ? generateWeatherComment(bundle.weather!)
+            : null;
+        mannequins = bundle.mannequins;
+      });
+      await _persistSelectedLocation(selectedLocationId);
+    } catch (e) {
+      debugPrint('Ошибка пакетного обновления: $e');
+      if (mounted) {
+        setState(() {
+          mannequinsError = 'Не удалось обновить данные';
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          isMannequinsLoading = false;
+        });
+      }
+    }
   }
 
   int? _locationIdForRequests() {
@@ -489,24 +588,30 @@ class _HomeScreenState extends State<HomeScreen> {
                   onTap: imageUrl != null && imageUrl.isNotEmpty
                       ? () => _openMannequinImage(context, imageUrl)
                       : null,
-                  child: Center(
-                    child: imageUrl != null && imageUrl.isNotEmpty
-                        ? Hero(
-                            tag: imageUrl,
-                            child: Image.network(
-                              imageUrl,
-                              fit: BoxFit.cover,
-                              alignment: Alignment.center,
-                              errorBuilder: (_, __, ___) => Icon(
-                                Icons.broken_image_outlined,
-                                color: colorScheme.onSurfaceVariant,
-                                size: 40,
+                    child: Center(
+                      child: imageUrl != null && imageUrl.isNotEmpty
+                          ? Hero(
+                              tag: imageUrl,
+                              child: ImageCacheService.cached(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                alignment: Alignment.center,
+                                placeholder: const ShimmerSkeleton(
+                                  height: double.infinity,
+                                  width: double.infinity,
+                                  borderRadius: 0,
+                                ),
+                                errorWidget: Icon(
+                                  Icons.broken_image_outlined,
+                                  color: colorScheme.onSurfaceVariant,
+                                  size: 40,
+                                ),
+                                borderRadius: 0,
                               ),
-                            ),
-                          )
-                        : Icon(
-                            Icons.image_not_supported_outlined,
-                            color: colorScheme.onSurfaceVariant,
+                            )
+                          : Icon(
+                              Icons.image_not_supported_outlined,
+                              color: colorScheme.onSurfaceVariant,
                             size: 40,
                           ),
                   ),
@@ -602,10 +707,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final pressureValue = weather?["pressure"];
-    final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
-    final isWeatherLoading = weather == null;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Гардероб 26'),
@@ -620,31 +721,45 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return Align(
-            alignment: Alignment.topCenter,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 640),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _buildLocationSection(context),
-                    const SizedBox(height: 20),
-                    _buildWeatherSection(
-                      context,
-                      isLoading: isWeatherLoading,
-                      pressureMm: pressureMm,
+      body: FutureBuilder<void>(
+        future: _initialLoadFuture,
+        builder: (context, snapshot) {
+          final isStartupLoading = snapshot.connectionState != ConnectionState.done;
+          final pressureValue = weather?["pressure"];
+          final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
+          final isWeatherLoading = isStartupLoading || weather == null;
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              if (isStartupLoading && mannequins.isEmpty && wardrobeLocations.isEmpty) {
+                return _buildHomeSkeleton(context);
+              }
+
+              return Align(
+                alignment: Alignment.topCenter,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 640),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildLocationSection(context),
+                        const SizedBox(height: 20),
+                        _buildWeatherSection(
+                          context,
+                          isLoading: isWeatherLoading,
+                          pressureMm: pressureMm,
+                        ),
+                        const SizedBox(height: 20),
+                        _buildMannequinSection(context),
+                        const SizedBox(height: 32),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-                    _buildMannequinSection(context),
-                    const SizedBox(height: 32),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
       ),
@@ -847,29 +962,34 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   const SizedBox(width: 24),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(18),
-                    child: Container(
-                      color: colorScheme.surface.withOpacity(0.6),
-                      padding: const EdgeInsets.all(12),
-                      child: weatherIconUrl != null && weatherIconUrl!.isNotEmpty
-                          ? Image.network(
-                              weatherIconUrl!,
-                              width: 72,
-                              height: 72,
-                              errorBuilder: (_, __, ___) => Icon(
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(18),
+                      child: Container(
+                        color: colorScheme.surface.withOpacity(0.6),
+                        padding: const EdgeInsets.all(12),
+                        child: weatherIconUrl != null && weatherIconUrl!.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: weatherIconUrl!,
+                                width: 72,
+                                height: 72,
+                                placeholder: (_, __) => const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                errorWidget: (_, __, ___) => Icon(
+                                  Icons.cloud,
+                                  size: 48,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                              )
+                            : Icon(
                                 Icons.cloud,
                                 size: 48,
                                 color: colorScheme.onSurfaceVariant,
                               ),
-                            )
-                          : Icon(
-                              Icons.cloud,
-                              size: 48,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
+                      ),
                     ),
-                  ),
                 ],
               ),
               if (weatherComment != null) ...[
@@ -1022,22 +1142,27 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               const SizedBox(width: 24),
-                              if (weatherIconUrl != null && weatherIconUrl!.isNotEmpty)
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(18),
-                                  child: Image.network(
-                                    weatherIconUrl!,
-                                    width: 88,
-                                    height: 88,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (_, __, ___) => Icon(
-                                      Icons.cloud,
-                                      size: 54,
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                )
-                              else
+        if (weatherIconUrl != null && weatherIconUrl!.isNotEmpty)
+          ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: CachedNetworkImage(
+              imageUrl: weatherIconUrl!,
+              width: 88,
+              height: 88,
+              fit: BoxFit.cover,
+              placeholder: (_, __) => const SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              errorWidget: (_, __, ___) => Icon(
+                Icons.cloud,
+                size: 54,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+          )
+        else
                                 Icon(
                                   Icons.cloud,
                                   size: 54,
@@ -1143,11 +1268,16 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(width: 12),
           if (iconCode != null && iconCode.isNotEmpty)
-            Image.network(
-              'http://openweathermap.org/img/wn/$iconCode@2x.png',
+            CachedNetworkImage(
+              imageUrl: 'http://openweathermap.org/img/wn/$iconCode@2x.png',
               width: 40,
               height: 40,
-              errorBuilder: (_, __, ___) => Icon(
+              placeholder: (_, __) => const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              errorWidget: (_, __, ___) => Icon(
                 Icons.cloud,
                 color: colorScheme.onSurfaceVariant,
               ),
@@ -1277,6 +1407,28 @@ class _HomeScreenState extends State<HomeScreen> {
         textAlign: TextAlign.center,
         style: theme.textTheme.bodyMedium?.copyWith(
           color: colorScheme.onSurfaceVariant,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHomeSkeleton(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 640),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: const [
+              HomeCardSkeleton(lines: 2, hasMedia: false),
+              SizedBox(height: 20),
+              HomeCardSkeleton(lines: 3),
+              SizedBox(height: 20),
+              HomeCardSkeleton(lines: 2),
+            ],
+          ),
         ),
       ),
     );
