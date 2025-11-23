@@ -8,8 +8,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
+from celery.exceptions import CeleryError
 from fastapi import HTTPException, status
 
+from celery_app import celery_app
 import models
 import settings
 import schemas
@@ -24,6 +26,87 @@ _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
 LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
+
+
+def _parse_datetime(value: object) -> Optional[datetime]:
+    if not value:
+        return None
+
+    if isinstance(value, datetime):
+        return value
+
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+
+    if isinstance(value, str):
+        for fmt in (None, "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f"):
+            try:
+                if fmt:
+                    return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+                return datetime.fromisoformat(value)
+            except ValueError:
+                continue
+
+    return None
+
+
+def _normalize_task_payload(task: dict, state: str, worker: str) -> schemas.AdminQueueTask:
+    request = task.get("request") if isinstance(task.get("request"), dict) else {}
+    delivery_info = task.get("delivery_info")
+    if isinstance(request, dict) and not isinstance(delivery_info, dict):
+        delivery_info = request.get("delivery_info")
+
+    queue = None
+    if isinstance(delivery_info, dict):
+        queue = delivery_info.get("routing_key") or delivery_info.get("queue")
+
+    eta_raw = task.get("eta") or task.get("time_start")
+    if isinstance(request, dict) and not eta_raw:
+        eta_raw = request.get("eta") or request.get("time_start")
+
+    task_id = (
+        task.get("id")
+        or task.get("request_id")
+        or (request.get("id") if isinstance(request, dict) else None)
+        or "unknown"
+    )
+
+    name = task.get("name")
+    if isinstance(request, dict) and not name:
+        name = request.get("name")
+
+    args_repr = task.get("args")
+    if isinstance(request, dict) and not args_repr:
+        args_repr = request.get("argsrepr") or request.get("args")
+
+    kwargs_repr = task.get("kwargs")
+    if isinstance(request, dict) and not kwargs_repr:
+        kwargs_repr = request.get("kwargsrepr") or request.get("kwargs")
+
+    return schemas.AdminQueueTask(
+        id=str(task_id),
+        name=name or "Неизвестная задача",
+        state=state,  # type: ignore[arg-type]
+        worker=worker,
+        queue=queue,
+        eta=_parse_datetime(eta_raw),
+        args=str(args_repr or ""),
+        kwargs=str(kwargs_repr or ""),
+    )
+
+
+def _collect_tasks(tasks_by_worker: dict, state: str) -> list[schemas.AdminQueueTask]:
+    normalized: list[schemas.AdminQueueTask] = []
+    for worker, tasks in (tasks_by_worker or {}).items():
+        if not isinstance(tasks, list):
+            continue
+        for task in tasks:
+            if isinstance(task, dict):
+                normalized.append(_normalize_task_payload(task, state, worker))
+    return normalized
 
 
 def _humanize_duration(seconds: float) -> str:
@@ -123,6 +206,33 @@ def get_system_status() -> schemas.AdminSystemStatus:
         maintenance_supported=is_maintenance_supported(),
         test_webhook_configured=bool(settings.ADMIN_TEST_WEBHOOK_URL),
     )
+
+
+def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
+    inspector = celery_app.control.inspect(timeout=1.0)
+
+    try:
+        active = inspector.active() or {}
+        reserved = inspector.reserved() or {}
+        scheduled = inspector.scheduled() or {}
+    except CeleryError as exc:  # pragma: no cover - network / broker issues
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Не удалось получить состояние очереди Celery",
+        ) from exc
+
+    active_tasks = _collect_tasks(active, "active")
+    reserved_tasks = _collect_tasks(reserved, "reserved")
+    scheduled_tasks = _collect_tasks(scheduled, "scheduled")
+
+    all_tasks = active_tasks + reserved_tasks + scheduled_tasks
+    by_state = {
+        "active": len(active_tasks),
+        "reserved": len(reserved_tasks),
+        "scheduled": len(scheduled_tasks),
+    }
+
+    return schemas.AdminQueueSnapshot(total=sum(by_state.values()), by_state=by_state, tasks=all_tasks)
 
 
 def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:

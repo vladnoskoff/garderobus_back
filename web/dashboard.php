@@ -252,6 +252,29 @@ $apiBaseUrl = getenv('API_BASE_URL') ?: 'http://aapanel-api.noksovsteam.ru';
             </div>
           </section>
 
+          <section id="drawer-queue" class="drawer-section hidden">
+            <p class="text-muted" style="margin-top: 0;">
+              Здесь отображаются задачи Celery: активные, отложенные и ожидающие обработки.
+            </p>
+
+            <div class="flex-between queue-summary">
+              <div class="flex-column gap-xs">
+                <div class="status-pill" id="queue-total-pill">Всего: —</div>
+                <div id="queue-state-badges" class="tag-list"></div>
+              </div>
+              <div class="flex gap-sm" style="flex-wrap: wrap;">
+                <span class="text-muted" id="queue-updated-at">—</span>
+                <button class="secondary" type="button" id="queue-refresh">Обновить</button>
+              </div>
+            </div>
+
+            <div id="queue-error" class="alert hidden" style="margin-top: 12px;"></div>
+            <p id="queue-loading" class="text-muted">Загрузка очереди...</p>
+            <p id="queue-empty" class="text-muted hidden">Очередь пуста.</p>
+
+            <div id="queue-list" class="queue-list"></div>
+          </section>
+
           <section id="drawer-code-editor" class="drawer-section hidden">
             <p class="text-muted" style="margin-top: 0;">
               Управляйте сервисными сценариями прямо из браузера. Все изменения сразу сохраняются в файловой системе API.

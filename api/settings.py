@@ -123,6 +123,16 @@ STATIC_CACHE_CONTROL = os.getenv(
 CDN_CACHE_CONTROL = os.getenv("CDN_CACHE_CONTROL", STATIC_CACHE_CONTROL)
 STATIC_ENABLE_ETAG = os.getenv("STATIC_ENABLE_ETAG", "true").lower() == "true"
 
+# CORS configuration
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://garderobus.noksovsteam.ru,https://garderobus.noksovsteam.ru",
+    ).split(",")
+    if origin.strip()
+]
+
 # Celery / task queue configuration
 CELERY_BROKER_URL = os.getenv(
     "CELERY_BROKER_URL", "amqp://guest:guest@localhost:5672//"

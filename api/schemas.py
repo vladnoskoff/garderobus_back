@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
 from pydantic import AliasChoices, BaseModel, Field, root_validator
@@ -272,6 +272,23 @@ class AdminSystemStatus(BaseModel):
     maintenance_enabled: bool = False
     maintenance_supported: bool = False
     test_webhook_configured: bool = False
+
+
+class AdminQueueTask(BaseModel):
+    id: str
+    name: str
+    state: Literal["active", "reserved", "scheduled"]
+    worker: Optional[str] = None
+    queue: Optional[str] = None
+    eta: Optional[datetime] = None
+    args: str = ""
+    kwargs: str = ""
+
+
+class AdminQueueSnapshot(BaseModel):
+    total: int = 0
+    by_state: Dict[str, int] = Field(default_factory=dict)
+    tasks: List[AdminQueueTask] = Field(default_factory=list)
 
 
 class AdminCodeFile(BaseModel):
