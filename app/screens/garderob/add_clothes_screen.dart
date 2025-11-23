@@ -6,6 +6,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../services/api_service.dart';
+import '../../services/network_service.dart';
+import '../../services/sync_service.dart';
 import '../../widgets/rounded_back_button.dart';
 
 enum _PhotoPermissionAction {
@@ -432,6 +434,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     });
 
     try {
+      final isOnline = await NetworkService.isConnected();
       await ApiService.addClothes(
         name: _useAiAutoFill ? '' : _nameController.text.trim(),
         category: _useAiAutoFill ? '' : _categoryController.text.trim(),
@@ -446,6 +449,15 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
       );
 
       if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isOnline
+                ? 'Одежда добавлена'
+                : 'Добавлено в офлайн. Синхронизируем при восстановлении сети',
+          ),
+        ),
+      );
       Navigator.pop(context);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
