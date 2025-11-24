@@ -891,41 +891,74 @@ class _HomeScreenState extends State<HomeScreen> {
       accentColor: colorScheme.primary,
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            _buildCardIcon(colorScheme.primary, Icons.home_work_outlined),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Дом и места',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 400;
+
+            final description = Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Дом и места',
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Выберите гардероб для погоды и рекомендаций.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: colorScheme.onSurfaceVariant,
-                    ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Выберите гардероб для погоды и рекомендаций.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: colorScheme.onSurfaceVariant,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            FilledButton.tonalIcon(
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            );
+
+            final actionButton = FilledButton.tonalIcon(
               onPressed: () => showHomeSettingsSheet(context),
               icon: const Icon(Icons.tune),
               label: const Text('Управлять'),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               ),
-            ),
-          ],
+            );
+
+            if (isCompact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildCardIcon(colorScheme.primary, Icons.home_work_outlined),
+                      const SizedBox(width: 12),
+                      Expanded(child: description),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: actionButton,
+                  ),
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildCardIcon(colorScheme.primary, Icons.home_work_outlined),
+                const SizedBox(width: 16),
+                Expanded(child: description),
+                const SizedBox(width: 12),
+                actionButton,
+              ],
+            );
+          },
         ),
         const SizedBox(height: 12),
         if (isLocationsLoading)
