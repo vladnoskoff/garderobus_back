@@ -16,6 +16,9 @@ class AppLocalizations {
     'ru': {
       'app_title': 'Гардероб 26',
       'home_refresh_mannequin': 'Обновить манекен',
+      'nav_home': 'Главная',
+      'nav_wardrobe': 'Гардероб',
+      'nav_settings': 'Настройки',
       'settings_title': 'Настройки',
       'settings_account': 'Аккаунт',
       'settings_home': 'Дом',
@@ -143,10 +146,17 @@ class AppLocalizations {
       'support_email_source_login': 'Экран входа',
       'support_email_launch_error':
           'Не удалось открыть почтовое приложение. Проверьте настройки почты.',
+      'location_picker_title': 'Выбор координат',
+      'location_picker_selected': 'Выбранные координаты',
+      'location_picker_hint': 'Нажмите на карту, чтобы изменить точку.',
+      'location_picker_confirm': 'Сохранить координаты',
     },
     'en': {
       'app_title': 'Wardrobe 26',
       'home_refresh_mannequin': 'Refresh mannequin',
+      'nav_home': 'Home',
+      'nav_wardrobe': 'Wardrobe',
+      'nav_settings': 'Settings',
       'settings_title': 'Settings',
       'settings_account': 'Account',
       'settings_home': 'Home',
@@ -274,6 +284,10 @@ class AppLocalizations {
       'support_email_source_login': 'Login screen',
       'support_email_launch_error':
           'Could not open the mail app. Please check your mail setup.',
+      'location_picker_title': 'Choose coordinates',
+      'location_picker_selected': 'Selected coordinates',
+      'location_picker_hint': 'Tap the map to move the pin.',
+      'location_picker_confirm': 'Save coordinates',
     },
   };
 
@@ -438,6 +452,13 @@ class AppLocalizations {
   String get supportEmailSourceLogin => getString('support_email_source_login');
   String get supportEmailLaunchError => getString('support_email_launch_error');
   String get homeRefreshMannequin => getString('home_refresh_mannequin');
+  String get navHome => getString('nav_home');
+  String get navWardrobe => getString('nav_wardrobe');
+  String get navSettings => getString('nav_settings');
+  String get locationPickerTitle => getString('location_picker_title');
+  String get locationPickerSelected => getString('location_picker_selected');
+  String get locationPickerHint => getString('location_picker_hint');
+  String get locationPickerConfirm => getString('location_picker_confirm');
 
   String languageName(String code) {
     switch (code) {
