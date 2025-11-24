@@ -11,14 +11,16 @@ void main() {
 
     expect(localeCodes, isNotEmpty);
 
-    final referenceKeys = localizedValues[localeCodes.first]?.keys;
-    expect(referenceKeys, isNotNull);
+    final referenceKeys = localizedValues[localeCodes.first]!
+        .keys
+        .toList(growable: false);
+    expect(referenceKeys, isNotEmpty);
 
     for (final code in localeCodes) {
       expect(localizedValues.containsKey(code), isTrue,
           reason: 'Locale $code should be registered.');
       final values = localizedValues[code]!;
-      expect(values.keys, unorderedEquals(referenceKeys),
+      expect(values.keys.toList(growable: false), unorderedEquals(referenceKeys),
           reason: 'Localization keys should match for locale $code.');
 
       for (final entry in values.entries) {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../widgets/rounded_back_button.dart';
@@ -13,14 +14,16 @@ void main() {
       ),
     );
 
-    final semantics = SemanticsTester(tester);
+    final semanticsHandle = tester.ensureSemantics();
     final tooltip = MaterialLocalizations.of(
             tester.element(find.byType(RoundedBackButton)))
         .backButtonTooltip;
 
-    final nodes = semantics.nodesWith(label: tooltip);
-    expect(nodes, isNotEmpty);
-    expect(nodes.first.hasFlag(SemanticsFlag.isButton), isTrue);
-    semantics.dispose();
+    final node = tester.getSemantics(find.byType(RoundedBackButton));
+
+    expect(node.hasFlag(SemanticsFlag.isButton), isTrue);
+    expect(node.label, tooltip);
+
+    semanticsHandle.dispose();
   });
 }
