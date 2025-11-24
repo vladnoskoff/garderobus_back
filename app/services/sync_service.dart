@@ -49,6 +49,8 @@ class SyncService {
       switch (action.entity) {
         case 'clothes':
           return await _syncClothes(action);
+        case 'user':
+          return await _syncUser(action);
         default:
           return true;
       }
@@ -152,5 +154,35 @@ class SyncService {
       createdAt: DateTime.now(),
     );
     await PendingActionQueue.enqueue(action);
+  }
+
+  Future<void> enqueueUserUpdate({
+    required int userId,
+    required String field,
+    required String value,
+  }) async {
+    final action = PendingAction(
+      id: PendingActionQueue.buildActionId(),
+      entity: 'user',
+      type: PendingActionType.update,
+      payload: {
+        'user_id': userId,
+        'field': field,
+        'value': value,
+      },
+      createdAt: DateTime.now(),
+    );
+    await PendingActionQueue.enqueue(action);
+  }
+
+  Future<bool> _syncUser(PendingAction action) async {
+    final userId = int.tryParse('${action.payload['user_id']}');
+    final field = action.payload['field']?.toString();
+    final value = action.payload['value']?.toString();
+    if (userId == null || field == null || value == null) return true;
+
+    await ApiService.updateUser(userId, field, value);
+    await LocalStorageService.updateCachedUserField(userId, field, value);
+    return true;
   }
 }

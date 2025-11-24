@@ -7,6 +7,10 @@ import '../../l10n/app_localizations.dart';
 import '../../l10n/l10n_extensions.dart';
 import '../../services/api_service.dart';
 import '../../services/language_controller.dart';
+import '../../services/local_storage_service.dart';
+import '../../services/network_service.dart';
+import '../../services/pending_action_queue.dart';
+import '../../services/sync_service.dart';
 import '../../services/theme_controller.dart';
 import '../auth/login_screen.dart';
 import 'home_settings/home_screen_settings.dart';
@@ -31,13 +35,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String _gender = 'not_specified';
   bool _isLoadingSelectedLocation = false;
   String? _currentLocationName;
+  Set<String> _pendingFields = {};
 
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   @override
   void initState() {
     super.initState();
+    SyncService.instance.isSyncing.addListener(_handleSyncStatusChanged);
     _loadAccountData();
+  }
+
+  @override
+  void dispose() {
+    SyncService.instance.isSyncing.removeListener(_handleSyncStatusChanged);
+    super.dispose();
   }
 
   @override
@@ -68,28 +80,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _isLoadingAccount = false;
           _currentLocationName = null;
           _isLoadingSelectedLocation = false;
+          _pendingFields.clear();
         });
         return;
       }
 
-      final data = await ApiService.getUser(parsedId);
+      final isOnline = NetworkService.isOnline.value;
+      Map<String, dynamic>? data;
+      if (isOnline) {
+        data = await ApiService.getUser(parsedId);
+      } else {
+        data = await LocalStorageService.getCachedUserProfile(parsedId);
+        if (data == null) {
+          throw Exception('Нет локальных данных профиля');
+        }
+      }
       if (!mounted) return;
 
-      setState(() {
-        _userId = parsedId;
-        _fullName = (data['name'] ?? '') as String;
-        _email = (data['email'] ?? '') as String;
-        final phoneValue = data['phone'] ??
-            data['phone_number'] ??
-            data['phoneNumber'] ??
-            data['mobile'] ??
-            data['mobile_phone'];
-        _phone = phoneValue != null ? phoneValue.toString() : '';
-        _gender = (data['gender'] ?? 'not_specified') as String;
-        _hasPin = data['has_pin'] == true;
-        _isLoadingAccount = false;
-      });
-      await _loadSelectedLocationName(parsedId);
+      _applyProfileData(parsedId, data);
+      await _refreshPendingFields(parsedId);
+
+      if (isOnline) {
+        await _loadSelectedLocationName(parsedId);
+      }
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -108,7 +121,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
+      if (!NetworkService.isOnline.value) {
+        await SyncService.instance
+            .enqueueUserUpdate(userId: _userId!, field: field, value: value);
+        await LocalStorageService.updateCachedUserField(_userId!, field, value);
+        setState(() {
+          _pendingFields = {..._pendingFields, field};
+        });
+        await _applyPendingFieldLocally(field, value);
+        if (!silent && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.settingsUpdateQueued)),
+          );
+        }
+        return true;
+      }
+
       await ApiService.updateUser(_userId!, field, value);
+      await LocalStorageService.updateCachedUserField(_userId!, field, value);
       await _loadAccountData();
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -143,6 +173,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
         children: [
+          _buildStatusBanner(),
+          const SizedBox(height: 16),
           _buildSectionHeader(l10n.settingsAccount, theme),
           const SizedBox(height: 12),
           _buildGradientSection(
@@ -153,7 +185,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 label: l10n.settingsAccountFullName,
                 icon: Icons.badge_outlined,
-                subtitle: _valueOrPlaceholder(_fullName, l10n),
+                subtitle: _valueOrPlaceholder(
+                  _fullName,
+                  l10n,
+                  fieldKey: 'name',
+                ),
                 onTap: _userId != null
                     ? () => _showEditableFieldDialog(
                           title: l10n.settingsAccountFullName,
@@ -170,7 +206,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 label: l10n.settingsAccountEmail,
                 icon: Icons.email_outlined,
-                subtitle: _valueOrPlaceholder(_email, l10n),
+                subtitle: _valueOrPlaceholder(
+                  _email,
+                  l10n,
+                  fieldKey: 'email',
+                ),
                 onTap: _userId != null
                     ? () => _showEditableFieldDialog(
                           title: l10n.settingsAccountEmail,
@@ -187,7 +227,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 context,
                 label: l10n.settingsAccountPhone,
                 icon: Icons.phone_outlined,
-                subtitle: _valueOrPlaceholder(_phone, l10n),
+                subtitle: _valueOrPlaceholder(
+                  _phone,
+                  l10n,
+                  fieldKey: 'phone',
+                ),
                 onTap: _userId != null
                     ? () => _showEditableFieldDialog(
                           title: l10n.settingsAccountPhone,
@@ -272,6 +316,56 @@ class _SettingsScreenState extends State<SettingsScreen> {
         fontWeight: FontWeight.w700,
         letterSpacing: -0.2,
       ),
+    );
+  }
+
+  Widget _buildStatusBanner() {
+    final colorScheme = Theme.of(context).colorScheme;
+    return ValueListenableBuilder<bool>(
+      valueListenable: NetworkService.isOnline,
+      builder: (context, isOnline, _) {
+        return ValueListenableBuilder<bool>(
+          valueListenable: SyncService.instance.isSyncing,
+          builder: (context, isSyncing, __) {
+            if (isOnline && !isSyncing) return const SizedBox.shrink();
+
+            final background = isOnline
+                ? colorScheme.tertiaryContainer
+                : colorScheme.errorContainer;
+            final foreground = isOnline
+                ? colorScheme.onTertiaryContainer
+                : colorScheme.onErrorContainer;
+
+            return Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: background,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isOnline ? Icons.sync : Icons.wifi_off,
+                    color: foreground,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      isOnline
+                          ? 'Идет синхронизация локальных изменений'
+                          : 'Офлайн: изменения в настройках будут отправлены позже',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: foreground),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -794,15 +888,80 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  String _valueOrPlaceholder(String value, AppLocalizations l10n) {
+  String _valueOrPlaceholder(
+    String value,
+    AppLocalizations l10n, {
+    String? fieldKey,
+  }) {
     if (_isLoadingAccount) {
       return l10n.settingsValueLoading;
     }
     final sanitized = value.trim();
-    if (sanitized.isEmpty || sanitized.toLowerCase() == 'null') {
-      return l10n.settingsValueNotSet;
+    String resolved =
+        sanitized.isEmpty || sanitized.toLowerCase() == 'null'
+            ? l10n.settingsValueNotSet
+            : sanitized;
+
+    if (fieldKey != null && _pendingFields.contains(fieldKey)) {
+      resolved = '$resolved · ${l10n.settingsUpdateQueuedHint}';
     }
-    return sanitized;
+    return resolved;
+  }
+
+  Future<void> _applyPendingFieldLocally(String field, String value) async {
+    if (!mounted) return;
+    setState(() {
+      switch (field) {
+        case 'name':
+          _fullName = value;
+          break;
+        case 'email':
+          _email = value;
+          break;
+        case 'phone':
+        case 'phone_number':
+        case 'phoneNumber':
+          _phone = value;
+          break;
+        case 'gender':
+          _gender = value;
+          break;
+      }
+    });
+  }
+
+  void _applyProfileData(int userId, Map<String, dynamic> data) {
+    final phoneValue = data['phone'] ??
+        data['phone_number'] ??
+        data['phoneNumber'] ??
+        data['mobile'] ??
+        data['mobile_phone'];
+
+    setState(() {
+      _userId = userId;
+      _fullName = (data['name'] ?? '') as String;
+      _email = (data['email'] ?? '') as String;
+      _phone = phoneValue != null ? phoneValue.toString() : '';
+      _gender = (data['gender'] ?? 'not_specified') as String;
+      _hasPin = data['has_pin'] == true;
+      _isLoadingAccount = false;
+    });
+  }
+
+  Future<void> _refreshPendingFields(int userId) async {
+    final queue = await PendingActionQueue.loadQueue();
+    final pendingForUser = queue
+        .where((action) =>
+            action.entity == 'user' &&
+            int.tryParse('${action.payload['user_id']}') == userId)
+        .map((action) => action.payload['field']?.toString())
+        .whereType<String>()
+        .toSet();
+
+    if (!mounted) return;
+    setState(() {
+      _pendingFields = pendingForUser;
+    });
   }
 
   Future<void> _showEditableFieldDialog({
@@ -1095,9 +1254,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   sheetSetState(() {
                     error = l10n.settingsPinSaveError;
                     successMessage = null;
-                  });
-                }
-              }
+      });
+    }
+  }
+
+  void _handleSyncStatusChanged() async {
+    if (!SyncService.instance.isSyncing.value && _userId != null) {
+      await _refreshPendingFields(_userId!);
+      if (NetworkService.isOnline.value) {
+        await _loadAccountData();
+      }
+    }
+  }
 
               Future<void> removePin() async {
                 final confirm = await showDialog<bool>(

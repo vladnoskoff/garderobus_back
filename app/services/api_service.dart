@@ -186,6 +186,7 @@ class ApiService {
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
       await cacheHasPin(data['has_pin'] == true);
+      await LocalStorageService.cacheUserProfile(userId, data);
       return data;
     } else {
       throw Exception('Ошибка при получении данных пользователя');

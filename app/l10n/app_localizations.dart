@@ -39,6 +39,8 @@ class AppLocalizations {
       'settings_account_load_failed': 'Не удалось загрузить данные профиля',
       'settings_update_success': 'Данные обновлены',
       'settings_update_failed': 'Не удалось обновить данные',
+      'settings_update_queued': 'Изменения сохранены офлайн',
+      'settings_update_queued_hint': 'в ожидании синхронизации',
       'settings_value_loading': 'Загрузка…',
       'settings_value_not_set': 'Не указано',
       'settings_edit_field_prefix': 'Изменить',
@@ -113,6 +115,8 @@ class AppLocalizations {
       'settings_account_load_failed': 'Failed to load profile data',
       'settings_update_success': 'Details updated',
       'settings_update_failed': 'Failed to update details',
+      'settings_update_queued': 'Changes saved offline',
+      'settings_update_queued_hint': 'pending sync',
       'settings_value_loading': 'Loading…',
       'settings_value_not_set': 'Not set',
       'settings_edit_field_prefix': 'Edit',
@@ -201,6 +205,8 @@ class AppLocalizations {
   String get settingsAccountLoadFailed => getString('settings_account_load_failed');
   String get settingsUpdateSuccess => getString('settings_update_success');
   String get settingsUpdateFailed => getString('settings_update_failed');
+  String get settingsUpdateQueued => getString('settings_update_queued');
+  String get settingsUpdateQueuedHint => getString('settings_update_queued_hint');
   String get settingsValueLoading => getString('settings_value_loading');
   String get settingsValueNotSet => getString('settings_value_not_set');
   String get settingsEditFieldPrefix => getString('settings_edit_field_prefix');

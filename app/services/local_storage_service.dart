@@ -6,6 +6,7 @@ import 'clothes.dart';
 class LocalStorageService {
   static const _clothesBox = 'clothes_box';
   static const _outfitsBox = 'outfits_box';
+  static const _userProfilesBox = 'user_profiles_box';
   static bool _initialized = false;
 
   static Future<void> initialize() async {
@@ -23,6 +24,9 @@ class LocalStorageService {
     }
     if (!Hive.isBoxOpen(_outfitsBox)) {
       await Hive.openBox<Map>(_outfitsBox);
+    }
+    if (!Hive.isBoxOpen(_userProfilesBox)) {
+      await Hive.openBox<Map>(_userProfilesBox);
     }
   }
 
@@ -80,6 +84,36 @@ class LocalStorageService {
           .toList();
     }
     return [];
+  }
+
+  static Future<void> cacheUserProfile(
+    int userId,
+    Map<String, dynamic> profile,
+  ) async {
+    final box = Hive.box<Map>(_userProfilesBox);
+    await box.put(_userKey(userId), {
+      'data': profile,
+      'updated_at': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<Map<String, dynamic>?> getCachedUserProfile(int userId) async {
+    final box = Hive.box<Map>(_userProfilesBox);
+    final data = box.get(_userKey(userId));
+    if (data is Map && data['data'] is Map) {
+      return (data['data'] as Map).cast<String, dynamic>();
+    }
+    return null;
+  }
+
+  static Future<void> updateCachedUserField(
+    int userId,
+    String field,
+    dynamic value,
+  ) async {
+    final current = await getCachedUserProfile(userId) ?? <String, dynamic>{};
+    current[field] = value;
+    await cacheUserProfile(userId, current);
   }
 
   static String _userKey(int userId) => 'user_$userId';
