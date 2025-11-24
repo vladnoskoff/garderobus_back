@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../l10n/l10n_extensions.dart';
 import '../../services/api_service.dart';
 import '../../services/clothes.dart';
 import '../../services/image_cache_service.dart';
@@ -43,13 +44,14 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 
   Future<void> _initialise() async {
+    final l10n = context.l10n;
     final userIdValue = await storage.read(key: 'user_id');
     if (!mounted) return;
 
     if (userIdValue == null) {
       setState(() {
         isLoading = false;
-        _error = 'Пользователь не найден';
+        _error = l10n.getString('wardrobe_user_not_found');
       });
       return;
     }
@@ -58,7 +60,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
     if (parsedId == null) {
       setState(() {
         isLoading = false;
-        _error = 'Некорректный идентификатор пользователя';
+        _error = l10n.getString('wardrobe_invalid_user_id');
       });
       return;
     }
@@ -82,6 +84,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
   }
 
   Future<void> _loadLocations() async {
+    final l10n = context.l10n;
     if (_userId == null) return;
     setState(() {
       isLocationsLoading = true;
@@ -124,7 +127,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Не удалось загрузить локации: $e';
+        _error = l10n.getStringWithPlaceholders(
+          'wardrobe_locations_load_failed',
+          {'error': e.toString()},
+        );
       });
     } finally {
       if (mounted) {
