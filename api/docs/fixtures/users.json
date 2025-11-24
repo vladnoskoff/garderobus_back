@@ -1,0 +1,11 @@
+{
+  "name": "Demo User",
+  "email": "demo@example.com",
+  "password": "Secret123",
+  "phone": "+79001112233",
+  "gender": "other",
+  "style_preference": "casual",
+  "theme_preference": "dark",
+  "language_preference": "ru",
+  "pin_code": "1234"
+}

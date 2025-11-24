@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Navy hoodie",
+    "category": "hoodie",
+    "season": "midseason",
+    "color": "navy",
+    "material": "cotton",
+    "temperature_min": 5,
+    "temperature_max": 18,
+    "location_id": 1,
+    "care_instructions": "Wash at 30C, no tumble dry",
+    "image_gallery": []
+  },
+  {
+    "name": "Black jeans",
+    "category": "jeans",
+    "season": "all",
+    "color": "black",
+    "material": "denim",
+    "temperature_min": -10,
+    "temperature_max": 25,
+    "location_id": 1,
+    "care_instructions": "Wash inside out",
+    "image_gallery": []
+  },
+  {
+    "name": "White sneakers",
+    "category": "shoes",
+    "season": "spring",
+    "color": "white",
+    "material": "leather",
+    "temperature_min": 5,
+    "temperature_max": 25,
+    "location_id": 2,
+    "care_instructions": "Use leather conditioner",
+    "image_gallery": []
+  }
+]

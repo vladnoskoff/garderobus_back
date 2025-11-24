@@ -1,0 +1,6 @@
+{
+  "temperature": 12,
+  "humidity": 70,
+  "condition": "cloudy",
+  "wind_speed": 4
+}
