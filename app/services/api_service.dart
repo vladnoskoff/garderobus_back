@@ -6,6 +6,9 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
 import 'clothes.dart';
+import 'local_storage_service.dart';
+import 'network_service.dart';
+import 'sync_service.dart';
 
 class ApiService {
   static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
@@ -183,6 +186,7 @@ class ApiService {
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
       await cacheHasPin(data['has_pin'] == true);
+      await LocalStorageService.cacheUserProfile(userId, data);
       return data;
     } else {
       throw Exception('Ошибка при получении данных пользователя');
@@ -354,17 +358,37 @@ class ApiService {
   }
 
   // Получение одежды пользователя
-  static Future<List<dynamic>> getUserClothes(int userId, {int? locationId}) async {
+  static Future<List<Clothes>> getUserClothes(int userId, {int? locationId}) async {
+    final online = await NetworkService.isConnected();
+    if (!online) {
+      final cached = await LocalStorageService.getCachedClothes(userId);
+      if (cached.isNotEmpty) return cached;
+    }
+
     final uri = locationId != null
         ? Uri.parse('$baseUrl/clothes/user/$userId?location_id=$locationId')
         : Uri.parse('$baseUrl/clothes/user/$userId');
-    final response = await http.get(uri);
 
-    if (response.statusCode == 200) {
-      final utf8Response = utf8.decode(response.bodyBytes); // Для корректной обработки русских символов
-      return jsonDecode(utf8Response);
-    } else {
+    try {
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final utf8Response = utf8.decode(response.bodyBytes); // Для корректной обработки русских символов
+        final decoded = jsonDecode(utf8Response);
+        if (decoded is List) {
+          final parsed = decoded
+              .whereType<Map<String, dynamic>>()
+              .map((json) => Clothes.fromJson(json))
+              .toList();
+          await LocalStorageService.cacheClothes(userId, parsed);
+          return parsed;
+        }
+      }
       throw Exception('Ошибка при получении одежды пользователя');
+    } catch (_) {
+      final cached = await LocalStorageService.getCachedClothes(userId);
+      if (cached.isNotEmpty) return cached;
+      rethrow;
     }
   }
 
@@ -403,8 +427,49 @@ class ApiService {
       throw Exception('Не удалось определить пользователя для добавления одежды');
     }
 
+    final parsedUserId = int.tryParse(userId);
+
     if (images.isEmpty) {
       throw Exception("Не выбраны изображения для загрузки");
+    }
+
+    final pendingModel = Clothes(
+      id: DateTime.now().microsecondsSinceEpoch * -1,
+      userId: parsedUserId ?? -1,
+      name: name,
+      category: category,
+      season: season,
+      color: color,
+      material: material,
+      imageUrl: images.isNotEmpty ? images.first.path : null,
+      imageGallery: images.map((e) => e.path).toList(),
+      createdAt: DateTime.now(),
+      locationId: locationId,
+      promptDescription: promptDescription,
+      careInstructions: careInstructions,
+      temperatureMin: null,
+      temperatureMax: null,
+      isPending: true,
+    );
+
+    if (!await NetworkService.isConnected()) {
+      if (parsedUserId != null) {
+        await LocalStorageService.upsertClothes(parsedUserId, pendingModel);
+      }
+      await SyncService.instance.enqueueClothesCreate(
+        userId: parsedUserId ?? -1,
+        name: name,
+        category: category,
+        season: season,
+        color: color,
+        material: material,
+        images: images,
+        autoFill: autoFill,
+        locationId: locationId,
+        promptDescription: promptDescription,
+        careInstructions: careInstructions,
+      );
+      return;
     }
 
     final request = http.MultipartRequest(
@@ -445,6 +510,13 @@ class ApiService {
     if (!isSuccess) {
       throw Exception("Ошибка добавления одежды: $responseBody");
     }
+
+    if (parsedUserId != null) {
+      await LocalStorageService.cacheClothes(
+        parsedUserId,
+        await getUserClothes(parsedUserId),
+      );
+    }
   }
 
   // Загрузка изображения
@@ -469,8 +541,8 @@ class ApiService {
   }
 
   
-static Future<Clothes> updateClothes({
-  required int clothesId,
+  static Future<Clothes> updateClothes({
+    required int clothesId,
   String? name,
   String? category,
   String? season,
@@ -508,6 +580,46 @@ static Future<Clothes> updateClothes({
     throw Exception('Нет данных для обновления');
   }
 
+  if (!await NetworkService.isConnected()) {
+    await SyncService.instance.enqueueClothesUpdate(
+      clothesId: clothesId,
+      body: body,
+    );
+    final cachedUserId = await getStoredUserId();
+    if (cachedUserId != null) {
+      final existing = await LocalStorageService.getCachedClothes(cachedUserId);
+      final match = existing.firstWhere(
+        (element) => element.id == clothesId,
+        orElse: () => Clothes(
+          id: clothesId,
+          userId: cachedUserId,
+          name: body['name']?.toString() ?? '',
+          category: body['category']?.toString() ?? '',
+          season: body['season']?.toString() ?? '',
+          color: body['color']?.toString() ?? '',
+          createdAt: DateTime.now(),
+        ),
+      );
+      await LocalStorageService.upsertClothes(
+        cachedUserId,
+        match.copyWith(
+          name: body['name']?.toString(),
+          category: body['category']?.toString(),
+          season: body['season']?.toString(),
+          color: body['color']?.toString(),
+          material: body['material']?.toString(),
+          promptDescription: body['prompt_description']?.toString(),
+          careInstructions: body['care_instructions']?.toString(),
+          temperatureMin: body['temperature_min'] as int?,
+          temperatureMax: body['temperature_max'] as int?,
+          locationId: body['location_id'] as int?,
+          isPending: true,
+        ),
+      );
+    }
+    return Clothes.fromJson({...body, 'id': clothesId, 'user_id': cachedUserId ?? -1, 'created_at': DateTime.now().toIso8601String(), 'is_pending': true});
+  }
+
   final response = await http.patch(
     uri,
     headers: {'Content-Type': 'application/json'},
@@ -521,7 +633,12 @@ static Future<Clothes> updateClothes({
 
   final decoded = jsonDecode(utf8.decode(response.bodyBytes));
   if (decoded is Map<String, dynamic>) {
-    return Clothes.fromJson(decoded);
+    final updated = Clothes.fromJson(decoded);
+    final cachedUserId = await getStoredUserId();
+    if (cachedUserId != null) {
+      await LocalStorageService.upsertClothes(cachedUserId, updated);
+    }
+    return updated;
   }
   throw Exception('Неожиданный формат ответа при обновлении одежды');
 }

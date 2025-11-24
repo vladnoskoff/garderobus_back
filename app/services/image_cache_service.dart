@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
@@ -21,6 +23,28 @@ class ImageCacheService {
     Widget? errorWidget,
     Alignment alignment = Alignment.center,
   }) {
+    final uri = Uri.tryParse(url);
+    final isFile = uri != null && uri.scheme.isEmpty;
+
+    if (isFile) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius),
+        child: Image.file(
+          File(url),
+          fit: fit,
+          width: width,
+          height: height,
+          alignment: alignment,
+          errorBuilder: (_, __, ___) => errorWidget ??
+              const Icon(
+                Icons.broken_image_outlined,
+                size: 40,
+                color: Colors.grey,
+              ),
+        ),
+      );
+    }
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
       child: CachedNetworkImage(
