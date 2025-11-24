@@ -32,6 +32,24 @@ REST API для «умного» гардероба, построенный на
 └── run.sh                 # Пример скрипта запуска
 ```
 
+### Версионирование маршрутов
+- Базовые эндпоинты доступны по префиксам `/v1` и `/v2`.
+- Неверсионированные маршруты остаются доступными, но отмечены как `deprecated` и предназначены только для обратной совместимости.
+
+### Документация и OpenAPI
+- Схема OpenAPI доступна по маршруту `/openapi.json` во время работы приложения.
+- Для генерации артефакта без запуска сервера используйте:
+  ```bash
+  DATABASE_URL=sqlite:///./openapi.db \
+  DATABASE_USE_REPLICAS=false \
+  CACHE_ENABLED=false \
+  TRACING_ENABLED=false \
+  OPENAI_API_KEY=fake-key \
+  OPENWEATHER_API_KEY=fake-key \
+  python api/docs/generate_openapi.py
+  ```
+- Если установлен `openapi-python-client`, скрипт автоматически соберёт SDK в каталоге `api/docs/openapi/python-sdk`.
+
 ## Требования
 - Python 3.10+
 - PostgreSQL 12+

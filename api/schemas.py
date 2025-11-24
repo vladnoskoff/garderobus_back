@@ -1,7 +1,14 @@
 from typing import Any, Dict, List, Literal, Optional
 from datetime import datetime
 
-from pydantic import AliasChoices, BaseModel, Field, root_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    EmailStr,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 
 class TaskSubmissionResponse(BaseModel):
@@ -23,29 +30,50 @@ class TaskStatusResponse(BaseModel):
 
 
 class UserCreate(BaseModel):
-    name: str
-    email: str
-    password: str
-    phone: Optional[str] = None
-    style_preference: Optional[str] = None
-    gender: Optional[str] = None
-    theme_preference: Optional[str] = None
+    name: str = Field(..., min_length=2, max_length=100)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=20)
+    phone: Optional[str] = Field(default=None, pattern=r"^[+\d][\d\-\s]{6,20}$")
+    style_preference: Optional[str] = Field(default=None, max_length=64)
+    gender: Optional[Literal["male", "female", "other"]] = None
+    theme_preference: Optional[Literal["light", "dark"]] = None
     pin_code: Optional[str] = Field(
-        default=None, validation_alias=AliasChoices("pin_code", "pinCode")
+        default=None,
+        min_length=4,
+        max_length=8,
+        pattern=r"^\d{4,8}$",
+        validation_alias=AliasChoices("pin_code", "pinCode"),
     )
-    language_preference: Optional[str] = None
+    language_preference: Optional[Literal["ru", "en"]] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
     def _alias_pin_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         """Support both snake_case and camelCase pin fields."""
         if "pin_code" not in values and "pinCode" in values:
             values["pin_code"] = values["pinCode"]
         return values
 
+    @field_validator("name")
+    def _strip_name(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name must not be empty")
+        return cleaned
+
+    @field_validator("password")
+    def _password_without_spaces(cls, value: str) -> str:
+        if " " in value:
+            raise ValueError("password must not contain spaces")
+        return value
+
+    @field_validator("language_preference", "theme_preference", mode="before")
+    def _lowercase_values(cls, value: Optional[str]) -> Optional[str]:
+        return value.lower() if isinstance(value, str) else value
+
 
 class UserLogin(BaseModel):
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=20)
 
 
 class RefreshRequest(BaseModel):
@@ -79,43 +107,64 @@ class UserResponse(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    name: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    password: Optional[str] = None
-    location: Optional[str] = None
-    gender: Optional[str] = None
-    theme_preference: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = Field(default=None, pattern=r"^[+\d][\d\-\s]{6,20}$")
+    password: Optional[str] = Field(default=None, min_length=6, max_length=20)
+    location: Optional[str] = Field(default=None, max_length=255)
+    gender: Optional[Literal["male", "female", "other"]] = None
+    theme_preference: Optional[Literal["light", "dark"]] = None
     pin_code: Optional[str] = Field(
-        default=None, validation_alias=AliasChoices("pin_code", "pinCode")
+        default=None,
+        min_length=4,
+        max_length=8,
+        pattern=r"^\d{4,8}$",
+        validation_alias=AliasChoices("pin_code", "pinCode"),
     )
-    language_preference: Optional[str] = None
+    language_preference: Optional[Literal["ru", "en"]] = None
 
-    @root_validator(pre=True)
+    @model_validator(mode="before")
     def _alias_pin_code(cls, values: Dict[str, Any]) -> Dict[str, Any]:
         if "pin_code" not in values and "pinCode" in values:
             values["pin_code"] = values["pinCode"]
         return values
 
+    @field_validator("name")
+    def _strip_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name must not be empty")
+        return cleaned
+
+    @field_validator("language_preference", "theme_preference", mode="before")
+    def _lowercase_values(cls, value: Optional[str]) -> Optional[str]:
+        return value.lower() if isinstance(value, str) else value
+
 
 class PinVerificationRequest(BaseModel):
-    pin_code: str
+    pin_code: str = Field(..., min_length=4, max_length=8, pattern=r"^\d{4,8}$")
 
 
 class ClothesCreate(BaseModel):
-    name: str
-    category: str
-    season: str
-    color: str
-    material: Optional[str] = None
+    name: str = Field(..., min_length=2, max_length=120)
+    category: str = Field(..., min_length=2, max_length=64)
+    season: str = Field(..., min_length=2, max_length=32)
+    color: str = Field(..., min_length=3, max_length=32)
+    material: Optional[str] = Field(default=None, max_length=64)
     image_url: Optional[str] = None
-    prompt_description: Optional[str] = None
-    care_instructions: Optional[str] = None
-    temperature_min: Optional[int] = None
-    temperature_max: Optional[int] = None
+    prompt_description: Optional[str] = Field(default=None, max_length=500)
+    care_instructions: Optional[str] = Field(default=None, max_length=256)
+    temperature_min: Optional[int] = Field(default=None, ge=-100, le=100)
+    temperature_max: Optional[int] = Field(default=None, ge=-100, le=100)
     ai_metadata: Optional[dict] = None
     location_id: Optional[int] = None
     image_gallery: List[str] = Field(default_factory=list)
+
+    @field_validator("image_gallery")
+    def _deduplicate_gallery(cls, value: List[str]) -> List[str]:
+        return list(dict.fromkeys(value))
 
 
 class ClothesResponse(ClothesCreate):
@@ -128,23 +177,23 @@ class ClothesResponse(ClothesCreate):
 
 
 class ClothesUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
-    season: Optional[str] = None
-    color: Optional[str] = None
-    material: Optional[str] = None
-    prompt_description: Optional[str] = None
-    care_instructions: Optional[str] = None
-    temperature_min: Optional[int] = None
-    temperature_max: Optional[int] = None
+    name: Optional[str] = Field(default=None, min_length=2, max_length=120)
+    category: Optional[str] = Field(default=None, min_length=2, max_length=64)
+    season: Optional[str] = Field(default=None, min_length=2, max_length=32)
+    color: Optional[str] = Field(default=None, min_length=3, max_length=32)
+    material: Optional[str] = Field(default=None, max_length=64)
+    prompt_description: Optional[str] = Field(default=None, max_length=500)
+    care_instructions: Optional[str] = Field(default=None, max_length=256)
+    temperature_min: Optional[int] = Field(default=None, ge=-100, le=100)
+    temperature_max: Optional[int] = Field(default=None, ge=-100, le=100)
     ai_metadata: Optional[dict] = None
     location_id: Optional[int] = None
 
 
 class ClothesInsights(BaseModel):
-    title: str
-    category: str
-    gender: Optional[str] = None
+    title: str = Field(..., min_length=2, max_length=200)
+    category: str = Field(..., min_length=2, max_length=64)
+    gender: Optional[Literal["male", "female", "unisex"]] = None
     colors: List[str]
     pattern: Optional[str] = None
     material: Optional[str] = None
@@ -155,39 +204,51 @@ class ClothesInsights(BaseModel):
     occasions: List[str]
     care: Optional[str] = None
     tags: List[str]
-    catalog_description: str
-    gen_prompt: str
+    catalog_description: str = Field(..., min_length=10, max_length=2000)
+    gen_prompt: str = Field(..., min_length=10, max_length=4000)
     pairing_hints: List[str]
+
+    @field_validator("colors", "season", "style", "occasions", "tags", "pairing_hints")
+    def _non_empty_lists(cls, value: List[str]) -> List[str]:
+        if not value:
+            raise ValueError("list must contain at least one item")
+        return value
+
+    @field_validator("temp_c_range")
+    def _temperature_range(cls, value: List[int]) -> List[int]:
+        if len(value) != 2:
+            raise ValueError("temp_c_range must contain exactly two bounds")
+        return value
 
 
 class ClothesAutoFill(BaseModel):
-    name: str
-    category: str
-    season: str
-    color: str
-    material: Optional[str] = None
-    prompt_description: str
-    care_instructions: Optional[str] = None
+    name: str = Field(..., min_length=2, max_length=120)
+    category: str = Field(..., min_length=2, max_length=64)
+    season: str = Field(..., min_length=2, max_length=32)
+    color: str = Field(..., min_length=3, max_length=32)
+    material: Optional[str] = Field(default=None, max_length=64)
+    prompt_description: str = Field(..., min_length=10, max_length=500)
+    care_instructions: Optional[str] = Field(default=None, max_length=256)
     ai_metadata: ClothesInsights
-    temperature_min: Optional[int] = None
-    temperature_max: Optional[int] = None
+    temperature_min: Optional[int] = Field(default=None, ge=-100, le=100)
+    temperature_max: Optional[int] = Field(default=None, ge=-100, le=100)
 
 
 class WeatherSnapshot(BaseModel):
-    temperature: int
-    humidity: int
-    condition: str
-    wind_speed: Optional[int] = None
+    temperature: int = Field(..., ge=-100, le=100)
+    humidity: int = Field(..., ge=0, le=100)
+    condition: str = Field(..., min_length=2, max_length=128)
+    wind_speed: Optional[int] = Field(default=None, ge=0, le=300)
 
 
 class MannequinItem(BaseModel):
     id: int
-    name: str
-    category: str
-    color: str
-    material: Optional[str] = None
-    season: str
-    prompt_description: Optional[str] = None
+    name: str = Field(..., min_length=2, max_length=120)
+    category: str = Field(..., min_length=2, max_length=64)
+    color: str = Field(..., min_length=3, max_length=32)
+    material: Optional[str] = Field(default=None, max_length=64)
+    season: str = Field(..., min_length=2, max_length=32)
+    prompt_description: Optional[str] = Field(default=None, max_length=500)
 
     class Config:
         from_attributes = True

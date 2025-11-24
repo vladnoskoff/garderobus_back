@@ -17,19 +17,7 @@ from cache import cache
 from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
-from routes import (
-    admin,
-    ai_recommendation,
-    clothes,
-    esp_display,
-    locations,
-    notifications,
-    outfits,
-    testgpt,
-    users,
-    wardrobe_analytics,
-    weather,
-)
+from routes import build_versioned_router
 from static_files import CDNStaticFiles
 
 configure_logging()
@@ -37,7 +25,11 @@ logger = logging.getLogger(__name__)
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI()
+app = FastAPI(
+    title="Smart Closet API",
+    version="1.0.0",
+    description="OpenAPI contract for the Smart Closet backend service.",
+)
 
 
 @app.middleware("http")
@@ -90,17 +82,9 @@ app.mount(
     name="mannequins",
 )
 
-app.include_router(admin.router)
-app.include_router(users.router)
-app.include_router(clothes.router)
-app.include_router(outfits.router)
-app.include_router(weather.router)
-app.include_router(ai_recommendation.router)
-app.include_router(wardrobe_analytics.router)
-app.include_router(esp_display.router)
-app.include_router(testgpt.router)
-app.include_router(locations.router)
-app.include_router(notifications.router)
+app.include_router(build_versioned_router("/v1"))
+app.include_router(build_versioned_router("/v2"))
+app.include_router(build_versioned_router(deprecated=True))
 
 configure_observability(app)
 
