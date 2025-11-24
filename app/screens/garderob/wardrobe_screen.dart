@@ -9,6 +9,7 @@ import '../../services/image_cache_service.dart';
 import '../../services/network_service.dart';
 import '../../services/startup_service.dart';
 import '../../services/sync_service.dart';
+import '../../services/state_restoration_service.dart';
 import '../../widgets/skeletons.dart';
 import 'add_clothes_screen.dart';
 import 'clothes_detail_screen.dart';
@@ -68,6 +69,16 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
 
     await _loadLocations();
     await fetchClothes();
+
+    final restored = await StateRestorationService.restoreWardrobeFilters();
+    final restoredCategory = restored.$1;
+    final restoredSeason = restored.$2;
+    if (!mounted) return;
+    setState(() {
+      _selectedCategoryFilter = restoredCategory;
+      _selectedSeasonFilter = restoredSeason;
+      clothes = _filterClothes(_allClothes);
+    });
   }
 
   Future<void> _loadLocations() async {
@@ -381,6 +392,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                               _selectedSeasonFilter = null;
                               clothes = _filterClothes(_allClothes);
                             });
+                            StateRestorationService.persistWardrobeFilters();
                             Navigator.pop(context);
                           },
                           child: const Text('Сбросить'),
@@ -395,6 +407,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                               _selectedSeasonFilter = tempSeason;
                               clothes = _filterClothes(_allClothes);
                             });
+                            StateRestorationService.persistWardrobeFilters(
+                              category: tempCategory,
+                              season: tempSeason,
+                            );
                             Navigator.pop(context);
                           },
                           child: const Text('Применить'),
@@ -417,6 +433,7 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       _selectedSeasonFilter = null;
       clothes = _filterClothes(_allClothes);
     });
+    StateRestorationService.persistWardrobeFilters();
   }
 
   Future<void> confirmAndDeleteClothes(int clothesId) async {
