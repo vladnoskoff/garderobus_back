@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 import '../../services/draft_storage_service.dart';
 import '../../services/form_validators.dart';
+import '../../services/auth_scope.dart';
 import '../../widgets/app_snackbar.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -69,20 +71,25 @@ class _RegisterScreenState extends State<RegisterScreen> with FormValidationMixi
             name: 'Место 1',
           );
         } catch (e) {
-          if (mounted) {
-            AppSnackbar.showError(
-              context,
-              l10n.authLocationError(e.toString()),
-            );
-          }
+          if (!mounted) return;
+          AppSnackbar.showError(
+            context,
+            l10n.authLocationError(e.toString()),
+          );
         }
       }
 
       setState(() => isLoading = false);
       await DraftStorageService.clearDraft(_draftKey);
-      Navigator.pop(context);
+      if (mounted) {
+        await AuthScope.of(context).logout();
+        if (!mounted) return;
+        context.go('/login');
+      }
     } catch (e) {
+      if (!mounted) return;
       setState(() => isLoading = false);
+      if (!mounted) return;
       AppSnackbar.showError(context, '${l10n.formUnexpectedError}\n$e');
     }
   }
@@ -137,7 +144,7 @@ class _RegisterScreenState extends State<RegisterScreen> with FormValidationMixi
     final l10n = AppLocalizations.of(context);
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -172,7 +179,7 @@ class _RegisterScreenState extends State<RegisterScreen> with FormValidationMixi
                             l10n.appTitle,
                             style: theme.textTheme.headlineMedium?.copyWith(
                               fontWeight: FontWeight.w700,
-                              color: colorScheme.onBackground,
+                              color: colorScheme.onSurface,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -180,7 +187,7 @@ class _RegisterScreenState extends State<RegisterScreen> with FormValidationMixi
                           Text(
                             l10n.authRegisterTitle,
                             style: theme.textTheme.titleLarge?.copyWith(
-                              color: colorScheme.onBackground.withOpacity(0.75),
+                              color: colorScheme.onSurface.withValues(alpha: 0.75),
                               fontWeight: FontWeight.w600,
                             ),
                             textAlign: TextAlign.center,
@@ -336,7 +343,7 @@ class _RegisterScreenState extends State<RegisterScreen> with FormValidationMixi
                                   ),
                                   const SizedBox(height: 8),
                                   TextButton(
-                                    onPressed: () => Navigator.pushNamed(context, '/login'),
+                                    onPressed: () => context.go('/login'),
                                     style: TextButton.styleFrom(
                                       foregroundColor: colorScheme.primary,
                                       minimumSize: const Size.fromHeight(44),
