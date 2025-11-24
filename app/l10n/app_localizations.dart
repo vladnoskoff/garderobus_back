@@ -9,7 +9,6 @@ class AppLocalizations {
 
   static const supportedLocales = [
     Locale('ru'),
-    Locale('en'),
   ];
 
   static const _localizedValues = <String, Map<String, String>>{
