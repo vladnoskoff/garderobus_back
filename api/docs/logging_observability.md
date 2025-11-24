@@ -61,3 +61,10 @@
 
 - Клиент может передать `X-Request-ID` и/или `X-Trace-Id`; оба значения возвращаются в ответе.
 - При отсутствии входящих идентификаторов сервис генерирует их автоматически, чтобы связать логи и трассы для запроса.
+
+## Celery метрики и дашборды
+
+- Метрики: `celery_task_latency_seconds`, `celery_task_retries_total`, `celery_task_dead_letter_total`, `celery_queue_depth`.
+- В задачах Celery включён backoff-ретрай с жёстким пределом (`CELERY_MAX_RETRIES`) и автоматической отправкой в DLQ (`CELERY_DEAD_LETTER_QUEUE`).
+- Для предотвращения дубликатов используется идемпотентность: `idempotency_key` попадает в заголовок, а результат с тем же ключом читается из бекенда.
+- Рекомендация по графикам в Grafana: панель с гистограммой `celery_task_latency_seconds` по тегу `task`, счётчик ретраев с алертом на `CELERY_RETRY_ALERT_THRESHOLD`, и отдельный график `celery_task_dead_letter_total`.

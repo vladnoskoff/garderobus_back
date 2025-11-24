@@ -1,5 +1,5 @@
 """Celery tasks package."""
 
-from . import ai  # noqa: F401
+from . import ai, dead_letter  # noqa: F401
 
-__all__ = ["ai"]
+__all__ = ["ai", "dead_letter"]
