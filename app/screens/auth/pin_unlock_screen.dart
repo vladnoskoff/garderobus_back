@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/api_service.dart';
 import '../../services/biometric_auth_service.dart';
+import '../../l10n/l10n_extensions.dart';
 
 class PinUnlockScreen extends StatefulWidget {
   final int userId;
@@ -67,7 +68,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
   Future<void> _verifyPin() async {
     final pin = _pinController.text.trim();
     if (pin.length < 4 || pin.length > 8 || !RegExp(r'^[0-9]+$').hasMatch(pin)) {
-      setState(() => _error = 'Введите PIN-код из 4–8 цифр.');
+      setState(() => _error = context.l10n.authPinLengthError);
       return;
     }
 
@@ -86,7 +87,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
         await widget.onUnlocked(context);
       } else {
         setState(() {
-          _error = 'Неверный PIN-код. Попробуйте ещё раз.';
+          _error = context.l10n.authPinInvalid;
         });
       }
     } catch (e) {
@@ -96,8 +97,8 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
           rawMessage.replaceFirst(RegExp(r'^Exception:\s*'), '').trim();
       setState(() {
         _error = cleanedMessage.isNotEmpty
-            ? 'Не удалось проверить PIN-код: $cleanedMessage'
-            : 'Не удалось проверить PIN-код. Попробуйте позже.';
+            ? context.l10n.authPinVerifyError(cleanedMessage)
+            : context.l10n.authPinVerifyGeneric;
       });
     } finally {
       if (mounted) {
@@ -116,7 +117,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
     });
 
     final success = await BiometricAuthService.authenticate(
-      reason: 'Подтвердите личность для доступа к гардеробу',
+      reason: context.l10n.authBiometricReason,
     );
 
     if (!mounted) return;
@@ -128,8 +129,7 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
       await widget.onUnlocked(context);
     } else {
       setState(() {
-        _error =
-            'Биометрическая аутентификация не выполнена. Введите PIN-код.';
+        _error = context.l10n.authBiometricFailed;
         _isBiometricAuthenticating = false;
       });
     }
@@ -150,41 +150,51 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
               Icon(Icons.lock, size: 64, color: theme.colorScheme.primary),
               const SizedBox(height: 16),
               Text(
-                'Введите PIN-код',
+                context.l10n.authPinPrompt,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineSmall,
               ),
               const SizedBox(height: 12),
               Text(
-                'Для продолжения требуется подтверждение безопасности.',
+                context.l10n.authPinHint,
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 24),
-              TextField(
-                controller: _pinController,
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                maxLength: 8,
-                textAlign: TextAlign.center,
-                decoration: InputDecoration(
-                  labelText: 'PIN-код',
-                  counterText: '',
-                  errorText: _error,
-                  border: const OutlineInputBorder(),
+              Semantics(
+                label: context.l10n.authPinLabel,
+                hint: context.l10n.authPinHint,
+                textField: true,
+                child: TextField(
+                  controller: _pinController,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  maxLength: 8,
+                  textAlign: TextAlign.center,
+                  decoration: InputDecoration(
+                    labelText: context.l10n.authPinLabel,
+                    counterText: '',
+                    errorText: _error,
+                    border: const OutlineInputBorder(),
+                  ),
+                  onSubmitted: (_) => _verifyPin(),
                 ),
-                onSubmitted: (_) => _verifyPin(),
               ),
               const SizedBox(height: 20),
-              FilledButton(
-                onPressed: _isVerifying ? null : _verifyPin,
-                child: _isVerifying
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Разблокировать'),
+              Semantics(
+                button: true,
+                enabled: !_isVerifying,
+                label: context.l10n.authUnlockAction,
+                child: FilledButton(
+                  onPressed: _isVerifying ? null : _verifyPin,
+                  child: _isVerifying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(context.l10n.authUnlockAction),
+                ),
               ),
               if (_isBiometricAuthenticating) ...[
                 const SizedBox(height: 16),
@@ -193,11 +203,15 @@ class _PinUnlockScreenState extends State<PinUnlockScreen> {
                 ),
               ],
               if (widget.onCancel != null)
-                TextButton(
-                  onPressed: () async {
-                    await widget.onCancel!(context);
-                  },
-                  child: const Text('Выйти'),
+                Semantics(
+                  button: true,
+                  label: context.l10n.authExitAction,
+                  child: TextButton(
+                    onPressed: () async {
+                      await widget.onCancel!(context);
+                    },
+                    child: Text(context.l10n.authExitAction),
+                  ),
                 ),
             ],
           ),

@@ -11,6 +11,7 @@ import '../services/startup_service.dart';
 import '../services/sync_service.dart';
 import '../widgets/rounded_back_button.dart';
 import '../widgets/skeletons.dart';
+import '../l10n/l10n_extensions.dart';
 import 'garderob/clothes_detail_screen.dart';
 import 'settings/home_settings/home_screen_settings.dart';
 
@@ -91,31 +92,38 @@ class _MannequinRefreshButton extends StatelessWidget {
     final resolvedForeground = foregroundColor ?? colorScheme.onSecondaryContainer;
     final resolvedBackground =
         backgroundColor ?? resolvedForeground.withOpacity(0.1);
+    final refreshLabel = context.l10n.homeRefreshMannequin;
 
-    return Tooltip(
-      message: 'Обновить манекен',
-      child: Material(
-        color: resolvedBackground,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
+    return Semantics(
+      button: true,
+      enabled: !isLoading,
+      label: refreshLabel,
+      child: Tooltip(
+        message: refreshLabel,
+        child: Material(
+          color: resolvedBackground,
           borderRadius: BorderRadius.circular(12),
-          onTap: isLoading ? null : onPressed,
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: isLoading
-                ? SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(resolvedForeground),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: isLoading ? null : onPressed,
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: isLoading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor:
+                            AlwaysStoppedAnimation<Color>(resolvedForeground),
+                      ),
+                    )
+                  : Icon(
+                      Icons.autorenew,
+                      color: resolvedForeground,
+                      size: 20,
                     ),
-                  )
-                : Icon(
-                    Icons.autorenew,
-                    color: resolvedForeground,
-                    size: 20,
-                  ),
+            ),
           ),
         ),
       ),
