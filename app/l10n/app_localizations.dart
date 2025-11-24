@@ -86,6 +86,35 @@ class AppLocalizations {
       'logout_confirmation': 'Вы уверены, что хотите выйти?',
       'logout_cancel': 'Отмена',
       'logout_confirm': 'Выйти',
+      'form_field_default': 'поле',
+      'form_required': 'Заполните {field}',
+      'form_email_required': 'Укажите email',
+      'form_email_invalid': 'Проверьте формат email',
+      'form_phone_required': 'Укажите телефон',
+      'form_phone_invalid': 'Введите не менее 10 цифр',
+      'form_password_required': 'Введите пароль',
+      'form_password_short': 'Пароль должен быть длиннее 8 символов',
+      'form_password_mismatch': 'Пароли не совпадают',
+      'form_fix_errors': 'Проверьте выделенные поля',
+      'form_unexpected_error': 'Что-то пошло не так. Попробуйте ещё раз.',
+      'form_draft_saved': 'Черновик сохранён',
+      'form_draft_restored': 'Черновик восстановлен',
+      'auth_login_title': 'Добро пожаловать!',
+      'auth_login_action': 'Войти',
+      'auth_register_prompt': 'Нет аккаунта? Зарегистрироваться',
+      'auth_register_action': 'Создать аккаунт',
+      'auth_register_title': 'Регистрация',
+      'auth_login_has_account': 'Есть аккаунт',
+      'auth_email_label': 'Email',
+      'auth_password_label': 'Пароль',
+      'auth_confirm_password_label': 'Повторите пароль',
+      'auth_name_label': 'Имя',
+      'auth_gender_label': 'Пол',
+      'auth_select_gender_hint': 'Выберите пол',
+      'auth_login_error': 'Неверный логин или пароль.',
+      'auth_passwords_match': 'Пароли совпадают',
+      'auth_passwords_mismatch': 'Пароли не совпадают',
+      'auth_location_error': 'Не удалось создать стартовую локацию: {error}',
     },
     'en': {
       'app_title': 'Wardrobe 26',
@@ -162,6 +191,35 @@ class AppLocalizations {
       'logout_confirmation': 'Are you sure you want to log out?',
       'logout_cancel': 'Cancel',
       'logout_confirm': 'Log out',
+      'form_field_default': 'field',
+      'form_required': 'Please fill in {field}',
+      'form_email_required': 'Enter your email',
+      'form_email_invalid': 'Email format looks incorrect',
+      'form_phone_required': 'Enter your phone number',
+      'form_phone_invalid': 'Use at least 10 digits',
+      'form_password_required': 'Enter a password',
+      'form_password_short': 'Password must be longer than 8 characters',
+      'form_password_mismatch': 'Passwords do not match',
+      'form_fix_errors': 'Please check the highlighted fields',
+      'form_unexpected_error': 'Something went wrong. Please try again.',
+      'form_draft_saved': 'Draft saved',
+      'form_draft_restored': 'Draft restored',
+      'auth_login_title': 'Welcome back!',
+      'auth_login_action': 'Log in',
+      'auth_register_prompt': 'No account? Sign up',
+      'auth_register_action': 'Create account',
+      'auth_register_title': 'Sign up',
+      'auth_login_has_account': 'Already have an account',
+      'auth_email_label': 'Email',
+      'auth_password_label': 'Password',
+      'auth_confirm_password_label': 'Confirm password',
+      'auth_name_label': 'Name',
+      'auth_gender_label': 'Gender',
+      'auth_select_gender_hint': 'Select gender',
+      'auth_login_error': 'Incorrect email or password.',
+      'auth_passwords_match': 'Passwords match',
+      'auth_passwords_mismatch': 'Passwords do not match',
+      'auth_location_error': 'Failed to create initial location: {error}',
     },
   };
 
@@ -250,6 +308,38 @@ class AppLocalizations {
   String get logoutConfirmation => getString('logout_confirmation');
   String get logoutCancel => getString('logout_cancel');
   String get logoutConfirm => getString('logout_confirm');
+  String get formFieldDefault => getString('form_field_default');
+  String formRequired(String field) =>
+      getString('form_required').replaceFirst('{field}', field);
+  String get formEmailRequired => getString('form_email_required');
+  String get formEmailInvalid => getString('form_email_invalid');
+  String get formPhoneRequired => getString('form_phone_required');
+  String get formPhoneInvalid => getString('form_phone_invalid');
+  String get formPasswordRequired => getString('form_password_required');
+  String get formPasswordShort => getString('form_password_short');
+  String get formPasswordMismatch => getString('form_password_mismatch');
+  String get formFixErrors => getString('form_fix_errors');
+  String get formUnexpectedError => getString('form_unexpected_error');
+  String get formDraftSaved => getString('form_draft_saved');
+  String get formDraftRestored => getString('form_draft_restored');
+  String get authLoginTitle => getString('auth_login_title');
+  String get authLoginAction => getString('auth_login_action');
+  String get authRegisterPrompt => getString('auth_register_prompt');
+  String get authRegisterAction => getString('auth_register_action');
+  String get authRegisterTitle => getString('auth_register_title');
+  String get authLoginHasAccount => getString('auth_login_has_account');
+  String get authEmailLabel => getString('auth_email_label');
+  String get authPasswordLabel => getString('auth_password_label');
+  String get authConfirmPasswordLabel =>
+      getString('auth_confirm_password_label');
+  String get authNameLabel => getString('auth_name_label');
+  String get authGenderLabel => getString('auth_gender_label');
+  String get authSelectGenderHint => getString('auth_select_gender_hint');
+  String get authLoginError => getString('auth_login_error');
+  String get authPasswordsMatch => getString('auth_passwords_match');
+  String get authPasswordsMismatch => getString('auth_passwords_mismatch');
+  String authLocationError(String error) =>
+      getString('auth_location_error').replaceFirst('{error}', error);
 
   String languageName(String code) {
     switch (code) {
