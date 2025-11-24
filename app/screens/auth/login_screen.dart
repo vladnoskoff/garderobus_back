@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
+import '../../services/draft_storage_service.dart';
+import '../../services/form_validators.dart';
 import '../../services/theme_controller.dart';
+import '../../widgets/app_snackbar.dart';
 import 'pin_unlock_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,10 +17,18 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with FormValidationMixin {
+  static const _draftKey = 'login_form_draft';
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final _formKey = GlobalKey<FormState>();
   bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreDraft();
+  }
 
   @override
   void dispose() {
@@ -26,6 +38,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void login() async {
+    final l10n = AppLocalizations.of(context);
+    final isValid = _formKey.currentState?.validate() ?? false;
+    if (!isValid) {
+      AppSnackbar.showError(context, l10n.formFixErrors);
+      return;
+    }
+
     setState(() => isLoading = true);
     try {
       final email = emailController.text.trim();
@@ -98,106 +117,180 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         Navigator.pushReplacementNamed(context, '/home');
       }
+      await DraftStorageService.clearDraft(_draftKey);
     } catch (e) {
       setState(() => isLoading = false);
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text("Ошибка входа"),
-          content: Text("Неверный логин или пароль.\n$e"),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("OK")),
-          ],
-        ),
-      );
+      AppSnackbar.showError(context, '${l10n.authLoginError}\n$e');
     }
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await DraftStorageService.loadDraft(_draftKey);
+    if (draft.isNotEmpty) {
+      emailController.text = draft['email'] ?? '';
+      passwordController.text = draft['password'] ?? '';
+      if (mounted) {
+        setState(() {});
+        AppSnackbar.showSuccess(context, AppLocalizations.of(context).formDraftRestored);
+      }
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    await DraftStorageService.saveDraft(_draftKey, {
+      'email': emailController.text,
+      'password': passwordController.text,
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final l10n = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: colorScheme.background,
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Center(
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                Image.asset("assets/logo.png", height: 150),
-                const SizedBox(height: 16),
-                Text(
-                  'Гардероб 26',
-                  style: theme.textTheme.displaySmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: colorScheme.primary,
-                  ),
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
+                  maxWidth: 520,
                 ),
-                const SizedBox(height: 12),
-                Text(
-                  "Добро пожаловать!",
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: colorScheme.onBackground,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                AutofillGroup(
+                child: Center(
                   child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      TextField(
-                        controller: emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        textInputAction: TextInputAction.next,
-                        autofillHints: const [
-                          AutofillHints.email,
-                          AutofillHints.username,
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primaryContainer,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Image.asset(
+                              "assets/logo.png",
+                              height: 72,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            l10n.appTitle,
+                            style: theme.textTheme.headlineMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              color: colorScheme.onBackground,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            l10n.authLoginTitle,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: colorScheme.onBackground.withOpacity(0.75),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
                         ],
-                        textCapitalization: TextCapitalization.none,
-                        decoration: const InputDecoration(labelText: "Email"),
                       ),
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: passwordController,
-                        obscureText: true,
-                        textInputAction: TextInputAction.done,
-                        autofillHints: const [AutofillHints.password],
-                        decoration: const InputDecoration(labelText: "Пароль"),
-                        onSubmitted: (_) {
-                          if (!isLoading) {
-                            login();
-                          }
-                        },
+                      const SizedBox(height: 24),
+                      Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: Form(
+                            key: _formKey,
+                            autovalidateMode: AutovalidateMode.onUserInteraction,
+                            child: AutofillGroup(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    l10n.authLoginTitle,
+                                    style: theme.textTheme.titleLarge?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextFormField(
+                                    controller: emailController,
+                                    keyboardType: TextInputType.emailAddress,
+                                    textInputAction: TextInputAction.next,
+                                    autofillHints: const [
+                                      AutofillHints.email,
+                                      AutofillHints.username,
+                                    ],
+                                    textCapitalization: TextCapitalization.none,
+                                    decoration: InputDecoration(
+                                      labelText: l10n.authEmailLabel,
+                                      prefixIcon: const Icon(Icons.alternate_email_rounded),
+                                    ),
+                                    onChanged: (_) => _saveDraft(),
+                                    validator: (value) => validateEmail(context, value),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  TextFormField(
+                                    controller: passwordController,
+                                    obscureText: true,
+                                    textInputAction: TextInputAction.done,
+                                    autofillHints: const [AutofillHints.password],
+                                    decoration: InputDecoration(
+                                      labelText: l10n.authPasswordLabel,
+                                      prefixIcon: const Icon(Icons.lock_outline_rounded),
+                                    ),
+                                    onChanged: (_) => _saveDraft(),
+                                    validator: (value) => validatePassword(context, value),
+                                    onFieldSubmitted: (_) {
+                                      if (!isLoading) {
+                                        login();
+                                      }
+                                    },
+                                  ),
+                                  const SizedBox(height: 20),
+                                  FilledButton(
+                                    onPressed: isLoading ? null : login,
+                                    style: FilledButton.styleFrom(
+                                      minimumSize: const Size.fromHeight(48),
+                                    ),
+                                    child: isLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : Text(l10n.authLoginAction),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton(
+                                    onPressed: () => Navigator.pushNamed(context, '/register'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: colorScheme.primary,
+                                      minimumSize: const Size.fromHeight(44),
+                                    ),
+                                    child: Text(l10n.authRegisterPrompt),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: isLoading ? null : login,
-                  child: isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text("Войти"),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pushNamed(context, '/register'),
-                  child: Text(
-                    "Нет аккаунта? Зарегистрироваться",
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         ),
       ),
     );
