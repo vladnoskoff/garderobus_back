@@ -785,63 +785,71 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Гардероб 26'),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune),
-            tooltip: 'Настройки',
-            onPressed: () {
-              showHomeSettingsSheet(context);
-            },
-          ),
-        ],
-      ),
-      body: FutureBuilder<void>(
-        future: _initialLoadFuture,
-        builder: (context, snapshot) {
-          final isStartupLoading = snapshot.connectionState != ConnectionState.done;
-          final pressureValue = weather?["pressure"];
-          final pressureMm = pressureValue is num ? (pressureValue * 0.75006).round() : null;
-          final isWeatherLoading = isStartupLoading || weather == null;
+    final mediaQuery = MediaQuery.of(context);
+    final clampedTextScaler = mediaQuery.textScaler.clamp(maxScaleFactor: 1.1);
 
-          return LayoutBuilder(
-            builder: (context, constraints) {
-              if (isStartupLoading && mannequins.isEmpty && wardrobeLocations.isEmpty) {
-                return _buildHomeSkeleton(context);
-              }
 
-              return Align(
-                alignment: Alignment.topCenter,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 640),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildStatusBanner(context),
-                        const SizedBox(height: 12),
-                        _buildLocationSection(context),
-                        const SizedBox(height: 20),
-                        _buildWeatherSection(
-                          context,
-                          isLoading: isWeatherLoading,
-                          pressureMm: pressureMm,
-                        ),
-                        const SizedBox(height: 20),
-                        _buildMannequinSection(context),
-                        const SizedBox(height: 32),
-                      ],
+    return MediaQuery(
+      data: mediaQuery.copyWith(textScaler: clampedTextScaler),
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Гардероб 26'),
+          centerTitle: true,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.tune),
+              tooltip: 'Настройки',
+              onPressed: () {
+                showHomeSettingsSheet(context);
+              },
+            ),
+          ],
+        ),
+        body: FutureBuilder<void>(
+          future: _initialLoadFuture,
+          builder: (context, snapshot) {
+            final isStartupLoading = snapshot.connectionState != ConnectionState.done;
+            final pressureValue = weather?["pressure"];
+            final pressureMm =
+                pressureValue is num ? (pressureValue * 0.75006).round() : null;
+            final isWeatherLoading = isStartupLoading || weather == null;
+
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                if (isStartupLoading && mannequins.isEmpty && wardrobeLocations.isEmpty) {
+                  return _buildHomeSkeleton(context);
+                }
+
+                return Align(
+                  alignment: Alignment.topCenter,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 640),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _buildStatusBanner(context),
+                          const SizedBox(height: 12),
+                          _buildLocationSection(context),
+                          const SizedBox(height: 20),
+                          _buildWeatherSection(
+                            context,
+                            isLoading: isWeatherLoading,
+                            pressureMm: pressureMm,
+                          ),
+                          const SizedBox(height: 20),
+                          _buildMannequinSection(context),
+                          const SizedBox(height: 32),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          );
-        },
+                );
+              },
+            );
+          },
+        ),
       ),
     );
   }

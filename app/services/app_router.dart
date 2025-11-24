@@ -28,6 +28,9 @@ class AppRouter {
         if (authState.requiresPin && state.matchedLocation != '/pin') {
           return '/pin';
         }
+        if (!authState.requiresPin && state.matchedLocation == '/pin') {
+          return '/home';
+        }
         if (isLoggingIn) return '/home';
         return null;
       },

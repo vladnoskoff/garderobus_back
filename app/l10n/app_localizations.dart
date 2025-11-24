@@ -130,6 +130,19 @@ class AppLocalizations {
       'auth_biometric_reason': 'Подтвердите личность для доступа к гардеробу',
       'auth_biometric_failed':
           'Биометрическая аутентификация не выполнена. Введите PIN-код.',
+      'support_section_title': 'Помощь и поддержка',
+      'support_contact_action': 'Написать в поддержку',
+      'support_contact_settings_hint':
+          'Опишите проблему — мы автоматически добавим модель устройства и версию системы.',
+      'support_contact_login_hint':
+          'Не получается войти? Напишите нам, и мы поможем.',
+      'support_email_subject': 'Запрос в поддержку: {source}',
+      'support_email_body':
+          'Опишите проблему или вопрос ниже.\n\n---\nМодель устройства: {model}\nВерсия системы: {osVersion}',
+      'support_email_source_settings': 'Настройки',
+      'support_email_source_login': 'Экран входа',
+      'support_email_launch_error':
+          'Не удалось открыть почтовое приложение. Проверьте настройки почты.',
     },
     'en': {
       'app_title': 'Wardrobe 26',
@@ -248,6 +261,19 @@ class AppLocalizations {
       'auth_biometric_reason': 'Confirm your identity to access the wardrobe',
       'auth_biometric_failed':
           'Biometric authentication failed. Please enter your PIN code.',
+      'support_section_title': 'Help & Support',
+      'support_contact_action': 'Contact support',
+      'support_contact_settings_hint':
+          'Tell us what happened — the device model and OS version will be added automatically.',
+      'support_contact_login_hint':
+          'Trouble signing in? Email us and we will help.',
+      'support_email_subject': 'Support request: {source}',
+      'support_email_body':
+          'Describe your issue or question below.\n\n---\nDevice model: {model}\nOS version: {osVersion}',
+      'support_email_source_settings': 'Settings',
+      'support_email_source_login': 'Login screen',
+      'support_email_launch_error':
+          'Could not open the mail app. Please check your mail setup.',
     },
   };
 
@@ -383,6 +409,22 @@ class AppLocalizations {
   String get authPinInvalid => getString('auth_pin_invalid');
   String get authBiometricReason => getString('auth_biometric_reason');
   String get authBiometricFailed => getString('auth_biometric_failed');
+  String get supportSectionTitle => getString('support_section_title');
+  String get supportContactAction => getString('support_contact_action');
+  String get supportContactSettingsHint =>
+      getString('support_contact_settings_hint');
+  String get supportContactLoginHint => getString('support_contact_login_hint');
+  String supportEmailSubject(String source) =>
+      getStringWithPlaceholder('support_email_subject', source);
+  String supportEmailBody({required String model, required String osVersion}) =>
+      getStringWithPlaceholders('support_email_body', {
+        'model': model,
+        'osVersion': osVersion,
+      });
+  String get supportEmailSourceSettings =>
+      getString('support_email_source_settings');
+  String get supportEmailSourceLogin => getString('support_email_source_login');
+  String get supportEmailLaunchError => getString('support_email_launch_error');
   String get homeRefreshMannequin => getString('home_refresh_mannequin');
 
   String languageName(String code) {
