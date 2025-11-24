@@ -786,7 +786,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final clampedTextScaler = mediaQuery.textScaler.clamp(maxScaleFactor: 1.1);
+    // Fix text rendering on the home screen by disabling oversized dynamic text
+    // scaling that caused words to wrap vertically on some devices.
+    final clampedTextScaler = const TextScaler.linear(1.0);
 
 
     return MediaQuery(
