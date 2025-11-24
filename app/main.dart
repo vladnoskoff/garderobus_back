@@ -10,16 +10,20 @@ import 'services/theme_controller.dart';
 import 'screens/auth/pin_unlock_screen.dart';
 import 'services/api_service.dart';
 import 'services/language_controller.dart';
+import 'services/local_storage_service.dart';
+import 'services/sync_service.dart';
 import 'l10n/app_localizations.dart';
 import 'l10n/l10n_extensions.dart';
 import 'widgets/fisheye_navigation_bar.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await LocalStorageService.initialize();
   final themeNotifier = ThemeNotifier();
   await themeNotifier.initialize();
   final languageNotifier = LanguageNotifier();
   await languageNotifier.initialize();
+  await SyncService.instance.initialize();
   runApp(WardrobeApp(
     themeNotifier: themeNotifier,
     languageNotifier: languageNotifier,
