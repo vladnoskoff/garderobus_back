@@ -1,19 +1,20 @@
 import datetime
+import uuid
 from typing import Optional
 
 import bcrypt
 import jwt
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 import models, schemas
 import settings
+from cache import cache
 from database import get_db
+from observability import get_rate_limiter, record_auth_failure, record_auth_lockout
 
 router = APIRouter(prefix="/users", tags=["Users"])
-
-SECRET_KEY = "supersecretkey"
-ALGORITHM = "HS256"
+limiter = get_rate_limiter()
 
 _MAX_BCRYPT_BYTES = 72
 _MIN_PASSWORD_LENGTH = 6
@@ -22,6 +23,9 @@ _PASSWORD_TOO_LONG_DETAIL = "Пароль слишком длинный. Мак�
 _MIN_PIN_LENGTH = 4
 _MAX_PIN_LENGTH = 8
 _SUPPORTED_LANGUAGES = {"ru", "en"}
+
+_ACCESS_TOKEN_TTL = datetime.timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+_REFRESH_TOKEN_TTL = datetime.timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
 
 def _ensure_password_fits_backend(password: str) -> None:
@@ -156,12 +160,117 @@ def _normalize_phone(value: Optional[str]) -> Optional[str]:
     return cleaned
 
 
-def create_access_token(data: dict):
+def _get_client_ip(request: Request) -> str:
+    if request.client is None:
+        return "unknown"
+    return request.client.host
+
+
+def _auth_key(prefix: str, value: str) -> str:
+    return cache.make_key("auth", prefix, value)
+
+
+def _is_blocked(ip_address: str, email: str) -> Optional[str]:
+    ip_block = cache.get_json(_auth_key("blocked_ip", ip_address), resource="auth")
+    if ip_block:
+        return "ip"
+    user_block = cache.get_json(_auth_key("blocked_user", email), resource="auth")
+    if user_block:
+        return "user"
+    return None
+
+
+def _block(identifier: str, dimension: str) -> None:
+    cache.set_json(
+        _auth_key(f"blocked_{dimension}", identifier),
+        True,
+        ttl=settings.AUTH_LOCKOUT_SECONDS,
+        resource="auth",
+    )
+    record_auth_lockout(dimension)
+
+
+def _clear_failures(ip_address: str, email: str) -> None:
+    for dimension, value in {"ip_fail": ip_address, "user_fail": email}.items():
+        cache.delete(_auth_key(dimension, value))
+
+
+def _register_failure(ip_address: str, email: str) -> None:
+    ip_attempts = cache.increment(
+        _auth_key("ip_fail", ip_address), settings.AUTH_FAILED_ATTEMPT_WINDOW_SECONDS
+    )
+    user_attempts = cache.increment(
+        _auth_key("user_fail", email), settings.AUTH_FAILED_ATTEMPT_WINDOW_SECONDS
+    )
+
+    if ip_attempts >= settings.AUTH_FAILED_ATTEMPT_LIMIT:
+        _block(ip_address, "ip")
+    if user_attempts >= settings.AUTH_FAILED_ATTEMPT_LIMIT:
+        _block(email, "user")
+
+    suspicious_attempts = cache.increment(
+        _auth_key("ip_suspicious", ip_address), settings.AUTH_SUSPICIOUS_IP_WINDOW_SECONDS
+    )
+    if suspicious_attempts >= settings.AUTH_SUSPICIOUS_IP_LIMIT:
+        _block(ip_address, "ip")
+
+
+def _persist_refresh_jti(user_id: int, jti: str) -> None:
+    cache.set_json(
+        _auth_key("refresh", user_id),
+        {"jti": jti},
+        ttl=int(_REFRESH_TOKEN_TTL.total_seconds()),
+        resource="auth",
+    )
+
+
+def _get_active_refresh_jti(user_id: int) -> Optional[str]:
+    payload = cache.get_json(_auth_key("refresh", user_id), resource="auth")
+    if not payload:
+        return None
+    return payload.get("jti")
+
+
+def _create_token(data: dict, ttl: datetime.timedelta, token_type: str, jti: str | None = None) -> str:
     to_encode = data.copy()
-    expire = datetime.datetime.utcnow() + datetime.timedelta(days=1)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)  # Здесь используем jwt.encode
+    expire = datetime.datetime.utcnow() + ttl
+    to_encode.update({"exp": expire, "iat": datetime.datetime.utcnow(), "type": token_type})
+    if jti:
+        to_encode["jti"] = jti
+    encoded_jwt = jwt.encode(
+        to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
+    )
     return encoded_jwt
+
+
+def _create_access_token(user: models.User) -> tuple[str, int]:
+    token = _create_token({"sub": user.id, "email": user.email}, _ACCESS_TOKEN_TTL, "access")
+    return token, int(_ACCESS_TOKEN_TTL.total_seconds())
+
+
+def _create_refresh_token(user: models.User, jti: str) -> tuple[str, int]:
+    token = _create_token(
+        {"sub": user.id, "email": user.email}, _REFRESH_TOKEN_TTL, "refresh", jti=jti
+    )
+    return token, int(_REFRESH_TOKEN_TTL.total_seconds())
+
+
+def _issue_token_pair(user: models.User) -> schemas.TokenPair:
+    refresh_jti = str(uuid.uuid4())
+    refresh_token, refresh_expires_in = _create_refresh_token(user, refresh_jti)
+    _persist_refresh_jti(user.id, refresh_jti)
+    access_token, access_expires_in = _create_access_token(user)
+
+    return schemas.TokenPair(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        token_type="bearer",
+        access_expires_in=access_expires_in,
+        refresh_expires_in=refresh_expires_in,
+        user_id=user.id,
+        has_pin=bool(user.pin_hash),
+    )
+
 
 @router.post("/register", response_model=schemas.UserResponse)
 def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
@@ -191,28 +300,83 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.refresh(new_user)
     return new_user
 
-@router.post("/login")
-def login(user: schemas.UserLogin, db: Session = Depends(get_db)):
+@router.post("/login", response_model=schemas.TokenPair)
+@limiter.limit(settings.API_RATE_LIMIT)
+def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
     _ensure_password_fits_backend(user.password)
+
+    client_ip = _get_client_ip(request)
+    if blocked := _is_blocked(client_ip, user.email):
+        record_auth_failure("blocked")
+        raise HTTPException(
+            status_code=429,
+            detail="Слишком много попыток входа. Попробуйте позже",
+            headers={"Retry-After": str(settings.AUTH_LOCKOUT_SECONDS)},
+        )
 
     db_user = db.query(models.User).filter(models.User.email == user.email).first()
     auth_error = HTTPException(status_code=401, detail="Неверный email или пароль")
 
     if not db_user:
+        _register_failure(client_ip, user.email)
+        record_auth_failure("user_not_found")
         raise auth_error
 
     password_matches = _verify_password(user.password, db_user.password_hash)
 
     if not password_matches:
+        _register_failure(client_ip, user.email)
+        record_auth_failure("invalid_credentials")
         raise auth_error
 
-    token = create_access_token({"sub": db_user.email})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user_id": db_user.id,
-        "has_pin": bool(db_user.pin_hash),
-    }
+    _clear_failures(client_ip, user.email)
+
+    return _issue_token_pair(db_user)
+
+
+@router.post("/refresh", response_model=schemas.TokenPair)
+@limiter.limit(settings.API_RATE_LIMIT)
+def refresh_tokens(
+    payload: schemas.RefreshRequest, request: Request, db: Session = Depends(get_db)
+):
+    try:
+        decoded = jwt.decode(
+            payload.refresh_token,
+            settings.JWT_SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM],
+        )
+    except jwt.ExpiredSignatureError as exc:
+        record_auth_failure("refresh_expired")
+        raise HTTPException(status_code=401, detail="Refresh токен истёк") from exc
+    except jwt.PyJWTError as exc:
+        record_auth_failure("refresh_invalid")
+        raise HTTPException(status_code=401, detail="Недействительный refresh токен") from exc
+
+    if decoded.get("type") != "refresh":
+        raise HTTPException(status_code=400, detail="Ожидался refresh токен")
+
+    user_id = decoded.get("sub")
+    jti = decoded.get("jti")
+    if user_id is None or jti is None:
+        raise HTTPException(status_code=400, detail="Refresh токен неполный")
+
+    try:
+        user_id_int = int(user_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Некорректный идентификатор пользователя") from exc
+
+    active_jti = _get_active_refresh_jti(user_id_int)
+    if active_jti != jti:
+        record_auth_failure("refresh_reuse")
+        _block(_get_client_ip(request), "ip")
+        raise HTTPException(status_code=401, detail="Refresh токен недействителен")
+
+    user = db.query(models.User).filter(models.User.id == user_id_int).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    _clear_failures(_get_client_ip(request), user.email)
+    return _issue_token_pair(user)
 
 @router.delete("/{user_id}")
 def delete_user(user_id: int, db: Session = Depends(get_db)):
