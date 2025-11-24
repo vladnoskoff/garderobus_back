@@ -9,6 +9,7 @@ import jwt
 from fastapi import FastAPI, HTTPException, Request
 from opentelemetry import trace
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
@@ -110,12 +111,20 @@ def setup_tracing(app: FastAPI) -> None:
     tracer_resource = Resource.create({"service.name": service_name})
     _tracer_provider = TracerProvider(resource=tracer_resource)
 
-    jaeger_exporter = JaegerExporter(
-        agent_host_name=settings.JAEGER_AGENT_HOST,
-        agent_port=settings.JAEGER_AGENT_PORT,
-    )
+    if settings.OTEL_EXPORTER_OTLP_ENDPOINT:
+        exporter = OTLPSpanExporter(
+            endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+            headers=_parse_otlp_headers(settings.OTEL_EXPORTER_OTLP_HEADERS),
+        )
+        exporter_name = "otlp"
+    else:
+        exporter = JaegerExporter(
+            agent_host_name=settings.JAEGER_AGENT_HOST,
+            agent_port=settings.JAEGER_AGENT_PORT,
+        )
+        exporter_name = "jaeger"
 
-    span_processor = BatchSpanProcessor(jaeger_exporter)
+    span_processor = BatchSpanProcessor(exporter)
     _tracer_provider.add_span_processor(span_processor)
     trace.set_tracer_provider(_tracer_provider)
 
@@ -123,8 +132,27 @@ def setup_tracing(app: FastAPI) -> None:
     RequestsInstrumentor().instrument()
 
     logger.info(
-        "Tracing enabled", extra={"service": service_name, "jaeger": f"{settings.JAEGER_AGENT_HOST}:{settings.JAEGER_AGENT_PORT}"}
+        "Tracing enabled",
+        extra={
+            "service": service_name,
+            "exporter": exporter_name,
+            "jaeger": f"{settings.JAEGER_AGENT_HOST}:{settings.JAEGER_AGENT_PORT}",
+            "otlp_endpoint": settings.OTEL_EXPORTER_OTLP_ENDPOINT,
+        },
     )
+
+
+def _parse_otlp_headers(raw_headers: Optional[str]) -> dict[str, str]:
+    if not raw_headers:
+        return {}
+    header_pairs = [segment.strip() for segment in raw_headers.split(",") if segment.strip()]
+    parsed_headers = {}
+    for pair in header_pairs:
+        if ":" not in pair:
+            continue
+        key, value = pair.split(":", 1)
+        parsed_headers[key.strip()] = value.strip()
+    return parsed_headers
 
 
 def setup_rate_limiter(app: FastAPI) -> Limiter:

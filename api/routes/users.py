@@ -1,4 +1,5 @@
 import datetime
+import logging
 import uuid
 from typing import Optional
 
@@ -11,7 +12,11 @@ import models, schemas
 import settings
 from cache import cache
 from database import get_db
+from logging_config import mask_sensitive_data
 from observability import get_rate_limiter, record_auth_failure, record_auth_lockout
+from opentelemetry import trace
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/users", tags=["Users"])
 limiter = get_rate_limiter()
@@ -298,16 +303,24 @@ def register(user: schemas.UserCreate, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    trace.get_current_span().set_attributes({"user.id": new_user.id, "user.email": new_user.email})
+    logger.info("User registered", extra={"user_id": new_user.id, "email": new_user.email})
     return new_user
 
 @router.post("/login", response_model=schemas.TokenPair)
 @limiter.limit(settings.API_RATE_LIMIT)
 def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
     _ensure_password_fits_backend(user.password)
-
     client_ip = _get_client_ip(request)
+    sanitized_payload = mask_sensitive_data(user.model_dump())
+    trace.get_current_span().set_attributes({"auth.email": user.email, "auth.client_ip": client_ip})
+
     if blocked := _is_blocked(client_ip, user.email):
         record_auth_failure("blocked")
+        logger.warning(
+            "Login blocked due to lockout",
+            extra={"client_ip": client_ip, "email": user.email},
+        )
         raise HTTPException(
             status_code=429,
             detail="Слишком много попыток входа. Попробуйте позже",
@@ -320,6 +333,10 @@ def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_d
     if not db_user:
         _register_failure(client_ip, user.email)
         record_auth_failure("user_not_found")
+        logger.warning(
+            "Login failed: user not found",
+            extra={"client_ip": client_ip, "payload": sanitized_payload},
+        )
         raise auth_error
 
     password_matches = _verify_password(user.password, db_user.password_hash)
@@ -327,10 +344,18 @@ def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_d
     if not password_matches:
         _register_failure(client_ip, user.email)
         record_auth_failure("invalid_credentials")
+        logger.warning(
+            "Login failed: wrong password",
+            extra={"client_ip": client_ip, "payload": sanitized_payload},
+        )
         raise auth_error
 
     _clear_failures(client_ip, user.email)
-
+    trace.get_current_span().set_attributes({"user.id": db_user.id, "user.email": db_user.email})
+    logger.info(
+        "Login succeeded",
+        extra={"user_id": db_user.id, "email": db_user.email, "client_ip": client_ip},
+    )
     return _issue_token_pair(db_user)
 
 
@@ -339,6 +364,8 @@ def login(user: schemas.UserLogin, request: Request, db: Session = Depends(get_d
 def refresh_tokens(
     payload: schemas.RefreshRequest, request: Request, db: Session = Depends(get_db)
 ):
+    sanitized_payload = mask_sensitive_data(payload.model_dump())
+    trace.get_current_span().set_attribute("auth.refresh_present", bool(payload.refresh_token))
     try:
         decoded = jwt.decode(
             payload.refresh_token,
@@ -358,6 +385,7 @@ def refresh_tokens(
     user_id = decoded.get("sub")
     jti = decoded.get("jti")
     if user_id is None or jti is None:
+        logger.warning("Refresh failed: missing subject", extra={"payload": sanitized_payload})
         raise HTTPException(status_code=400, detail="Refresh токен неполный")
 
     try:
@@ -369,13 +397,20 @@ def refresh_tokens(
     if active_jti != jti:
         record_auth_failure("refresh_reuse")
         _block(_get_client_ip(request), "ip")
+        logger.warning(
+            "Refresh reuse detected",
+            extra={"user_id": user_id, "payload": sanitized_payload},
+        )
         raise HTTPException(status_code=401, detail="Refresh токен недействителен")
 
     user = db.query(models.User).filter(models.User.id == user_id_int).first()
     if not user:
+        logger.warning("Refresh failed: user missing", extra={"user_id": user_id_int})
         raise HTTPException(status_code=404, detail="Пользователь не найден")
 
     _clear_failures(_get_client_ip(request), user.email)
+    trace.get_current_span().set_attributes({"user.id": user.id, "user.email": user.email})
+    logger.info("Tokens refreshed", extra={"user_id": user.id, "email": user.email})
     return _issue_token_pair(user)
 
 @router.delete("/{user_id}")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,11 +9,13 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
+from opentelemetry import trace
+
 import models
 import settings
 from cache import cache
 from database import engine
-from logging_config import configure_logging
+from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
 from routes import (
     admin,
@@ -35,6 +38,27 @@ logger = logging.getLogger(__name__)
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+
+@app.middleware("http")
+async def enrich_request_context(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    trace_id = request.headers.get("X-Trace-Id")
+    tokens = set_request_context(request_id=request_id, trace_id=trace_id)
+    request.state.request_id = request_id
+
+    try:
+        response = await call_next(request)
+        current_span = trace.get_current_span()
+        span_context = current_span.get_span_context()
+        if span_context and span_context.is_valid:
+            trace_id = format(span_context.trace_id, "032x")
+        response.headers["X-Request-ID"] = request_id
+        if trace_id:
+            response.headers["X-Trace-Id"] = trace_id
+        return response
+    finally:
+        reset_request_context(*tokens)
 
 # Разрешаем CORS для доверенных источников
 app.add_middleware(

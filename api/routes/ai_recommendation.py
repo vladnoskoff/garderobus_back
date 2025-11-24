@@ -17,6 +17,7 @@ import models
 import schemas
 from celery_app import celery_app
 from database import get_db
+from opentelemetry import trace
 from tasks.ai import generate_mannequin_task, generate_recommendation_task
 from .location_utils import ensure_location_for_user
 
@@ -144,6 +145,13 @@ async def _enqueue_task(
     request: Request,
     task_kwargs: dict[str, Any],
 ) -> schemas.TaskSubmissionResponse:
+    current_span = trace.get_current_span()
+    current_span.set_attributes({
+        "ai.task_name": getattr(task, "name", task.__name__),
+        "ai.user_id": task_kwargs.get("user_id"),
+        "ai.location_id": task_kwargs.get("location_id"),
+    })
+
     try:
         async_result = task.delay(**task_kwargs)
     except (KombuOperationalError, CeleryError):
@@ -152,6 +160,7 @@ async def _enqueue_task(
             "Failed to enqueue Celery task %s; executing inline due to queue error",
             task_name,
             exc_info=True,
+            extra={"user_id": task_kwargs.get("user_id"), "location_id": task_kwargs.get("location_id")},
         )
         task_id = f"inline-{uuid4()}"
         INLINE_TASK_RESULTS[task_id] = schemas.TaskStatusResponse(
@@ -162,6 +171,15 @@ async def _enqueue_task(
         asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
         return _submission_response(task_id, request)
 
+    logger.info(
+        "Queued AI task",
+        extra={
+            "task_id": async_result.id,
+            "task_name": getattr(task, "name", task.__name__),
+            "user_id": task_kwargs.get("user_id"),
+            "location_id": task_kwargs.get("location_id"),
+        },
+    )
     return _submission_response(async_result.id, request)
 
 
