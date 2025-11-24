@@ -293,6 +293,18 @@ class AppLocalizations {
         key;
   }
 
+  String getStringWithPlaceholder(String key, String value) {
+    return getString(key).replaceFirst('{source}', value);
+  }
+
+  String getStringWithPlaceholders(String key, Map<String, String> placeholders) {
+    var result = getString(key);
+    placeholders.forEach((placeholder, value) {
+      result = result.replaceAll('{$placeholder}', value);
+    });
+    return result;
+  }
+
   String get appTitle => getString('app_title');
   String get settingsTitle => getString('settings_title');
   String get settingsAccount => getString('settings_account');
