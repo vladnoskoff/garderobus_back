@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 import importlib
 import importlib.util
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
@@ -40,6 +40,25 @@ _auth_lockouts = Counter(
     labelnames=("dimension",),
 )
 
+_celery_retries = Counter(
+    "celery_task_retries_total",
+    "Total number of Celery task retries",
+    labelnames=("task",),
+)
+_celery_dead_letters = Counter(
+    "celery_task_dead_letter_total",
+    "Total number of tasks forwarded to the dead-letter queue",
+    labelnames=("task",),
+)
+_celery_queue_depth = Gauge(
+    "celery_queue_depth", "Current queue depth as reported by broker", labelnames=("queue",)
+)
+_celery_latency = Histogram(
+    "celery_task_latency_seconds",
+    "Time spent waiting in queue + executing Celery task",
+    labelnames=("task",),
+)
+
 
 def get_rate_limiter() -> Limiter:
     return _limiter
@@ -51,6 +70,22 @@ def record_auth_failure(reason: str) -> None:
 
 def record_auth_lockout(dimension: str) -> None:
     _auth_lockouts.labels(dimension=dimension).inc()
+
+
+def record_celery_retry(task_name: str) -> None:
+    _celery_retries.labels(task=task_name).inc()
+
+
+def record_dead_letter(task_name: str) -> None:
+    _celery_dead_letters.labels(task=task_name).inc()
+
+
+def observe_celery_latency(task_name: str, latency_seconds: float) -> None:
+    _celery_latency.labels(task=task_name).observe(latency_seconds)
+
+
+def report_queue_depth(queue: str, depth: int) -> None:
+    _celery_queue_depth.labels(queue=queue).set(depth)
 
 
 def _user_or_ip_key(request: Request) -> str:

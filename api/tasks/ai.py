@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 from prometheus_client import Counter, Histogram
 from sqlalchemy.orm import joinedload
 
+import observability
 from celery_app import celery_app
 from database import db_session
 import models
@@ -107,16 +108,22 @@ def _run_with_metrics(task_name: str, func: Callable[[], Dict[str, Any]]) -> Dic
         result = func()
     except TaskError as exc:  # expected domain failure
         TASK_COMPLETED.labels(task_name, "error").inc()
-        TASK_DURATION.labels(task_name).observe(perf_counter() - started)
+        elapsed = perf_counter() - started
+        TASK_DURATION.labels(task_name).observe(elapsed)
+        observability.observe_celery_latency(task_name, elapsed)
         return exc.to_dict()
     except Exception:  # pragma: no cover - unexpected failures should retry
         TASK_COMPLETED.labels(task_name, "failure").inc()
-        TASK_DURATION.labels(task_name).observe(perf_counter() - started)
+        elapsed = perf_counter() - started
+        TASK_DURATION.labels(task_name).observe(elapsed)
+        observability.observe_celery_latency(task_name, elapsed)
         log.exception("Task %s failed with unexpected error", task_name)
         raise
     else:
         TASK_COMPLETED.labels(task_name, "success").inc()
-        TASK_DURATION.labels(task_name).observe(perf_counter() - started)
+        elapsed = perf_counter() - started
+        TASK_DURATION.labels(task_name).observe(elapsed)
+        observability.observe_celery_latency(task_name, elapsed)
         return {"status": "success", "result": result}
 
 
