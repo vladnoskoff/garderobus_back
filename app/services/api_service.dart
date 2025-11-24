@@ -789,6 +789,7 @@ class ApiService {
   static Future<Map<String, dynamic>> generateMannequin(
     int userId, {
     int? locationId,
+    void Function(double progress, String status)? onProgress,
   }) async {
     final baseUri = Uri.parse("$baseUrl/ai/mannequin/$userId");
     final lang = await _resolveLanguageCode();
@@ -806,11 +807,74 @@ class ApiService {
     }
 
     final dynamic data = json.decode(utf8.decode(response.bodyBytes));
-    if (data is Map) {
+    if (data is Map && data['task_id'] != null) {
+      final taskId = data['task_id'].toString();
+      return _pollTaskResult(
+        taskId,
+        onProgress: onProgress,
+      );
+    }
+
+    if (data is Map && data['image_url'] != null) {
       return data.map((key, value) => MapEntry(key.toString(), value));
     }
 
     throw Exception('Не удалось прочитать ответ при генерации манекена');
+  }
+
+  static Future<Map<String, dynamic>> getTaskStatus(String taskId) async {
+    final response = await http.get(Uri.parse("$baseUrl/ai/tasks/$taskId"));
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка при получении статуса задачи');
+    }
+
+    final dynamic data = json.decode(utf8.decode(response.bodyBytes));
+    if (data is Map<String, dynamic>) {
+      return data;
+    }
+
+    throw Exception('Некорректный ответ статуса задачи');
+  }
+
+  static Future<Map<String, dynamic>> _pollTaskResult(
+    String taskId, {
+    Duration timeout = const Duration(seconds: 90),
+    Duration interval = const Duration(seconds: 2),
+    void Function(double progress, String status)? onProgress,
+  }) async {
+    final startedAt = DateTime.now();
+
+    while (true) {
+      final statusResponse = await getTaskStatus(taskId);
+      final status = statusResponse['status']?.toString() ?? 'pending';
+      final elapsed = DateTime.now().difference(startedAt);
+      final normalizedProgress = (elapsed.inMilliseconds / timeout.inMilliseconds)
+          .clamp(0.0, 0.98);
+      onProgress?.call(normalizedProgress.toDouble(), status);
+
+      if (status == 'success') {
+        final result = statusResponse['result'];
+        if (result is Map) {
+          return result
+              .map((key, value) => MapEntry(key.toString(), value));
+        }
+        throw Exception('Сервер вернул пустой результат задачи');
+      }
+
+      if (status == 'failure') {
+        final errorDetail = statusResponse['error'];
+        final detailMessage = errorDetail is Map && errorDetail['detail'] != null
+            ? errorDetail['detail'].toString()
+            : 'Задача завершилась с ошибкой';
+        throw Exception(detailMessage);
+      }
+
+      if (elapsed >= timeout) {
+        throw Exception('Превышено время ожидания генерации манекена');
+      }
+
+      await Future.delayed(interval);
+    }
   }
 
   // Получить визуальное изображение наряда
