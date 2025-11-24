@@ -36,7 +36,7 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
   late final PageController _imagePageController;
   int _currentImageIndex = 0;
   bool _isLoading = false;
-  bool _useAiAutoFill = false;
+  bool _useAiAutoFill = true;
   int? _selectedLocationId;
   List<dynamic> _locations = [];
   bool _isLocationsLoading = false;
