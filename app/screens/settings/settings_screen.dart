@@ -756,38 +756,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               }
 
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.settingsLanguage,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 20),
-                  for (final locale in LanguageNotifier.supportedLocales) ...[
-                    buildOption(locale),
-                    if (locale != LanguageNotifier.supportedLocales.last)
-                      const SizedBox(height: 12),
-                  ],
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(sheetContext),
-                        child: Text(l10n.settingsCancel),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(sheetContext, tempLocale),
-                        child: Text(l10n.settingsSave),
-                      ),
+              final hasChanges = tempLocale != languageNotifier.locale;
+
+              return SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.settingsLanguage,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 20),
+                    for (final locale in LanguageNotifier.supportedLocales) ...[
+                      buildOption(locale),
+                      if (locale != LanguageNotifier.supportedLocales.last)
+                        const SizedBox(height: 12),
                     ],
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: Text(l10n.settingsCancel),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: hasChanges
+                                ? () => Navigator.pop(sheetContext, tempLocale)
+                                : null,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                            child: Text(l10n.settingsSave),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               );
             },
           ),
