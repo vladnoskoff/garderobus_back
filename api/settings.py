@@ -109,6 +109,26 @@ JAEGER_AGENT_PORT = int(os.getenv("JAEGER_AGENT_PORT", "6831"))
 OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 OTEL_EXPORTER_OTLP_HEADERS = os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
 
+# Hot-path profiling
+PROFILING_ENABLED = os.getenv("PROFILING_ENABLED", "false").lower() == "true"
+PROFILING_ENDPOINT_PREFIXES = [
+    prefix.strip()
+    for prefix in os.getenv(
+        "PROFILING_ENDPOINT_PREFIXES",
+        "/clothes/user,/outfits/history,/weather/user",
+    ).split(",")
+    if prefix.strip()
+]
+PROFILING_OUTPUT_DIR = Path(
+    os.getenv("PROFILING_OUTPUT_DIR", str(BASE_DIR / "logs" / "profiles"))
+)
+PROFILING_SAMPLING_INTERVAL = float(
+    os.getenv("PROFILING_SAMPLING_INTERVAL", "0.001")
+)
+PROFILING_WRITE_FLAMEGRAPH = (
+    os.getenv("PROFILING_WRITE_FLAMEGRAPH", "true").lower() == "true"
+)
+
 # HTTP client resilience
 HTTP_CLIENT_TIMEOUT = float(os.getenv("HTTP_CLIENT_TIMEOUT", "5.0"))
 HTTP_CLIENT_CIRCUIT_MAX_FAILURES = int(os.getenv("HTTP_CLIENT_CIRCUIT_MAX_FAILURES", "5"))
@@ -136,6 +156,11 @@ CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "garderobus")
 CACHE_INVALIDATION_BATCH_SIZE = int(
     os.getenv("CACHE_INVALIDATION_BATCH_SIZE", "50")
 )
+CACHE_USE_LOCAL_FALLBACK = (
+    os.getenv("CACHE_USE_LOCAL_FALLBACK", "true").lower() == "true"
+)
+CACHE_LOCAL_TTL = int(os.getenv("CACHE_LOCAL_TTL", "60"))
+CACHE_MAX_CONNECTIONS = int(os.getenv("CACHE_MAX_CONNECTIONS", "50"))
 
 # Static content caching / CDN hints
 STATIC_CACHE_CONTROL = os.getenv(
