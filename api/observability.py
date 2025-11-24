@@ -8,13 +8,13 @@ from typing import Callable, Optional
 import jwt
 from fastapi import FastAPI, HTTPException, Request
 from opentelemetry import trace
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+import importlib
+import importlib.util
 from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter
@@ -95,6 +95,15 @@ def setup_metrics(app: FastAPI) -> None:
     logger.info("Prometheus metrics instrumentation enabled")
 
 
+def _load_exporter(module_path: str, class_name: str):
+    if importlib.util.find_spec(module_path) is None:
+        raise RuntimeError(
+            f"Exporter dependency {module_path} is not installed; check requirements."
+        )
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
+
+
 def setup_tracing(app: FastAPI) -> None:
     """Configure OpenTelemetry tracing with Jaeger exporter when enabled."""
 
@@ -112,13 +121,19 @@ def setup_tracing(app: FastAPI) -> None:
     _tracer_provider = TracerProvider(resource=tracer_resource)
 
     if settings.OTEL_EXPORTER_OTLP_ENDPOINT:
-        exporter = OTLPSpanExporter(
+        otlp_exporter_cls = _load_exporter(
+            "opentelemetry.exporter.otlp.proto.http.trace_exporter", "OTLPSpanExporter"
+        )
+        exporter = otlp_exporter_cls(
             endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
             headers=_parse_otlp_headers(settings.OTEL_EXPORTER_OTLP_HEADERS),
         )
         exporter_name = "otlp"
     else:
-        exporter = JaegerExporter(
+        jaeger_exporter_cls = _load_exporter(
+            "opentelemetry.exporter.jaeger.thrift", "JaegerExporter"
+        )
+        exporter = jaeger_exporter_cls(
             agent_host_name=settings.JAEGER_AGENT_HOST,
             agent_port=settings.JAEGER_AGENT_PORT,
         )
