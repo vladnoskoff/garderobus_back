@@ -14,6 +14,66 @@ Future<bool?> showClothesDetailSheet(BuildContext context, Clothes clothes) {
   );
 }
 
+class ClothesDetailScreen extends StatefulWidget {
+  const ClothesDetailScreen({super.key, required this.clothesId});
+
+  final int clothesId;
+
+  @override
+  State<ClothesDetailScreen> createState() => _ClothesDetailScreenState();
+}
+
+class _ClothesDetailScreenState extends State<ClothesDetailScreen> {
+  late final Future<Clothes> _clothesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _clothesFuture = ApiService.getClothesById(widget.clothesId);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Детали вещи'),
+      ),
+      body: FutureBuilder<Clothes>(
+        future: _clothesFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'Не удалось загрузить вещь: ${snapshot.error}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
+          }
+
+          final clothes = snapshot.data;
+          if (clothes == null) {
+            return const Center(child: Text('Вещь не найдена'));
+          }
+
+          return SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: _ClothesDetailSheet(clothes: clothes),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _ClothesDetailSheet extends StatefulWidget {
   const _ClothesDetailSheet({required this.clothes});
 
@@ -337,6 +397,7 @@ class _ClothesDetailSheetState extends State<_ClothesDetailSheet> {
 
     return FractionallySizedBox(
       heightFactor: 0.94,
+      alignment: Alignment.topCenter,
       child: Stack(
         children: [
           ClipRRect(
