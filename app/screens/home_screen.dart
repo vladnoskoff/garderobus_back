@@ -145,9 +145,9 @@ class _MannequinImageViewer extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text(
-          'Просмотр манекена',
-          style: TextStyle(color: Colors.white),
+        title: Text(
+          context.l10n.getString('home_mannequin_preview'),
+          style: const TextStyle(color: Colors.white),
         ),
       ),
       body: Center(
@@ -175,6 +175,7 @@ class _MannequinImageViewer extends StatelessWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  AppLocalizations get l10n => context.l10n;
   Map<String, dynamic>? weather;
   List<Map<String, dynamic>> mannequins = [];
   String? weatherComment;
@@ -186,7 +187,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool isLocationsLoading = false;
   bool isMannequinsLoading = false;
   double mannequinProgress = 0;
-  String mannequinStatusText = 'Готовим образ...';
+  String mannequinStatusKey = 'home_outfit_preparing';
+  String get mannequinStatusText => l10n.getString(mannequinStatusKey);
   String? mannequinsError;
   Timer? _weatherTimer;
   late Future<void> _initialLoadFuture;
@@ -355,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
       debugPrint('Ошибка пакетного обновления: $e');
       if (mounted) {
         setState(() {
-          mannequinsError = 'Не удалось обновить данные';
+          mannequinsError = l10n.getString('home_mannequins_update_failed');
         });
       }
     } finally {
@@ -476,7 +478,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           mannequins = [];
-          mannequinsError = 'Не удалось загрузить историю манекенов';
+          mannequinsError =
+              l10n.getString('home_mannequin_history_load_failed');
         });
       }
     } finally {
@@ -495,7 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
         isMannequinsLoading = true;
         mannequinsError = null;
         mannequinProgress = 0.05;
-        mannequinStatusText = 'Запускаем генерацию...';
+        mannequinStatusKey = 'home_mannequin_generation_starting';
       });
 
       final locationIdForRequest = _locationIdForRequests();
@@ -506,7 +509,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!mounted) return;
           setState(() {
             mannequinProgress = progress;
-            mannequinStatusText = _resolveMannequinStatusText(status);
+            mannequinStatusKey = _resolveMannequinStatusKey(status);
           });
         },
       );
@@ -515,14 +518,14 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         mannequins = [mannequin];
         mannequinProgress = 1;
-        mannequinStatusText = 'Готово';
+        mannequinStatusKey = 'home_outfit_ready';
       });
     } catch (e) {
       debugPrint('Ошибка при генерации манекена: $e');
       if (!mounted) return;
       setState(() {
-        mannequinsError = 'Не удалось создать манекен. Попробуйте снова.';
-        mannequinStatusText = 'Ошибка';
+        mannequinsError = l10n.getString('home_mannequin_create_failed');
+        mannequinStatusKey = 'home_mannequin_error_label';
         mannequinProgress = 0;
       });
     } finally {
@@ -540,33 +543,32 @@ class _HomeScreenState extends State<HomeScreen> {
     final condition = weather['condition']?.toString().toLowerCase() ?? '';
 
     if (temp == null) {
-      return 'Следите за погодой и подбирайте одежду по ощущениям.';
+      return l10n.getString('home_recommendation_default');
     }
 
     String recommendation;
     if (temp < -10) {
-      recommendation = 'Экстремальный холод — утепляйтесь по максимуму.';
+      recommendation = l10n.getString('home_recommendation_extreme_cold');
     } else if (temp < 0) {
-      recommendation =
-          'Очень холодно, одевайтесь теплее и добавьте аксессуары для защиты от мороза.';
+      recommendation = l10n.getString('home_recommendation_very_cold');
     } else if (temp < 10) {
-      recommendation = 'Прохладно — наденьте тёплый верхний слой.';
+      recommendation = l10n.getString('home_recommendation_cool');
     } else if (temp < 18) {
-      recommendation = 'Лёгкая прохлада, возьмите ветровку или кардиган.';
+      recommendation = l10n.getString('home_recommendation_light_cool');
     } else if (temp < 25) {
-      recommendation = 'Комфортно, можно выбрать лёгкий повседневный образ.';
+      recommendation = l10n.getString('home_recommendation_comfortable');
     } else {
-      recommendation = 'Жарко, выбирайте лёгкие ткани и дышащую одежду.';
+      recommendation = l10n.getString('home_recommendation_hot');
     }
 
     if (condition.contains('дожд') || condition.contains('rain')) {
-      recommendation += ' Возьмите зонт или дождевик.';
+      recommendation += ' ${l10n.getString('home_recommendation_rain_add')}';
     } else if (condition.contains('снег') || condition.contains('snow')) {
-      recommendation += ' Не забудьте тёплую верхнюю одежду и обувь для снега.';
+      recommendation += ' ${l10n.getString('home_recommendation_snow_add')}';
     }
 
     if (wind >= 8) {
-      recommendation += ' На улице ветрено — выбирайте закрытые верхние слои.';
+      recommendation += ' ${l10n.getString('home_recommendation_wind_add')}';
     }
 
     return recommendation;
@@ -1532,21 +1534,21 @@ class _HomeScreenState extends State<HomeScreen> {
     return value.toString();
   }
 
-  String _resolveMannequinStatusText(String status) {
+  String _resolveMannequinStatusKey(String status) {
     switch (status) {
       case 'started':
-        return 'Подбираем вещи...';
+        return 'home_outfit_collecting_items';
       case 'pending':
       case 'queued':
-        return 'Задача в очереди';
+        return 'home_outfit_queued';
       case 'progress':
-        return 'Генерируем изображение';
+        return 'home_outfit_rendering';
       case 'success':
-        return 'Готово';
+        return 'home_outfit_ready';
       case 'failure':
-        return 'Ошибка генерации';
+        return 'home_outfit_error';
       default:
-        return 'Готовим образ...';
+        return 'home_outfit_preparing';
     }
   }
 
