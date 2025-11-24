@@ -375,16 +375,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required List<Widget> children,
   }) {
     final colorScheme = Theme.of(context).colorScheme;
-    final baseColor = colorScheme.surfaceVariant;
+    final baseColor = colorScheme.surfaceContainerHighest;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
         gradient: LinearGradient(
-          colors: [
-            baseColor.withOpacity(0.7),
-            baseColor,
-            accentColor.withOpacity(0.22),
-          ],
+            colors: [
+              baseColor.withValues(alpha: 0.7),
+              baseColor,
+              accentColor.withValues(alpha: 0.22),
+            ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -457,7 +457,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Widget _buildDivider(ColorScheme colorScheme) {
     return Divider(
-      color: colorScheme.outlineVariant.withOpacity(0.6),
+      color: colorScheme.outlineVariant.withValues(alpha: 0.6),
       height: 4,
       thickness: 1,
     );
@@ -568,18 +568,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: selected
-                          ? colorScheme.primary.withOpacity(0.08)
-                          : colorScheme.surfaceVariant.withOpacity(0.2),
-                      border: Border.all(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
                         color: selected
-                            ? colorScheme.primary
-                            : colorScheme.outlineVariant.withOpacity(0.2),
-                        width: 1.4,
+                            ? colorScheme.primary.withValues(alpha: 0.08)
+                            : colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.2),
+                        border: Border.all(
+                          color: selected
+                              ? colorScheme.primary
+                              : colorScheme.outlineVariant.withValues(alpha: 0.2),
+                          width: 1.4,
+                        ),
                       ),
-                    ),
                     child: Row(
                       children: [
                         Icon(icon, color: colorScheme.primary),
@@ -695,18 +696,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      color: selected
-                          ? colorScheme.primary.withOpacity(0.08)
-                          : colorScheme.surfaceVariant.withOpacity(0.2),
-                      border: Border.all(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(18),
                         color: selected
-                            ? colorScheme.primary
-                            : colorScheme.outlineVariant.withOpacity(0.2),
-                        width: 1.4,
+                            ? colorScheme.primary.withValues(alpha: 0.08)
+                            : colorScheme.surfaceContainerHighest
+                                .withValues(alpha: 0.2),
+                        border: Border.all(
+                          color: selected
+                              ? colorScheme.primary
+                              : colorScheme.outlineVariant.withValues(alpha: 0.2),
+                          width: 1.4,
+                        ),
                       ),
-                    ),
                     child: Row(
                       children: [
                         Icon(Icons.language_outlined, color: colorScheme.primary),
@@ -779,12 +781,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (selectedLocale != null && selectedLocale != languageNotifier.locale) {
       try {
         await languageNotifier.setLocale(selectedLocale);
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.languageUpdated)),
         );
       } catch (_) {
-        if (!mounted) return;
+        if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.languageUpdateFailed)),
         );
@@ -803,7 +805,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case ThemeMode.light:
         return l10n.settingsThemeLight;
       case ThemeMode.system:
-      default:
         return l10n.settingsThemeSystem;
     }
   }
@@ -815,7 +816,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       case ThemeMode.light:
         return Icons.light_mode_outlined;
       case ThemeMode.system:
-      default:
         return Icons.brightness_auto;
     }
   }
@@ -1403,6 +1403,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _handleSyncStatusChanged() async {
+    if (!SyncService.instance.isSyncing.value && _userId != null) {
+      await _refreshPendingFields(_userId!);
+      if (NetworkService.isOnline.value) {
+        await _loadAccountData();
+      }
+    }
+  }
+
   Future<void> _loadSelectedLocationName(int userId) async {
     if (!mounted) return;
     setState(() {
@@ -1507,7 +1516,7 @@ class _QuickActionButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
-    final backgroundColor = color.withOpacity(0.85);
+    final backgroundColor = color.withValues(alpha: 0.85);
     final brightness = ThemeData.estimateBrightnessForColor(backgroundColor);
     final foregroundColor =
         brightness == Brightness.dark ? Colors.white : Colors.black87;
