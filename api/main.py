@@ -17,6 +17,7 @@ from cache import cache
 from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
+from profiling import setup_profiling
 from routes import build_versioned_router
 from static_files import CDNStaticFiles
 
@@ -87,6 +88,7 @@ app.include_router(build_versioned_router("/v2"))
 app.include_router(build_versioned_router(deprecated=True))
 
 configure_observability(app)
+setup_profiling(app)
 
 logger.info(
     "Smart Closet API initialised",

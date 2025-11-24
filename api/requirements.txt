@@ -25,3 +25,4 @@ opentelemetry-exporter-jaeger
 opentelemetry-exporter-otlp
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-requests
+pyinstrument

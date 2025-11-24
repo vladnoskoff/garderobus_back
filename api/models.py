@@ -226,6 +226,7 @@ class WearHistory(Base):
     __table_args__ = (
         Index("ix_wear_history_user_clothing", "user_id", "clothing_id"),
         Index("ix_wear_history_clothing_worn_at", "clothing_id", "worn_at"),
+        Index("ix_wear_history_user_worn_at", "user_id", "worn_at"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -267,6 +268,9 @@ class ClothesMetadata(Base):
 
 class WardrobeLocation(Base):
     __tablename__ = "wardrobe_locations"
+    __table_args__ = (
+        Index("ix_locations_user_created_at", "user_id", "created_at"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(

@@ -1,0 +1,24 @@
+name: Performance regression
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/load/**'
+      - 'api/**'
+      - '.github/workflows/performance-regression.yml'
+
+jobs:
+  k6-smoke:
+    if: ${{ secrets.PERF_BASE_URL != '' }}
+    runs-on: ubuntu-latest
+    env:
+      API_BASE_URL: ${{ secrets.PERF_BASE_URL }}
+      TEST_USER_ID: ${{ secrets.PERF_TEST_USER_ID || '1' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run k6 regression thresholds
+        uses: grafana/k6-action@v0.2.0
+        with:
+          filename: tests/load/outfit_history.js
