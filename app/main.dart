@@ -36,80 +36,31 @@ class WardrobeApp extends StatelessWidget {
 
   const WardrobeApp({super.key, required this.themeNotifier, required this.languageNotifier});
 
-  ThemeData _buildLightTheme() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF3F51B5),
-      brightness: Brightness.light,
+  ThemeData _buildTheme(Brightness brightness) {
+    final isLight = brightness == Brightness.light;
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: isLight ? const Color(0xFF2B3A67) : const Color(0xFF8FB7FF),
+      brightness: brightness,
     );
-    return ThemeData(
-      colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.background,
-      useMaterial3: true,
-      appBarTheme: AppBarTheme(
-        backgroundColor: scheme.surface,
-        foregroundColor: scheme.onSurface,
-        elevation: 0,
-        titleTextStyle: TextStyle(
-          color: scheme.onSurface,
-          fontWeight: FontWeight.w600,
-          fontSize: 18,
-        ),
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: Colors.transparent,
-        surfaceTintColor: Colors.transparent,
-        height: 70,
-        elevation: 0,
-        indicatorShape: const StadiumBorder(),
-        labelTextStyle: MaterialStateProperty.all(
-          TextStyle(
-            fontWeight: FontWeight.w600,
-            color: scheme.onSurface,
-          ),
-        ),
-        iconTheme: MaterialStateProperty.resolveWith(
-          (states) => IconThemeData(
-            color: states.contains(MaterialState.selected)
-                ? scheme.onPrimary
-                : scheme.onSurfaceVariant,
-          ),
-        ),
-      ),
-      cardTheme: CardTheme(
-        color: scheme.surface,
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: scheme.surfaceVariant,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: scheme.primary, width: 2),
-        ),
-      ),
+    final textTheme = (isLight
+            ? Typography.material2021().black
+            : Typography.material2021().white)
+        .apply(
+      fontSizeFactor: 1.05,
+      bodyColor: colorScheme.onSurface,
+      displayColor: colorScheme.onSurface,
     );
-  }
 
-  ThemeData _buildDarkTheme() {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF90CAF9),
-      brightness: Brightness.dark,
-    );
     return ThemeData(
-      colorScheme: scheme,
-      scaffoldBackgroundColor: scheme.background,
+      colorScheme: colorScheme,
+      scaffoldBackgroundColor: colorScheme.background,
       useMaterial3: true,
+      textTheme: textTheme,
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        foregroundColor: scheme.onSurface,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         elevation: 0,
-        titleTextStyle: TextStyle(
-          color: scheme.onSurface,
-          fontWeight: FontWeight.w600,
-          fontSize: 18,
-        ),
+        titleTextStyle: textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.transparent,
@@ -118,32 +69,45 @@ class WardrobeApp extends StatelessWidget {
         elevation: 0,
         indicatorShape: const StadiumBorder(),
         labelTextStyle: MaterialStateProperty.all(
-          TextStyle(
-            fontWeight: FontWeight.w600,
-            color: scheme.onSurface,
-          ),
+          textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         iconTheme: MaterialStateProperty.resolveWith(
           (states) => IconThemeData(
             color: states.contains(MaterialState.selected)
-                ? scheme.onPrimary
-                : scheme.onSurfaceVariant,
+                ? colorScheme.onPrimary
+                : colorScheme.onSurfaceVariant,
           ),
         ),
       ),
       cardTheme: CardTheme(
-        color: scheme.surface,
-        elevation: 1,
+        color: colorScheme.surface,
+        elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shadowColor: colorScheme.shadow.withOpacity(0.08),
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(48),
+          textStyle: textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: scheme.surfaceVariant,
+        fillColor: colorScheme.surfaceVariant,
+        labelStyle: textTheme.labelLarge,
+        floatingLabelStyle:
+            textTheme.labelLarge?.copyWith(color: colorScheme.onSurface),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: scheme.primary, width: 2),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
         ),
+      ),
+      tooltipTheme: TooltipThemeData(
+        textStyle:
+            textTheme.labelSmall?.copyWith(color: colorScheme.onInverseSurface),
       ),
     );
   }
@@ -161,8 +125,8 @@ class WardrobeApp extends StatelessWidget {
               debugShowCheckedModeBanner: false,
               onGenerateTitle: (context) => context.l10n.appTitle,
               themeMode: themeNotifier.themeMode,
-              theme: _buildLightTheme(),
-              darkTheme: _buildDarkTheme(),
+              theme: _buildTheme(Brightness.light),
+              darkTheme: _buildTheme(Brightness.dark),
               locale: languageNotifier.locale,
               supportedLocales: LanguageNotifier.supportedLocales,
               localizationsDelegates: const [

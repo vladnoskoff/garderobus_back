@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import 'package:flutter/widgets.dart';
 
 class AppLocalizations {
@@ -13,6 +15,7 @@ class AppLocalizations {
   static const _localizedValues = <String, Map<String, String>>{
     'ru': {
       'app_title': 'Гардероб 26',
+      'home_refresh_mannequin': 'Обновить манекен',
       'settings_title': 'Настройки',
       'settings_account': 'Аккаунт',
       'settings_home': 'Дом',
@@ -115,9 +118,22 @@ class AppLocalizations {
       'auth_passwords_match': 'Пароли совпадают',
       'auth_passwords_mismatch': 'Пароли не совпадают',
       'auth_location_error': 'Не удалось создать стартовую локацию: {error}',
+      'auth_pin_length_error': 'Введите PIN-код из 4–8 цифр.',
+      'auth_pin_verify_error': 'Не удалось проверить PIN-код: {error}',
+      'auth_pin_verify_generic': 'Не удалось проверить PIN-код. Попробуйте позже.',
+      'auth_pin_prompt': 'Введите PIN-код',
+      'auth_pin_hint': 'Для продолжения требуется подтверждение безопасности.',
+      'auth_pin_label': 'PIN-код',
+      'auth_unlock_action': 'Разблокировать',
+      'auth_exit_action': 'Выйти',
+      'auth_pin_invalid': 'Неверный PIN-код. Попробуйте ещё раз.',
+      'auth_biometric_reason': 'Подтвердите личность для доступа к гардеробу',
+      'auth_biometric_failed':
+          'Биометрическая аутентификация не выполнена. Введите PIN-код.',
     },
     'en': {
       'app_title': 'Wardrobe 26',
+      'home_refresh_mannequin': 'Refresh mannequin',
       'settings_title': 'Settings',
       'settings_account': 'Account',
       'settings_home': 'Home',
@@ -220,8 +236,23 @@ class AppLocalizations {
       'auth_passwords_match': 'Passwords match',
       'auth_passwords_mismatch': 'Passwords do not match',
       'auth_location_error': 'Failed to create initial location: {error}',
+      'auth_pin_length_error': 'Enter a 4–8 digit PIN code.',
+      'auth_pin_verify_error': 'Could not verify PIN code: {error}',
+      'auth_pin_verify_generic': 'Unable to verify the PIN code. Please try later.',
+      'auth_pin_prompt': 'Enter PIN code',
+      'auth_pin_hint': 'Security confirmation is required to continue.',
+      'auth_pin_label': 'PIN code',
+      'auth_unlock_action': 'Unlock',
+      'auth_exit_action': 'Sign out',
+      'auth_pin_invalid': 'Incorrect PIN code. Please try again.',
+      'auth_biometric_reason': 'Confirm your identity to access the wardrobe',
+      'auth_biometric_failed':
+          'Biometric authentication failed. Please enter your PIN code.',
     },
   };
+
+  static Map<String, Map<String, String>> get localizedValues =>
+      UnmodifiableMapView(_localizedValues);
 
   static AppLocalizations of(BuildContext context) {
     final localizations = Localizations.of<AppLocalizations>(context, AppLocalizations);
@@ -340,6 +371,19 @@ class AppLocalizations {
   String get authPasswordsMismatch => getString('auth_passwords_mismatch');
   String authLocationError(String error) =>
       getString('auth_location_error').replaceFirst('{error}', error);
+  String get authPinLengthError => getString('auth_pin_length_error');
+  String authPinVerifyError(String error) =>
+      getString('auth_pin_verify_error').replaceFirst('{error}', error);
+  String get authPinVerifyGeneric => getString('auth_pin_verify_generic');
+  String get authPinPrompt => getString('auth_pin_prompt');
+  String get authPinHint => getString('auth_pin_hint');
+  String get authPinLabel => getString('auth_pin_label');
+  String get authUnlockAction => getString('auth_unlock_action');
+  String get authExitAction => getString('auth_exit_action');
+  String get authPinInvalid => getString('auth_pin_invalid');
+  String get authBiometricReason => getString('auth_biometric_reason');
+  String get authBiometricFailed => getString('auth_biometric_failed');
+  String get homeRefreshMannequin => getString('home_refresh_mannequin');
 
   String languageName(String code) {
     switch (code) {
