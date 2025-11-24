@@ -16,6 +16,9 @@ class AppLocalizations {
     'ru': {
       'app_title': 'Гардероб 26',
       'home_refresh_mannequin': 'Обновить манекен',
+      'nav_home': 'Главная',
+      'nav_wardrobe': 'Гардероб',
+      'nav_settings': 'Настройки',
       'settings_title': 'Настройки',
       'settings_account': 'Аккаунт',
       'settings_home': 'Дом',
@@ -130,10 +133,142 @@ class AppLocalizations {
       'auth_biometric_reason': 'Подтвердите личность для доступа к гардеробу',
       'auth_biometric_failed':
           'Биометрическая аутентификация не выполнена. Введите PIN-код.',
+      'support_section_title': 'Помощь и поддержка',
+      'support_contact_action': 'Написать в поддержку',
+      'support_contact_settings_hint':
+          'Опишите проблему — мы автоматически добавим модель устройства и версию системы.',
+      'support_contact_login_hint':
+          'Не получается войти? Напишите нам, и мы поможем.',
+      'support_email_subject': 'Запрос в поддержку: {source}',
+      'support_email_body':
+          'Опишите проблему или вопрос ниже.\n\n---\nМодель устройства: {model}\nВерсия системы: {osVersion}',
+      'support_email_source_settings': 'Настройки',
+      'support_email_source_login': 'Экран входа',
+      'support_email_launch_error':
+          'Не удалось открыть почтовое приложение. Проверьте настройки почты.',
+      'location_picker_title': 'Выбор координат',
+      'location_picker_selected': 'Выбранные координаты',
+      'location_picker_hint': 'Нажмите на карту, чтобы изменить точку.',
+      'location_picker_confirm': 'Сохранить координаты',
+      'home_mannequin_preview': 'Просмотр манекена',
+      'home_mannequin_status_preparing': 'Готовим образ...',
+      'home_mannequin_status_collecting': 'Подбираем вещи...',
+      'home_mannequin_status_queue': 'Задача в очереди',
+      'home_mannequin_status_rendering': 'Генерируем изображение',
+      'home_mannequin_status_ready': 'Готово',
+      'home_mannequin_status_error': 'Ошибка генерации',
+      'home_mannequins_update_failed': 'Не удалось обновить данные',
+      'home_mannequin_history_load_failed':
+          'Не удалось загрузить историю манекенов',
+      'home_mannequin_generation_starting': 'Запускаем генерацию...',
+      'home_mannequin_create_failed':
+          'Не удалось создать манекен. Попробуйте снова.',
+      'home_mannequin_error_label': 'Ошибка',
+      'home_recommendation_default':
+          'Следите за погодой и подбирайте одежду по ощущениям.',
+      'home_recommendation_extreme_cold':
+          'Экстремальный холод — утепляйтесь по максимуму.',
+      'home_recommendation_very_cold':
+          'Очень холодно, одевайтесь теплее и добавьте аксессуары для защиты от мороза.',
+      'home_recommendation_cool': 'Прохладно — наденьте тёплый верхний слой.',
+      'home_recommendation_light_cool':
+          'Лёгкая прохлада, возьмите ветровку или кардиган.',
+      'home_recommendation_comfortable':
+          'Комфортно, можно выбрать лёгкий повседневный образ.',
+      'home_recommendation_hot':
+          'Жарко, выбирайте лёгкие ткани и дышащую одежду.',
+      'home_recommendation_rain_add': 'Возьмите зонт или дождевик.',
+      'home_recommendation_snow_add':
+          'Не забудьте тёплую верхнюю одежду и обувь для снега.',
+      'home_recommendation_wind_add':
+          'На улице ветрено — выбирайте закрытые верхние слои.',
+      'home_mannequin_title': 'Манекен',
+      'home_item_placeholder_name': 'Вещь',
+      'home_outfit_details_pending': 'Состав образа уточняется...',
+      'home_item_missing_for_preview':
+          'Не удалось определить вещь для просмотра.',
+      'home_item_open_error': 'Не удалось открыть вещь: {error}',
+      'home_sync_banner_syncing': 'Идет синхронизация локальных данных',
+      'home_sync_banner_offline':
+          'Вы офлайн — изменения будут отправлены при появлении связи',
+      'home_settings_tooltip': 'Настройки',
+      'home_use_personal_coords': 'Использовать личные координаты',
+      'home_location_untitled': 'Без названия',
+      'home_location_missing_coords': ' (нет координат)',
+      'home_places_title': 'Дом и места',
+      'home_places_description':
+          'Выберите гардероб для погоды и рекомендаций.',
+      'home_places_manage': 'Управлять',
+      'home_places_add_address_hint':
+          'Добавьте адрес в настройках, чтобы выбрать конкретный гардероб.',
+      'home_weather_now': 'Погода сейчас',
+      'home_weather_humidity': 'Влажность',
+      'home_weather_pressure': 'Давление',
+      'home_weather_pressure_value': '{value} мм рт. ст.',
+      'home_weather_wind': 'Ветер',
+      'home_weather_wind_value': '{value} м/с',
+      'home_weather_forecast_hint':
+          'Нажмите, чтобы посмотреть подробный прогноз и погоду на неделю',
+      'home_weather_forecast_title': 'Прогноз погоды',
+      'common_close': 'Закрыть',
+      'home_feels_like': 'Ощущается как {value}°C',
+      'home_week_forecast_title': 'Прогноз на неделю',
+      'home_outfit_of_day': 'Образ дня',
+      'home_outfit_refresh_hint':
+          'Нажмите «Обновить», чтобы ИИ подобрал образ под вашу погоду и гардероб.',
+      'home_outfit_collecting_items': 'Подбираем вещи...',
+      'home_outfit_queued': 'Задача в очереди',
+      'home_outfit_rendering': 'Генерируем изображение',
+      'home_outfit_ready': 'Готово',
+      'home_outfit_error': 'Ошибка генерации',
+      'home_outfit_preparing': 'Готовим образ...',
+      'wardrobe_user_not_found': 'Пользователь не найден',
+      'wardrobe_invalid_user_id': 'Некорректный идентификатор пользователя',
+      'wardrobe_locations_load_failed': 'Не удалось загрузить локации: {error}',
+      'wardrobe_syncing_queue': 'Синхронизация очереди действий',
+      'wardrobe_offline_hint':
+          'Офлайн-режим: новые изменения помечены как ожидающие',
+      'wardrobe_clothes_load_failed': 'Ошибка при загрузке одежды: {error}',
+      'wardrobe_filters_title': 'Фильтры гардероба',
+      'wardrobe_filters_subtitle': 'Сужайте подборку по категориям и сезонам.',
+      'wardrobe_filter_category_label': 'Категория',
+      'wardrobe_filter_category_all': 'Все категории',
+      'wardrobe_filter_season_label': 'Сезон',
+      'wardrobe_filter_season_all': 'Все сезоны',
+      'wardrobe_filters_empty_hint':
+          'Фильтры появятся, когда вы добавите вещи с категориями и сезонами.',
+      'wardrobe_filters_reset': 'Сбросить',
+      'wardrobe_filters_apply': 'Применить',
+      'wardrobe_delete_title': 'Удалить вещь',
+      'wardrobe_delete_confirmation':
+          'Вы уверены, что хотите удалить эту вещь?',
+      'common_cancel': 'Отмена',
+      'wardrobe_delete_action': 'Удалить',
+      'wardrobe_title': 'Гардероб',
+      'wardrobe_total_items': 'Всего вещей: {count}',
+      'wardrobe_empty_call_to_action': 'Добавьте первую вещь в гардероб',
+      'wardrobe_history_tooltip': 'История нарядов',
+      'wardrobe_location_label': 'Локация гардероба',
+      'wardrobe_location_all': 'Все локации',
+      'wardrobe_add_item': 'Добавить вещь',
+      'wardrobe_filters_chip_active': 'Фильтры • {count}',
+      'wardrobe_filters_chip_label': 'Фильтры',
+      'wardrobe_filter_category_chip': 'Категория: {value}',
+      'wardrobe_filter_season_chip': 'Сезон: {value}',
+      'wardrobe_active_filters': 'Активные фильтры',
+      'wardrobe_reset_filters': 'Сбросить фильтры',
+      'wardrobe_delete_tooltip': 'Удалить',
+      'wardrobe_location_fallback': 'Локация #{id}',
+      'wardrobe_header_title': 'Гардероб {count}',
+      'wardrobe_empty_state_message':
+          'В этом гардеробе пока нет вещей. Добавьте новые элементы, чтобы увидеть их здесь.',
     },
     'en': {
       'app_title': 'Wardrobe 26',
       'home_refresh_mannequin': 'Refresh mannequin',
+      'nav_home': 'Home',
+      'nav_wardrobe': 'Wardrobe',
+      'nav_settings': 'Settings',
       'settings_title': 'Settings',
       'settings_account': 'Account',
       'settings_home': 'Home',
@@ -248,6 +383,23 @@ class AppLocalizations {
       'auth_biometric_reason': 'Confirm your identity to access the wardrobe',
       'auth_biometric_failed':
           'Biometric authentication failed. Please enter your PIN code.',
+      'support_section_title': 'Help & Support',
+      'support_contact_action': 'Contact support',
+      'support_contact_settings_hint':
+          'Tell us what happened — the device model and OS version will be added automatically.',
+      'support_contact_login_hint':
+          'Trouble signing in? Email us and we will help.',
+      'support_email_subject': 'Support request: {source}',
+      'support_email_body':
+          'Describe your issue or question below.\n\n---\nDevice model: {model}\nOS version: {osVersion}',
+      'support_email_source_settings': 'Settings',
+      'support_email_source_login': 'Login screen',
+      'support_email_launch_error':
+          'Could not open the mail app. Please check your mail setup.',
+      'location_picker_title': 'Choose coordinates',
+      'location_picker_selected': 'Selected coordinates',
+      'location_picker_hint': 'Tap the map to move the pin.',
+      'location_picker_confirm': 'Save coordinates',
     },
   };
 
@@ -265,6 +417,18 @@ class AppLocalizations {
     return _localizedValues[languageCode]?[key] ??
         _localizedValues['ru']?[key] ??
         key;
+  }
+
+  String getStringWithPlaceholder(String key, String value) {
+    return getString(key).replaceFirst('{source}', value);
+  }
+
+  String getStringWithPlaceholders(String key, Map<String, String> placeholders) {
+    var result = getString(key);
+    placeholders.forEach((placeholder, value) {
+      result = result.replaceAll('{$placeholder}', value);
+    });
+    return result;
   }
 
   String get appTitle => getString('app_title');
@@ -383,7 +547,30 @@ class AppLocalizations {
   String get authPinInvalid => getString('auth_pin_invalid');
   String get authBiometricReason => getString('auth_biometric_reason');
   String get authBiometricFailed => getString('auth_biometric_failed');
+  String get supportSectionTitle => getString('support_section_title');
+  String get supportContactAction => getString('support_contact_action');
+  String get supportContactSettingsHint =>
+      getString('support_contact_settings_hint');
+  String get supportContactLoginHint => getString('support_contact_login_hint');
+  String supportEmailSubject(String source) =>
+      getStringWithPlaceholder('support_email_subject', source);
+  String supportEmailBody({required String model, required String osVersion}) =>
+      getStringWithPlaceholders('support_email_body', {
+        'model': model,
+        'osVersion': osVersion,
+      });
+  String get supportEmailSourceSettings =>
+      getString('support_email_source_settings');
+  String get supportEmailSourceLogin => getString('support_email_source_login');
+  String get supportEmailLaunchError => getString('support_email_launch_error');
   String get homeRefreshMannequin => getString('home_refresh_mannequin');
+  String get navHome => getString('nav_home');
+  String get navWardrobe => getString('nav_wardrobe');
+  String get navSettings => getString('nav_settings');
+  String get locationPickerTitle => getString('location_picker_title');
+  String get locationPickerSelected => getString('location_picker_selected');
+  String get locationPickerHint => getString('location_picker_hint');
+  String get locationPickerConfirm => getString('location_picker_confirm');
 
   String languageName(String code) {
     switch (code) {

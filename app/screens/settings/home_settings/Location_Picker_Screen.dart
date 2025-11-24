@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../../../l10n/l10n_extensions.dart';
 import '../../../widgets/rounded_back_button.dart';
 
 class LocationPickerScreen extends StatefulWidget {
@@ -50,7 +51,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
     return Scaffold(
       appBar: AppBar(
         leading: const RoundedBackButton(),
-        title: const Text("Выбор координат"),
+        title: Text(context.l10n.locationPickerTitle),
       ),
       body: Stack(
         children: [
@@ -112,9 +113,9 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'Выбранные координаты',
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                  Text(
+                    context.l10n.locationPickerSelected,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -122,9 +123,10 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
                     '${_selectedLocation.longitude.toStringAsFixed(6)}',
                   ),
                   const SizedBox(height: 6),
-                  const Text(
-                    'Нажмите на карту, чтобы изменить точку.',
-                    style: TextStyle(fontSize: 12, color: Colors.black54),
+                  Text(
+                    context.l10n.locationPickerHint,
+                    style:
+                        const TextStyle(fontSize: 12, color: Colors.black54),
                   ),
                 ],
               ),
@@ -133,6 +135,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
+        tooltip: context.l10n.locationPickerConfirm,
         child: const Icon(Icons.check),
         onPressed: () {
           final loc =

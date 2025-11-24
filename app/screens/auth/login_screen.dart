@@ -9,6 +9,7 @@ import '../../services/draft_storage_service.dart';
 import '../../services/form_validators.dart';
 import '../../services/theme_controller.dart';
 import '../../services/auth_scope.dart';
+import '../../services/support_service.dart';
 import '../../widgets/app_snackbar.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -130,6 +131,23 @@ class _LoginScreenState extends State<LoginScreen> with FormValidationMixin {
     });
   }
 
+  Future<void> _contactSupport() async {
+    final l10n = AppLocalizations.of(context);
+    try {
+      final deviceInfo = await SupportService.loadDeviceInfo();
+      await SupportService.composeEmail(
+        subject: l10n.supportEmailSubject(l10n.supportEmailSourceLogin),
+        body: l10n.supportEmailBody(
+          model: deviceInfo.model,
+          osVersion: deviceInfo.osVersion,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      AppSnackbar.showError(context, l10n.supportEmailLaunchError);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -248,23 +266,40 @@ class _LoginScreenState extends State<LoginScreen> with FormValidationMixin {
                                     onPressed: isLoading ? null : login,
                                     style: FilledButton.styleFrom(
                                       minimumSize: const Size.fromHeight(48),
+                                    ),
+                                    child: isLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          )
+                                        : Text(l10n.authLoginAction),
                                   ),
-                                  child: isLoading
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(strokeWidth: 2),
-                                        )
-                                      : Text(l10n.authLoginAction),
-                                ),
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: () => context.go('/register'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: colorScheme.primary,
-                                    minimumSize: const Size.fromHeight(44),
-                                  ),
+                                  const SizedBox(height: 8),
+                                  TextButton(
+                                    onPressed: () => context.go('/register'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: colorScheme.primary,
+                                      minimumSize: const Size.fromHeight(44),
+                                    ),
                                     child: Text(l10n.authRegisterPrompt),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  OutlinedButton.icon(
+                                    onPressed: isLoading ? null : _contactSupport,
+                                    icon: const Icon(Icons.support_agent_outlined),
+                                    label: Text(l10n.supportContactAction),
+                                    style: OutlinedButton.styleFrom(
+                                      minimumSize: const Size.fromHeight(48),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    l10n.supportContactLoginHint,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ],
                               ),

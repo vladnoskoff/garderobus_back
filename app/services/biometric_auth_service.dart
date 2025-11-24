@@ -57,7 +57,7 @@ class BiometricAuthService {
   }
 
   static Future<bool> authenticate({
-    String reason = 'Подтвердите личность для доступа к гардеробу',
+    required String reason,
   }) async {
     try {
       final support = await checkSupport();

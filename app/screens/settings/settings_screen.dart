@@ -12,6 +12,7 @@ import '../../services/network_service.dart';
 import '../../services/pending_action_queue.dart';
 import '../../services/sync_service.dart';
 import '../../services/theme_controller.dart';
+import '../../services/support_service.dart';
 import '../auth/login_screen.dart';
 import 'home_settings/home_screen_settings.dart';
 import 'places/places_screen.dart';
@@ -297,6 +298,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             themeMode: _themeMode,
             colorScheme: colorScheme,
             l10n: l10n,
+          ),
+          const SizedBox(height: 28),
+          _buildSectionHeader(l10n.supportSectionTitle, theme),
+          const SizedBox(height: 12),
+          _buildGradientSection(
+            context,
+            accentColor: colorScheme.tertiary,
+            children: [
+              _buildSettingsTile(
+                context,
+                label: l10n.supportContactAction,
+                icon: Icons.support_agent_outlined,
+                subtitle: l10n.supportContactSettingsHint,
+                onTap: () => _launchSupportEmail(l10n.supportEmailSourceSettings),
+              ),
+            ],
           ),
           const SizedBox(height: 36),
           Align(
@@ -739,38 +756,51 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 );
               }
 
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    l10n.settingsLanguage,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 20),
-                  for (final locale in LanguageNotifier.supportedLocales) ...[
-                    buildOption(locale),
-                    if (locale != LanguageNotifier.supportedLocales.last)
-                      const SizedBox(height: 12),
-                  ],
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(sheetContext),
-                        child: Text(l10n.settingsCancel),
-                      ),
-                      const SizedBox(width: 12),
-                      FilledButton(
-                        onPressed: () => Navigator.pop(sheetContext, tempLocale),
-                        child: Text(l10n.settingsSave),
-                      ),
+              final hasChanges = tempLocale != languageNotifier.locale;
+
+              return SafeArea(
+                top: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.settingsLanguage,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    const SizedBox(height: 20),
+                    for (final locale in LanguageNotifier.supportedLocales) ...[
+                      buildOption(locale),
+                      if (locale != LanguageNotifier.supportedLocales.last)
+                        const SizedBox(height: 12),
                     ],
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(sheetContext),
+                            child: Text(l10n.settingsCancel),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: hasChanges
+                                ? () => Navigator.pop(sheetContext, tempLocale)
+                                : null,
+                            style: FilledButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                            ),
+                            child: Text(l10n.settingsSave),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               );
             },
           ),
@@ -962,6 +992,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _pendingFields = pendingForUser;
     });
+  }
+
+  Future<void> _launchSupportEmail(String source) async {
+    final l10n = context.l10n;
+    try {
+      final deviceInfo = await SupportService.loadDeviceInfo();
+      await SupportService.composeEmail(
+        subject: l10n.supportEmailSubject(source),
+        body: l10n.supportEmailBody(
+          model: deviceInfo.model,
+          osVersion: deviceInfo.osVersion,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.supportEmailLaunchError)),
+      );
+    }
   }
 
   Future<void> _showEditableFieldDialog({

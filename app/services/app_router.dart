@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/pin_unlock_screen.dart';
 import '../screens/auth/register_screen.dart';
@@ -27,6 +28,9 @@ class AppRouter {
         }
         if (authState.requiresPin && state.matchedLocation != '/pin') {
           return '/pin';
+        }
+        if (!authState.requiresPin && state.matchedLocation == '/pin') {
+          return '/home';
         }
         if (isLoggingIn) return '/home';
         return null;
@@ -150,21 +154,21 @@ class _MainNavigationState extends State<MainNavigation> {
         child: FisheyeNavigationBar(
           currentIndex: _currentIndex,
           onItemSelected: _onItemSelected,
-          items: const [
+          items: [
             FisheyeNavigationBarItem(
               icon: Icons.home_outlined,
               selectedIcon: Icons.home_rounded,
-              label: 'Главная',
+              label: context.l10n.navHome,
             ),
             FisheyeNavigationBarItem(
               icon: Icons.checkroom_outlined,
               selectedIcon: Icons.checkroom,
-              label: 'Гардероб',
+              label: context.l10n.navWardrobe,
             ),
             FisheyeNavigationBarItem(
               icon: Icons.settings_outlined,
               selectedIcon: Icons.settings,
-              label: 'Настройки',
+              label: context.l10n.navSettings,
             ),
           ],
         ),
