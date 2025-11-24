@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../l10n/app_localizations.dart';
 import '../../services/api_service.dart';
 import '../../services/draft_storage_service.dart';
 import '../../services/form_validators.dart';
 import '../../services/theme_controller.dart';
+import '../../services/auth_scope.dart';
 import '../../widgets/app_snackbar.dart';
 import 'pin_unlock_screen.dart';
 
@@ -86,36 +88,19 @@ class _LoginScreenState extends State<LoginScreen> with FormValidationMixin {
       if (!mounted) return;
       final userId = int.tryParse(userIdValue ?? "");
       final hasPin = response["has_pin"] == true;
+      final authState = AuthScope.of(context);
 
       if (hasPin && userId != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => PinUnlockScreen(
-              userId: userId,
-              accessToken: accessToken,
-              onUnlocked: (pinContext) async {
-                if (!pinContext.mounted) return;
-                await Navigator.pushReplacementNamed(pinContext, '/home');
-              },
-              onCancel: (pinContext) async {
-                await storage.delete(key: "user_id");
-                await storage.delete(key: "token");
-                ApiService.rememberAccessToken(null);
-                if (!pinContext.mounted) {
-                  return;
-                }
-                await Navigator.pushNamedAndRemoveUntil(
-                  pinContext,
-                  '/login',
-                  (route) => false,
-                );
-              },
-            ),
-          ),
-        );
+        await authState.refresh();
+        if (!mounted) return;
+        if (accessToken != null) {
+          ApiService.rememberAccessToken(accessToken);
+        }
+        context.go('/pin');
       } else {
-        Navigator.pushReplacementNamed(context, '/home');
+        await authState.refresh();
+        if (!mounted) return;
+        context.go('/home');
       }
       await DraftStorageService.clearDraft(_draftKey);
     } catch (e) {
@@ -261,22 +246,22 @@ class _LoginScreenState extends State<LoginScreen> with FormValidationMixin {
                                     onPressed: isLoading ? null : login,
                                     style: FilledButton.styleFrom(
                                       minimumSize: const Size.fromHeight(48),
-                                    ),
-                                    child: isLoading
-                                        ? const SizedBox(
-                                            width: 20,
-                                            height: 20,
-                                            child: CircularProgressIndicator(strokeWidth: 2),
-                                          )
-                                        : Text(l10n.authLoginAction),
                                   ),
-                                  const SizedBox(height: 8),
-                                  TextButton(
-                                    onPressed: () => Navigator.pushNamed(context, '/register'),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: colorScheme.primary,
-                                      minimumSize: const Size.fromHeight(44),
-                                    ),
+                                  child: isLoading
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : Text(l10n.authLoginAction),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: () => context.go('/register'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: colorScheme.primary,
+                                    minimumSize: const Size.fromHeight(44),
+                                  ),
                                     child: Text(l10n.authRegisterPrompt),
                                   ),
                                 ],
