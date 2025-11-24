@@ -9,6 +9,7 @@ class AppLocalizations {
 
   static const supportedLocales = [
     Locale('ru'),
+    Locale('en'),
   ];
 
   static const _localizedValues = <String, Map<String, String>>{
@@ -399,6 +400,118 @@ class AppLocalizations {
       'location_picker_selected': 'Selected coordinates',
       'location_picker_hint': 'Tap the map to move the pin.',
       'location_picker_confirm': 'Save coordinates',
+      'home_mannequin_preview': 'Mannequin preview',
+      'home_mannequin_status_preparing': 'Preparing outfit...',
+      'home_mannequin_status_collecting': 'Collecting items...',
+      'home_mannequin_status_queue': 'Task queued',
+      'home_mannequin_status_rendering': 'Rendering image',
+      'home_mannequin_status_ready': 'Ready',
+      'home_mannequin_status_error': 'Generation error',
+      'home_mannequins_update_failed': 'Failed to update data',
+      'home_mannequin_history_load_failed': 'Failed to load mannequin history',
+      'home_mannequin_generation_starting': 'Starting generation...',
+      'home_mannequin_create_failed':
+          'Could not create mannequin. Please try again.',
+      'home_mannequin_error_label': 'Error',
+      'home_recommendation_default':
+          'Watch the weather and choose outfits based on how it feels.',
+      'home_recommendation_extreme_cold':
+          'Extreme cold — layer up as much as possible.',
+      'home_recommendation_very_cold':
+          'Very cold — dress warmer and add accessories for frost protection.',
+      'home_recommendation_cool': 'Chilly — add a warm outer layer.',
+      'home_recommendation_light_cool':
+          'Slight chill — grab a windbreaker or cardigan.',
+      'home_recommendation_comfortable':
+          'Comfortable — go with a light everyday outfit.',
+      'home_recommendation_hot':
+          'Hot — choose light and breathable fabrics.',
+      'home_recommendation_rain_add': 'Take an umbrella or raincoat.',
+      'home_recommendation_snow_add':
+          'Don’t forget warm outerwear and snow-friendly shoes.',
+      'home_recommendation_wind_add':
+          'It’s windy outside — pick closed outer layers.',
+      'home_mannequin_title': 'Mannequin',
+      'home_item_placeholder_name': 'Item',
+      'home_outfit_details_pending': 'Outfit details are being finalized...',
+      'home_item_missing_for_preview':
+          'Could not determine an item to preview.',
+      'home_item_open_error': 'Could not open item: {error}',
+      'home_sync_banner_syncing': 'Syncing local data',
+      'home_sync_banner_offline':
+          'You are offline — changes will be sent when back online',
+      'home_settings_tooltip': 'Settings',
+      'home_use_personal_coords': 'Use personal coordinates',
+      'home_location_untitled': 'Untitled',
+      'home_location_missing_coords': ' (no coordinates)',
+      'home_places_title': 'Home & places',
+      'home_places_description':
+          'Choose a wardrobe for weather and recommendations.',
+      'home_places_manage': 'Manage',
+      'home_places_add_address_hint':
+          'Add an address in settings to pick a specific wardrobe.',
+      'home_weather_now': 'Weather now',
+      'home_weather_humidity': 'Humidity',
+      'home_weather_pressure': 'Pressure',
+      'home_weather_pressure_value': '{value} mmHg',
+      'home_weather_wind': 'Wind',
+      'home_weather_wind_value': '{value} m/s',
+      'home_weather_forecast_hint':
+          'Tap to view detailed forecast and weekly weather',
+      'home_weather_forecast_title': 'Weather forecast',
+      'common_close': 'Close',
+      'home_feels_like': 'Feels like {value}°C',
+      'home_week_forecast_title': 'Weekly forecast',
+      'home_outfit_of_day': 'Outfit of the day',
+      'home_outfit_refresh_hint':
+          'Tap "Refresh" to let AI pick an outfit for your weather and wardrobe.',
+      'home_outfit_collecting_items': 'Collecting items...',
+      'home_outfit_queued': 'Task queued',
+      'home_outfit_rendering': 'Rendering image',
+      'home_outfit_ready': 'Ready',
+      'home_outfit_error': 'Generation error',
+      'home_outfit_preparing': 'Preparing outfit...',
+      'wardrobe_user_not_found': 'User not found',
+      'wardrobe_invalid_user_id': 'Invalid user identifier',
+      'wardrobe_locations_load_failed': 'Failed to load locations: {error}',
+      'wardrobe_syncing_queue': 'Syncing queued actions',
+      'wardrobe_offline_hint':
+          'Offline mode: new changes are marked as pending',
+      'wardrobe_clothes_load_failed': 'Error loading clothes: {error}',
+      'wardrobe_filters_title': 'Wardrobe filters',
+      'wardrobe_filters_subtitle':
+          'Narrow results by categories and seasons.',
+      'wardrobe_filter_category_label': 'Category',
+      'wardrobe_filter_category_all': 'All categories',
+      'wardrobe_filter_season_label': 'Season',
+      'wardrobe_filter_season_all': 'All seasons',
+      'wardrobe_filters_empty_hint':
+          'Filters will appear after you add items with categories and seasons.',
+      'wardrobe_filters_reset': 'Reset',
+      'wardrobe_filters_apply': 'Apply',
+      'wardrobe_delete_title': 'Delete item',
+      'wardrobe_delete_confirmation':
+          'Are you sure you want to delete this item?',
+      'common_cancel': 'Cancel',
+      'wardrobe_delete_action': 'Delete',
+      'wardrobe_title': 'Wardrobe',
+      'wardrobe_total_items': 'Total items: {count}',
+      'wardrobe_empty_call_to_action': 'Add your first item to the wardrobe',
+      'wardrobe_history_tooltip': 'Outfit history',
+      'wardrobe_location_label': 'Wardrobe location',
+      'wardrobe_location_all': 'All locations',
+      'wardrobe_add_item': 'Add item',
+      'wardrobe_filters_chip_active': 'Filters • {count}',
+      'wardrobe_filters_chip_label': 'Filters',
+      'wardrobe_filter_category_chip': 'Category: {value}',
+      'wardrobe_filter_season_chip': 'Season: {value}',
+      'wardrobe_active_filters': 'Active filters',
+      'wardrobe_reset_filters': 'Reset filters',
+      'wardrobe_delete_tooltip': 'Delete',
+      'wardrobe_location_fallback': 'Location #{id}',
+      'wardrobe_header_title': 'Wardrobe {count}',
+      'wardrobe_empty_state_message':
+          'This wardrobe is empty for now. Add items to see them here.',
     },
   };
 

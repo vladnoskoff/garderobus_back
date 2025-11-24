@@ -5,6 +5,7 @@ import 'api_service.dart';
 class LanguageNotifier extends ChangeNotifier {
   static const List<Locale> supportedLocales = [
     Locale('ru'),
+    Locale('en'),
   ];
 
   Locale _locale = const Locale('ru');
