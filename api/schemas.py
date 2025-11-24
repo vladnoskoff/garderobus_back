@@ -48,6 +48,20 @@ class UserLogin(BaseModel):
     password: str
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenPair(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    access_expires_in: int
+    refresh_expires_in: int
+    user_id: int
+    has_pin: bool = False
+
+
 class UserResponse(BaseModel):
     id: int
     name: str

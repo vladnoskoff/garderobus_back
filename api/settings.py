@@ -76,6 +76,25 @@ APP_NAME = os.getenv("APP_NAME", "Smart Closet")
 ESP_DISPLAY_IP = os.getenv("ESP_DISPLAY_IP", "http://192.168.1.100")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
+# Authentication / JWT
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+AUTH_FAILED_ATTEMPT_LIMIT = int(os.getenv("AUTH_FAILED_ATTEMPT_LIMIT", "5"))
+AUTH_FAILED_ATTEMPT_WINDOW_SECONDS = int(
+    os.getenv("AUTH_FAILED_ATTEMPT_WINDOW_SECONDS", str(15 * 60))
+)
+AUTH_LOCKOUT_SECONDS = int(os.getenv("AUTH_LOCKOUT_SECONDS", str(15 * 60)))
+AUTH_SUSPICIOUS_IP_LIMIT = int(os.getenv("AUTH_SUSPICIOUS_IP_LIMIT", "20"))
+AUTH_SUSPICIOUS_IP_WINDOW_SECONDS = int(
+    os.getenv("AUTH_SUSPICIOUS_IP_WINDOW_SECONDS", str(10 * 60))
+)
+USER_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("USER_RATE_LIMIT_MAX_REQUESTS", "600"))
+USER_RATE_LIMIT_WINDOW_SECONDS = int(
+    os.getenv("USER_RATE_LIMIT_WINDOW_SECONDS", str(15 * 60))
+)
+
 # Logging and rate limiting
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = os.getenv("LOG_FILE", "/var/log/garderobus/api.log")

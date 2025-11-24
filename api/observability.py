@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
-from fastapi import FastAPI
+import jwt
+from fastapi import FastAPI, HTTPException, Request
 from opentelemetry import trace
 from opentelemetry.exporter.jaeger.thrift import JaegerExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -13,6 +14,7 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_client import Counter
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
@@ -24,6 +26,50 @@ logger = logging.getLogger(__name__)
 
 _instrumentator: Optional[Instrumentator] = None
 _tracer_provider: Optional[TracerProvider] = None
+_limiter: Limiter = Limiter(key_func=get_remote_address, headers_enabled=True)
+
+_auth_failures = Counter(
+    "auth_failures_total",
+    "Total authentication failures",
+    labelnames=("reason",),
+)
+_auth_lockouts = Counter(
+    "auth_lockouts_total",
+    "Total authentication lockouts triggered",
+    labelnames=("dimension",),
+)
+
+
+def get_rate_limiter() -> Limiter:
+    return _limiter
+
+
+def record_auth_failure(reason: str) -> None:
+    _auth_failures.labels(reason=reason).inc()
+
+
+def record_auth_lockout(dimension: str) -> None:
+    _auth_lockouts.labels(dimension=dimension).inc()
+
+
+def _user_or_ip_key(request: Request) -> str:
+    auth_header = request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1]
+        try:
+            payload = jwt.decode(
+                token,
+                settings.JWT_SECRET_KEY,
+                algorithms=[settings.JWT_ALGORITHM],
+                options={"verify_exp": False},
+            )
+            user_id = payload.get("sub")
+            if user_id is not None:
+                return f"user:{user_id}"
+        except jwt.PyJWTError:
+            logger.debug("Unable to parse bearer token for rate limit key")
+    ip_address = get_remote_address(request) or "unknown"
+    return f"ip:{ip_address}"
 
 
 def setup_metrics(app: FastAPI) -> None:
@@ -84,15 +130,13 @@ def setup_tracing(app: FastAPI) -> None:
 def setup_rate_limiter(app: FastAPI) -> Limiter:
     """Attach global rate limiting middleware to the app."""
 
-    limiter = Limiter(
-        key_func=get_remote_address,
-        default_limits=[settings.API_RATE_LIMIT],
-        headers_enabled=True,
-    )
-    app.state.limiter = limiter
+    global _limiter
+    _limiter.default_limits = [settings.API_RATE_LIMIT]
+    _limiter.key_func = _user_or_ip_key
+    app.state.limiter = _limiter
     app.add_middleware(SlowAPIMiddleware)
     logger.info("API rate limiting enabled", extra={"limit": settings.API_RATE_LIMIT})
-    return limiter
+    return _limiter
 
 
 def configure_observability(app: FastAPI) -> None:

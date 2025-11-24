@@ -116,6 +116,20 @@ class CacheService:
         except redis.RedisError as exc:
             logger.warning("Redis DELETE failed for key %s: %s", key, exc)
 
+    def increment(self, key: str, ttl: int) -> int:
+        if not self.enabled:
+            logger.debug("Cache disabled; returning synthetic counter value for %s", key)
+            return 1
+
+        assert self._client is not None
+        try:
+            value = self._client.incr(key)
+            self._client.expire(key, ttl)
+            return int(value)
+        except redis.RedisError as exc:
+            logger.warning("Redis INCR/EXPIRE failed for key %s: %s", key, exc)
+            return 1
+
     def delete_prefix(self, prefix: str) -> None:
         if not self.enabled:
             return
