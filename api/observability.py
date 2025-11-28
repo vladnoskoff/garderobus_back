@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import socket
 from typing import Optional
 
 from fastapi import FastAPI
@@ -64,10 +65,27 @@ def setup_tracing(app: FastAPI) -> None:
     tracer_resource = Resource.create({"service.name": service_name})
     _tracer_provider = TracerProvider(resource=tracer_resource)
 
-    jaeger_exporter = JaegerExporter(
-        agent_host_name=settings.JAEGER_AGENT_HOST,
-        agent_port=settings.JAEGER_AGENT_PORT,
-    )
+    try:
+        socket.getaddrinfo(settings.JAEGER_AGENT_HOST, settings.JAEGER_AGENT_PORT)
+    except socket.gaierror:
+        logger.warning(
+            "Tracing disabled: Jaeger host cannot be resolved",
+            extra={"host": settings.JAEGER_AGENT_HOST, "port": settings.JAEGER_AGENT_PORT},
+        )
+        return
+
+    try:
+        jaeger_exporter = JaegerExporter(
+            agent_host_name=settings.JAEGER_AGENT_HOST,
+            agent_port=settings.JAEGER_AGENT_PORT,
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning(
+            "Tracing disabled: failed to initialise Jaeger exporter",
+            exc_info=exc,
+            extra={"host": settings.JAEGER_AGENT_HOST, "port": settings.JAEGER_AGENT_PORT},
+        )
+        return
 
     span_processor = BatchSpanProcessor(jaeger_exporter)
     _tracer_provider.add_span_processor(span_processor)
