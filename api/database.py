@@ -10,26 +10,8 @@ from sqlalchemy.engine.url import make_url
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
-from prometheus_client import Gauge
 
 import settings
-
-
-_db_pool_size = Gauge(
-    "app_db_pool_size",
-    "Configured SQLAlchemy pool size.",
-    labelnames=("role",),
-)
-_db_pool_in_use = Gauge(
-    "app_db_pool_in_use",
-    "Connections currently checked out from the pool.",
-    labelnames=("role",),
-)
-_db_pool_overflow = Gauge(
-    "app_db_pool_overflow",
-    "Overflow connections created beyond the base pool size.",
-    labelnames=("role",),
-)
 
 
 def _build_engine(url: str) -> Engine:
@@ -52,40 +34,12 @@ def _build_engine(url: str) -> Engine:
     return create_engine(url, **engine_kwargs)
 
 
-def _safe_pool_metric(engine: Engine, attribute: str) -> float:
-    try:
-        pool = engine.pool
-        value = getattr(pool, attribute, None)
-        if callable(value):
-            return float(value() or 0)
-        return float(value or 0)
-    except Exception:
-        return 0.0
-
-
-def _instrument_pool(engine: Engine, role: str) -> None:
-    """Expose connection pool metrics to Prometheus."""
-
-    _db_pool_size.labels(role).set_function(
-        lambda eng=engine: _safe_pool_metric(eng, "size")
-    )
-    _db_pool_in_use.labels(role).set_function(
-        lambda eng=engine: _safe_pool_metric(eng, "checkedout")
-    )
-    _db_pool_overflow.labels(role).set_function(
-        lambda eng=engine: _safe_pool_metric(eng, "overflow")
-    )
-
-
 WRITE_ENGINE: Engine = _build_engine(settings.DATABASE_URL)
-_instrument_pool(WRITE_ENGINE, "write")
 READ_ENGINES: List[Engine] = []
 
 if settings.DATABASE_USE_REPLICAS:
-    for idx, replica_url in enumerate(settings.DATABASE_READ_REPLICAS):
-        engine = _build_engine(replica_url)
-        READ_ENGINES.append(engine)
-        _instrument_pool(engine, f"read:{idx}")
+    for replica_url in settings.DATABASE_READ_REPLICAS:
+        READ_ENGINES.append(_build_engine(replica_url))
 
 
 class RoutingSession(Session):

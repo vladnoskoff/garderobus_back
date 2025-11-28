@@ -11,7 +11,7 @@ requests
 openai
 python-dotenv
 pyuploadcare
-httpx<0.28
+httpx
 httpx-socks
 redis
 prometheus-client
@@ -22,7 +22,5 @@ slowapi
 pybreaker
 opentelemetry-sdk
 opentelemetry-exporter-jaeger
-opentelemetry-exporter-otlp
 opentelemetry-instrumentation-fastapi
 opentelemetry-instrumentation-requests
-pyinstrument

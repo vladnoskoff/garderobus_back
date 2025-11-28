@@ -3,19 +3,16 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Callable, Optional
+from typing import Optional
 
-import jwt
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI
 from opentelemetry import trace
+from opentelemetry.exporter.jaeger.thrift import JaegerExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-import importlib
-import importlib.util
-from prometheus_client import Counter, Gauge, Histogram
 from prometheus_fastapi_instrumentator import Instrumentator
 from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
@@ -27,85 +24,6 @@ logger = logging.getLogger(__name__)
 
 _instrumentator: Optional[Instrumentator] = None
 _tracer_provider: Optional[TracerProvider] = None
-_limiter: Limiter = Limiter(key_func=get_remote_address, headers_enabled=True)
-
-_auth_failures = Counter(
-    "auth_failures_total",
-    "Total authentication failures",
-    labelnames=("reason",),
-)
-_auth_lockouts = Counter(
-    "auth_lockouts_total",
-    "Total authentication lockouts triggered",
-    labelnames=("dimension",),
-)
-
-_celery_retries = Counter(
-    "celery_task_retries_total",
-    "Total number of Celery task retries",
-    labelnames=("task",),
-)
-_celery_dead_letters = Counter(
-    "celery_task_dead_letter_total",
-    "Total number of tasks forwarded to the dead-letter queue",
-    labelnames=("task",),
-)
-_celery_queue_depth = Gauge(
-    "celery_queue_depth", "Current queue depth as reported by broker", labelnames=("queue",)
-)
-_celery_latency = Histogram(
-    "celery_task_latency_seconds",
-    "Time spent waiting in queue + executing Celery task",
-    labelnames=("task",),
-)
-
-
-def get_rate_limiter() -> Limiter:
-    return _limiter
-
-
-def record_auth_failure(reason: str) -> None:
-    _auth_failures.labels(reason=reason).inc()
-
-
-def record_auth_lockout(dimension: str) -> None:
-    _auth_lockouts.labels(dimension=dimension).inc()
-
-
-def record_celery_retry(task_name: str) -> None:
-    _celery_retries.labels(task=task_name).inc()
-
-
-def record_dead_letter(task_name: str) -> None:
-    _celery_dead_letters.labels(task=task_name).inc()
-
-
-def observe_celery_latency(task_name: str, latency_seconds: float) -> None:
-    _celery_latency.labels(task=task_name).observe(latency_seconds)
-
-
-def report_queue_depth(queue: str, depth: int) -> None:
-    _celery_queue_depth.labels(queue=queue).set(depth)
-
-
-def _user_or_ip_key(request: Request) -> str:
-    auth_header = request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ", 1)[1]
-        try:
-            payload = jwt.decode(
-                token,
-                settings.JWT_SECRET_KEY,
-                algorithms=[settings.JWT_ALGORITHM],
-                options={"verify_exp": False},
-            )
-            user_id = payload.get("sub")
-            if user_id is not None:
-                return f"user:{user_id}"
-        except jwt.PyJWTError:
-            logger.debug("Unable to parse bearer token for rate limit key")
-    ip_address = get_remote_address(request) or "unknown"
-    return f"ip:{ip_address}"
 
 
 def setup_metrics(app: FastAPI) -> None:
@@ -130,15 +48,6 @@ def setup_metrics(app: FastAPI) -> None:
     logger.info("Prometheus metrics instrumentation enabled")
 
 
-def _load_exporter(module_path: str, class_name: str):
-    if importlib.util.find_spec(module_path) is None:
-        raise RuntimeError(
-            f"Exporter dependency {module_path} is not installed; check requirements."
-        )
-    module = importlib.import_module(module_path)
-    return getattr(module, class_name)
-
-
 def setup_tracing(app: FastAPI) -> None:
     """Configure OpenTelemetry tracing with Jaeger exporter when enabled."""
 
@@ -155,26 +64,12 @@ def setup_tracing(app: FastAPI) -> None:
     tracer_resource = Resource.create({"service.name": service_name})
     _tracer_provider = TracerProvider(resource=tracer_resource)
 
-    if settings.OTEL_EXPORTER_OTLP_ENDPOINT:
-        otlp_exporter_cls = _load_exporter(
-            "opentelemetry.exporter.otlp.proto.http.trace_exporter", "OTLPSpanExporter"
-        )
-        exporter = otlp_exporter_cls(
-            endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
-            headers=_parse_otlp_headers(settings.OTEL_EXPORTER_OTLP_HEADERS),
-        )
-        exporter_name = "otlp"
-    else:
-        jaeger_exporter_cls = _load_exporter(
-            "opentelemetry.exporter.jaeger.thrift", "JaegerExporter"
-        )
-        exporter = jaeger_exporter_cls(
-            agent_host_name=settings.JAEGER_AGENT_HOST,
-            agent_port=settings.JAEGER_AGENT_PORT,
-        )
-        exporter_name = "jaeger"
+    jaeger_exporter = JaegerExporter(
+        agent_host_name=settings.JAEGER_AGENT_HOST,
+        agent_port=settings.JAEGER_AGENT_PORT,
+    )
 
-    span_processor = BatchSpanProcessor(exporter)
+    span_processor = BatchSpanProcessor(jaeger_exporter)
     _tracer_provider.add_span_processor(span_processor)
     trace.set_tracer_provider(_tracer_provider)
 
@@ -182,39 +77,22 @@ def setup_tracing(app: FastAPI) -> None:
     RequestsInstrumentor().instrument()
 
     logger.info(
-        "Tracing enabled",
-        extra={
-            "service": service_name,
-            "exporter": exporter_name,
-            "jaeger": f"{settings.JAEGER_AGENT_HOST}:{settings.JAEGER_AGENT_PORT}",
-            "otlp_endpoint": settings.OTEL_EXPORTER_OTLP_ENDPOINT,
-        },
+        "Tracing enabled", extra={"service": service_name, "jaeger": f"{settings.JAEGER_AGENT_HOST}:{settings.JAEGER_AGENT_PORT}"}
     )
-
-
-def _parse_otlp_headers(raw_headers: Optional[str]) -> dict[str, str]:
-    if not raw_headers:
-        return {}
-    header_pairs = [segment.strip() for segment in raw_headers.split(",") if segment.strip()]
-    parsed_headers = {}
-    for pair in header_pairs:
-        if ":" not in pair:
-            continue
-        key, value = pair.split(":", 1)
-        parsed_headers[key.strip()] = value.strip()
-    return parsed_headers
 
 
 def setup_rate_limiter(app: FastAPI) -> Limiter:
     """Attach global rate limiting middleware to the app."""
 
-    global _limiter
-    _limiter.default_limits = [settings.API_RATE_LIMIT]
-    _limiter.key_func = _user_or_ip_key
-    app.state.limiter = _limiter
+    limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=[settings.API_RATE_LIMIT],
+        headers_enabled=True,
+    )
+    app.state.limiter = limiter
     app.add_middleware(SlowAPIMiddleware)
     logger.info("API rate limiting enabled", extra={"limit": settings.API_RATE_LIMIT})
-    return _limiter
+    return limiter
 
 
 def configure_observability(app: FastAPI) -> None:

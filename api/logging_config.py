@@ -77,15 +77,47 @@ def mask_sensitive_data(payload: Mapping[str, Any] | None) -> Dict[str, Any]:
             sanitized[key] = value
 
     return sanitized
+def _prepare_log_path(log_path: Path) -> Path | None:
+    """Ensure log path is writable; fall back to None when not possible."""
 
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.touch(exist_ok=True)
+    except PermissionError:
+        return None
+    except OSError:
+        return None
+
+    return log_path
 
 def configure_logging() -> None:
     """Configure standard logging with JSON output for observability tools."""
 
     log_level = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
-    log_path = Path(os.getenv("LOG_FILE", DEFAULT_LOG_PATH))
+    log_path = _prepare_log_path(Path(os.getenv("LOG_FILE", DEFAULT_LOG_PATH)))
 
-    log_path.parent.mkdir(parents=True, exist_ok=True)
+    handlers: Dict[str, Dict[str, Any]] = {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "json",
+            "level": log_level,
+            "filters": ["request_context"],
+        }
+    }
+
+    root_handlers = ["console"]
+
+    if log_path is not None:
+        handlers["file"] = {
+            "class": "logging.handlers.TimedRotatingFileHandler",
+            "formatter": "json",
+            "level": log_level,
+            "filename": str(log_path),
+            "when": "midnight",
+            "backupCount": int(os.getenv("LOG_FILE_BACKUP_COUNT", "7")),
+            "filters": ["request_context"],
+        }
+        root_handlers.append("file")
 
     logging_config = {
         "version": 1,
@@ -97,27 +129,8 @@ def configure_logging() -> None:
                 "fmt": "%(asctime)s %(levelname)s %(name)s %(message)s",
             },
         },
-        "handlers": {
-            "console": {
-                "class": "logging.StreamHandler",
-                "formatter": "json",
-                "level": log_level,
-                "filters": ["request_context"],
-            },
-            "file": {
-                "class": "logging.handlers.TimedRotatingFileHandler",
-                "formatter": "json",
-                "level": log_level,
-                "filename": str(log_path),
-                "when": "midnight",
-                "backupCount": int(os.getenv("LOG_FILE_BACKUP_COUNT", "7")),
-                "filters": ["request_context"],
-            },
-        },
-        "root": {
-            "handlers": ["console", "file"],
-            "level": log_level,
-        },
+	"handlers": handlers,
+        "root": {"handlers": root_handlers, "level": log_level},
     }
 
     logging.config.dictConfig(logging_config)

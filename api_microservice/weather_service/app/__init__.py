@@ -1,1 +1,0 @@
-"""Weather service FastAPI application."""

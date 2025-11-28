@@ -1,7 +1,7 @@
 (function () {
   const config = window.APP_CONFIG || {};
   const apiBaseUrl =
-    config.apiBaseUrl || "http://aapanel-api.noksovsteam.ru";
+    config.apiBaseUrl || "http://garderobus.tech";
   const token = localStorage.getItem("authToken");
 
   if (!token) {

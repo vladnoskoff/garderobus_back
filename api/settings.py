@@ -9,7 +9,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 CLOTHES_IMAGE_DIR = BASE_DIR / os.getenv("CLOTHES_IMAGE_DIR", "clothes_images")
 MANNEQUIN_IMAGE_DIR = BASE_DIR / os.getenv("MANNEQUIN_IMAGE_DIR", "mannequins")
-DEFAULT_API_DOMAIN = "http://aapanel-api.noksovsteam.ru"
+DEFAULT_API_DOMAIN = "http://garderobus.tech"
 CLOTHES_IMAGE_URL_PREFIX = os.getenv(
     "CLOTHES_IMAGE_URL_PREFIX", f"{DEFAULT_API_DOMAIN}/clothes_images"
 )
@@ -18,7 +18,7 @@ MANNEQUIN_IMAGE_URL_PREFIX = os.getenv(
 )
 TEST_PERSON_IMAGE_URL = os.getenv(
     "TEST_PERSON_IMAGE_URL",
-    "http://aapanel-api.noksovsteam.ru/chkaf/clothes_images/static/test_mannequin.png",
+    "http://garderobus.tech/chkaf/clothes_images/static/test_mannequin.png",
 )
 
 # Создание директорий, если они отсутствуют
@@ -28,7 +28,7 @@ for directory in (CLOTHES_IMAGE_DIR, MANNEQUIN_IMAGE_DIR):
 # Настройки базы данных
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://postgres:Inoskoff11@192.168.1.148:5432/smart-closet",
+    "postgresql://garderobus:InoskoffStrelkov18@localhost:5432/smart-closet",
 )
 
 DATABASE_READ_REPLICAS = [
@@ -76,25 +76,6 @@ APP_NAME = os.getenv("APP_NAME", "Smart Closet")
 ESP_DISPLAY_IP = os.getenv("ESP_DISPLAY_IP", "http://192.168.1.100")
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 
-# Authentication / JWT
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "supersecretkey")
-JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "15"))
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-AUTH_FAILED_ATTEMPT_LIMIT = int(os.getenv("AUTH_FAILED_ATTEMPT_LIMIT", "5"))
-AUTH_FAILED_ATTEMPT_WINDOW_SECONDS = int(
-    os.getenv("AUTH_FAILED_ATTEMPT_WINDOW_SECONDS", str(15 * 60))
-)
-AUTH_LOCKOUT_SECONDS = int(os.getenv("AUTH_LOCKOUT_SECONDS", str(15 * 60)))
-AUTH_SUSPICIOUS_IP_LIMIT = int(os.getenv("AUTH_SUSPICIOUS_IP_LIMIT", "20"))
-AUTH_SUSPICIOUS_IP_WINDOW_SECONDS = int(
-    os.getenv("AUTH_SUSPICIOUS_IP_WINDOW_SECONDS", str(10 * 60))
-)
-USER_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("USER_RATE_LIMIT_MAX_REQUESTS", "600"))
-USER_RATE_LIMIT_WINDOW_SECONDS = int(
-    os.getenv("USER_RATE_LIMIT_WINDOW_SECONDS", str(15 * 60))
-)
-
 # Logging and rate limiting
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = os.getenv("LOG_FILE", "/var/log/garderobus/api.log")
@@ -106,28 +87,6 @@ TRACING_ENABLED = os.getenv("TRACING_ENABLED", "true").lower() == "true"
 TRACING_SERVICE_NAME = os.getenv("TRACING_SERVICE_NAME", "garderobus-api")
 JAEGER_AGENT_HOST = os.getenv("JAEGER_AGENT_HOST", "jaeger")
 JAEGER_AGENT_PORT = int(os.getenv("JAEGER_AGENT_PORT", "6831"))
-OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
-OTEL_EXPORTER_OTLP_HEADERS = os.getenv("OTEL_EXPORTER_OTLP_HEADERS")
-
-# Hot-path profiling
-PROFILING_ENABLED = os.getenv("PROFILING_ENABLED", "false").lower() == "true"
-PROFILING_ENDPOINT_PREFIXES = [
-    prefix.strip()
-    for prefix in os.getenv(
-        "PROFILING_ENDPOINT_PREFIXES",
-        "/clothes/user,/outfits/history,/weather/user",
-    ).split(",")
-    if prefix.strip()
-]
-PROFILING_OUTPUT_DIR = Path(
-    os.getenv("PROFILING_OUTPUT_DIR", str(BASE_DIR / "logs" / "profiles"))
-)
-PROFILING_SAMPLING_INTERVAL = float(
-    os.getenv("PROFILING_SAMPLING_INTERVAL", "0.001")
-)
-PROFILING_WRITE_FLAMEGRAPH = (
-    os.getenv("PROFILING_WRITE_FLAMEGRAPH", "true").lower() == "true"
-)
 
 # HTTP client resilience
 HTTP_CLIENT_TIMEOUT = float(os.getenv("HTTP_CLIENT_TIMEOUT", "5.0"))
@@ -156,11 +115,6 @@ CACHE_KEY_PREFIX = os.getenv("CACHE_KEY_PREFIX", "garderobus")
 CACHE_INVALIDATION_BATCH_SIZE = int(
     os.getenv("CACHE_INVALIDATION_BATCH_SIZE", "50")
 )
-CACHE_USE_LOCAL_FALLBACK = (
-    os.getenv("CACHE_USE_LOCAL_FALLBACK", "true").lower() == "true"
-)
-CACHE_LOCAL_TTL = int(os.getenv("CACHE_LOCAL_TTL", "60"))
-CACHE_MAX_CONNECTIONS = int(os.getenv("CACHE_MAX_CONNECTIONS", "50"))
 
 # Static content caching / CDN hints
 STATIC_CACHE_CONTROL = os.getenv(
@@ -174,7 +128,7 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://garderobus.noksovsteam.ru,https://garderobus.noksovsteam.ru",
+        "http://garderobus.tech,https://garderobus.tech",
     ).split(",")
     if origin.strip()
 ]
@@ -185,18 +139,12 @@ CELERY_BROKER_URL = os.getenv(
 )
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "rpc://")
 CELERY_DEFAULT_QUEUE = os.getenv("CELERY_DEFAULT_QUEUE", "garderobus-tasks")
-CELERY_DEAD_LETTER_QUEUE = os.getenv(
-    "CELERY_DEAD_LETTER_QUEUE", "garderobus-dead-letter"
-)
 CELERY_RESULT_EXPIRES = int(os.getenv("CELERY_RESULT_EXPIRES", "3600"))
-CELERY_IDEMPOTENCY_TTL = int(os.getenv("CELERY_IDEMPOTENCY_TTL", "7200"))
-CELERY_RETRY_ALERT_THRESHOLD = int(os.getenv("CELERY_RETRY_ALERT_THRESHOLD", "2"))
 CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv("CELERY_TASK_SOFT_TIME_LIMIT", "120"))
 CELERY_TASK_HARD_TIME_LIMIT = int(os.getenv("CELERY_TASK_HARD_TIME_LIMIT", "180"))
 CELERY_WORKER_PREFETCH_MULTIPLIER = int(
     os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
 )
-CELERY_MAX_RETRIES = int(os.getenv("CELERY_MAX_RETRIES", "3"))
 APP_ENV = os.getenv("APP_ENV", "production")
 APP_VERSION = os.getenv("APP_VERSION", "development")
 
