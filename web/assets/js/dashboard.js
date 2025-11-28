@@ -795,7 +795,10 @@
       }
 
       if (!response.ok) {
-        throw new Error(`Backup failed with status ${response.status}`);
+        const message = await safeReadError(response);
+        throw new Error(
+          message ? `Не удалось создать бэкап: ${message}` : `Backup failed with status ${response.status}`,
+        );
       }
 
       const blob = await response.blob();
@@ -811,7 +814,10 @@
       showAlert(elements.databaseBackupStatus, "Бэкап успешно скачан.", "success");
     } catch (error) {
       console.error(error);
-      showAlert(elements.databaseBackupStatus, "Не удалось создать бэкап базы данных.");
+      showAlert(
+        elements.databaseBackupStatus,
+        error?.message || "Не удалось создать бэкап базы данных.",
+      );
     } finally {
       if (elements.databaseBackupButton) {
         elements.databaseBackupButton.disabled = false;
@@ -850,8 +856,8 @@
       }
 
       if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        const message = payload.detail || `Восстановление завершилось с ошибкой ${response.status}`;
+        const rawMessage = await safeReadError(response);
+        const message = rawMessage || `Восстановление завершилось с ошибкой ${response.status}`;
         throw new Error(message);
       }
 

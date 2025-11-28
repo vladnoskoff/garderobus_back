@@ -49,6 +49,8 @@ button {
   padding: 12px;
   text-align: left;
   border-bottom: 1px solid #e5e7eb;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .card {
@@ -445,6 +447,7 @@ button.link {
 
 .table-wrapper {
   overflow-x: auto;
+  width: 100%;
 }
 
 .sidebar button.link {
