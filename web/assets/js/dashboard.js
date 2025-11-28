@@ -1,7 +1,6 @@
 (function () {
   const config = window.APP_CONFIG || {};
-  const apiBaseUrl =
-    config.apiBaseUrl || "http://garderobus.tech";
+  const apiBaseUrl = (config.apiBaseUrl || window.location.origin || "http://garderobus.tech").replace(/\/$/, "");
   const pageType = document.body?.dataset.page || "users";
 
   const token = localStorage.getItem("authToken");
@@ -311,6 +310,16 @@
     }
   }
 
+  async function safeReadError(response) {
+    try {
+      const text = await response.text();
+      return text || response.statusText || "";
+    } catch (err) {
+      console.error("Failed to read error response", err);
+      return response.statusText || "";
+    }
+  }
+
   function setText(element, value) {
     if (element) {
       element.textContent = value;
@@ -582,7 +591,8 @@
     }
 
     if (!response.ok) {
-      throw new Error(`Database summary failed with status ${response.status}`);
+      const message = await safeReadError(response);
+      throw new Error(`Database summary failed (${response.status}): ${message}`);
     }
 
     return response.json();
@@ -667,7 +677,10 @@
       }
     } catch (error) {
       console.error(error);
-      showAlert(elements.databaseSummaryError, "Не удалось загрузить список таблиц.");
+      showAlert(
+        elements.databaseSummaryError,
+        error?.message || "Не удалось загрузить список таблиц.",
+      );
     } finally {
       if (elements.databaseSummaryLoading) {
         toggleHidden(elements.databaseSummaryLoading, true);
@@ -738,7 +751,8 @@
       }
 
       if (!response.ok) {
-        throw new Error(`Table fetch failed with status ${response.status}`);
+        const message = await safeReadError(response);
+        throw new Error(`Table fetch failed (${response.status}): ${message}`);
       }
 
       const payload = await response.json();
@@ -751,7 +765,10 @@
       }
     } catch (error) {
       console.error(error);
-      showAlert(elements.databaseRowsError, "Не удалось загрузить данные таблицы.");
+      showAlert(
+        elements.databaseRowsError,
+        error?.message || "Не удалось загрузить данные таблицы.",
+      );
     } finally {
       if (elements.databaseRowsLoading) {
         toggleHidden(elements.databaseRowsLoading, true);
