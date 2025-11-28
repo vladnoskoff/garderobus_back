@@ -117,6 +117,25 @@
     queueTotalPill: document.getElementById("queue-total-pill"),
     queueStateBadges: document.getElementById("queue-state-badges"),
     queueUpdatedAt: document.getElementById("queue-updated-at"),
+    databaseSummaryBody: document.getElementById("database-summary-body"),
+    databaseSummaryWrapper: document.getElementById("database-summary-wrapper"),
+    databaseSummaryLoading: document.getElementById("database-summary-loading"),
+    databaseSummaryError: document.getElementById("database-summary-error"),
+    databaseSummaryEmpty: document.getElementById("database-summary-empty"),
+    databaseRefreshButton: document.getElementById("database-refresh-button"),
+    databaseTableSelect: document.getElementById("database-table-select"),
+    databaseTableRefresh: document.getElementById("database-table-refresh"),
+    databaseRowsWrapper: document.getElementById("database-rows-wrapper"),
+    databaseRowsHead: document.getElementById("database-rows-head"),
+    databaseRowsBody: document.getElementById("database-rows-body"),
+    databaseRowsLoading: document.getElementById("database-rows-loading"),
+    databaseRowsEmpty: document.getElementById("database-rows-empty"),
+    databaseRowsError: document.getElementById("database-rows-error"),
+    databaseRowsTotal: document.getElementById("database-rows-total"),
+    databaseBackupButton: document.getElementById("database-backup-button"),
+    databaseRestoreFile: document.getElementById("database-restore-file"),
+    databaseRestoreButton: document.getElementById("database-restore-button"),
+    databaseBackupStatus: document.getElementById("database-backup-status"),
   };
 
   const state = {
@@ -143,6 +162,8 @@
     queueSnapshot: null,
     queueLoadedOnce: false,
     queueLoading: false,
+    databaseTables: [],
+    databaseSelectedTable: "",
   };
 
   function handleUnauthorized() {
@@ -545,6 +566,286 @@
       if (elements.queueLoading) {
         toggleHidden(elements.queueLoading, true);
       }
+    }
+  }
+
+  async function fetchDatabaseSummary() {
+    const response = await fetch(`${apiBaseUrl}/admin/database/summary`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+      },
+    });
+
+    if (response.status === 401) {
+      handleUnauthorized();
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Database summary failed with status ${response.status}`);
+    }
+
+    return response.json();
+  }
+
+  function renderDatabaseSummary(tables) {
+    if (!elements.databaseSummaryBody) {
+      return;
+    }
+
+    elements.databaseSummaryBody.innerHTML = "";
+    tables.forEach((table) => {
+      const row = document.createElement("tr");
+      const nameCell = document.createElement("td");
+      nameCell.textContent = table.name;
+
+      const columnsCell = document.createElement("td");
+      columnsCell.textContent = (table.columns || []).join(", ") || "—";
+
+      const countCell = document.createElement("td");
+      countCell.textContent = table.row_count ?? "0";
+
+      row.appendChild(nameCell);
+      row.appendChild(columnsCell);
+      row.appendChild(countCell);
+      elements.databaseSummaryBody.appendChild(row);
+    });
+  }
+
+  function updateDatabaseTableSelect(tables) {
+    if (!elements.databaseTableSelect) {
+      return;
+    }
+
+    elements.databaseTableSelect.innerHTML = "";
+
+    tables.forEach((table) => {
+      const option = document.createElement("option");
+      option.value = table.name;
+      option.textContent = `${table.name} (${table.row_count ?? 0})`;
+      elements.databaseTableSelect.appendChild(option);
+    });
+
+    if (!state.databaseSelectedTable && tables.length > 0) {
+      state.databaseSelectedTable = tables[0].name;
+    }
+
+    if (state.databaseSelectedTable) {
+      elements.databaseTableSelect.value = state.databaseSelectedTable;
+    }
+  }
+
+  async function loadDatabaseSummary({ showLoader = false } = {}) {
+    if (!elements.databaseSummaryLoading) {
+      return;
+    }
+
+    showAlert(elements.databaseSummaryError, "");
+    toggleHidden(elements.databaseSummaryEmpty, true);
+    toggleHidden(elements.databaseSummaryWrapper, true);
+    if (showLoader) {
+      elements.databaseSummaryLoading.textContent = "Загрузка таблиц...";
+      toggleHidden(elements.databaseSummaryLoading, false);
+    }
+
+    try {
+      const payload = await fetchDatabaseSummary();
+      if (!payload) {
+        return;
+      }
+
+      const tables = Array.isArray(payload.tables) ? payload.tables : [];
+      state.databaseTables = tables;
+      renderDatabaseSummary(tables);
+      updateDatabaseTableSelect(tables);
+
+      toggleHidden(elements.databaseSummaryWrapper, tables.length === 0);
+      toggleHidden(elements.databaseSummaryEmpty, tables.length !== 0);
+
+      if (state.databaseSelectedTable && tables.length > 0) {
+        await loadDatabaseTable({ showLoader: true });
+      }
+    } catch (error) {
+      console.error(error);
+      showAlert(elements.databaseSummaryError, "Не удалось загрузить список таблиц.");
+    } finally {
+      if (elements.databaseSummaryLoading) {
+        toggleHidden(elements.databaseSummaryLoading, true);
+      }
+    }
+  }
+
+  function renderDatabaseRows(tableData) {
+    if (!elements.databaseRowsHead || !elements.databaseRowsBody) {
+      return;
+    }
+
+    elements.databaseRowsHead.innerHTML = "";
+    elements.databaseRowsBody.innerHTML = "";
+
+    const columns = tableData.columns || [];
+    columns.forEach((column) => {
+      const th = document.createElement("th");
+      th.textContent = column;
+      elements.databaseRowsHead.appendChild(th);
+    });
+
+    tableData.rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      columns.forEach((column) => {
+        const td = document.createElement("td");
+        const value = row[column];
+        td.textContent = value === null || value === undefined ? "—" : String(value);
+        tr.appendChild(td);
+      });
+      elements.databaseRowsBody.appendChild(tr);
+    });
+  }
+
+  async function loadDatabaseTable({ showLoader = false } = {}) {
+    if (!elements.databaseRowsLoading) {
+      return;
+    }
+
+    if (!state.databaseSelectedTable) {
+      elements.databaseRowsLoading.textContent = "Выберите таблицу для просмотра.";
+      toggleHidden(elements.databaseRowsLoading, false);
+      toggleHidden(elements.databaseRowsWrapper, true);
+      toggleHidden(elements.databaseRowsEmpty, true);
+      showAlert(elements.databaseRowsError, "");
+      return;
+    }
+
+    showAlert(elements.databaseRowsError, "");
+    toggleHidden(elements.databaseRowsEmpty, true);
+    toggleHidden(elements.databaseRowsWrapper, true);
+    if (showLoader) {
+      elements.databaseRowsLoading.textContent = "Загрузка данных таблицы...";
+      toggleHidden(elements.databaseRowsLoading, false);
+    }
+
+    try {
+      const params = new URLSearchParams({ table: state.databaseSelectedTable, limit: "200" });
+      const response = await fetch(`${apiBaseUrl}/admin/database/table?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Table fetch failed with status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      renderDatabaseRows(payload);
+
+      toggleHidden(elements.databaseRowsWrapper, false);
+      toggleHidden(elements.databaseRowsEmpty, payload.rows.length !== 0);
+      if (elements.databaseRowsTotal) {
+        elements.databaseRowsTotal.textContent = `Всего записей: ${payload.total ?? 0}`;
+      }
+    } catch (error) {
+      console.error(error);
+      showAlert(elements.databaseRowsError, "Не удалось загрузить данные таблицы.");
+    } finally {
+      if (elements.databaseRowsLoading) {
+        toggleHidden(elements.databaseRowsLoading, true);
+      }
+    }
+  }
+
+  async function downloadDatabaseBackup() {
+    if (elements.databaseBackupButton) {
+      elements.databaseBackupButton.disabled = true;
+    }
+    showAlert(elements.databaseBackupStatus, "");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/database/backup`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Backup failed with status ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "database-backup.json";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+
+      showAlert(elements.databaseBackupStatus, "Бэкап успешно скачан.", "success");
+    } catch (error) {
+      console.error(error);
+      showAlert(elements.databaseBackupStatus, "Не удалось создать бэкап базы данных.");
+    } finally {
+      if (elements.databaseBackupButton) {
+        elements.databaseBackupButton.disabled = false;
+      }
+    }
+  }
+
+  async function restoreDatabaseBackup() {
+    if (!elements.databaseRestoreFile || !elements.databaseRestoreButton) {
+      return;
+    }
+
+    if (!elements.databaseRestoreFile.files || elements.databaseRestoreFile.files.length === 0) {
+      showAlert(elements.databaseBackupStatus, "Выберите JSON-файл с бэкапом для восстановления.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", elements.databaseRestoreFile.files[0]);
+
+    elements.databaseRestoreButton.disabled = true;
+    showAlert(elements.databaseBackupStatus, "");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/database/restore`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+        },
+        body: formData,
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        const message = payload.detail || `Восстановление завершилось с ошибкой ${response.status}`;
+        throw new Error(message);
+      }
+
+      showAlert(elements.databaseBackupStatus, "База данных успешно восстановлена.", "success");
+      await loadDatabaseSummary({ showLoader: false });
+      await loadDatabaseTable({ showLoader: true });
+    } catch (error) {
+      console.error(error);
+      showAlert(elements.databaseBackupStatus, error.message || "Не удалось восстановить базу данных.");
+    } finally {
+      elements.databaseRestoreButton.disabled = false;
     }
   }
 
@@ -2012,6 +2313,37 @@
     });
   }
 
+  if (elements.databaseRefreshButton) {
+    elements.databaseRefreshButton.addEventListener("click", () => {
+      void loadDatabaseSummary({ showLoader: true });
+    });
+  }
+
+  if (elements.databaseTableSelect) {
+    elements.databaseTableSelect.addEventListener("change", (event) => {
+      state.databaseSelectedTable = event.target.value;
+      void loadDatabaseTable({ showLoader: true });
+    });
+  }
+
+  if (elements.databaseTableRefresh) {
+    elements.databaseTableRefresh.addEventListener("click", () => {
+      void loadDatabaseTable({ showLoader: true });
+    });
+  }
+
+  if (elements.databaseBackupButton) {
+    elements.databaseBackupButton.addEventListener("click", () => {
+      void downloadDatabaseBackup();
+    });
+  }
+
+  if (elements.databaseRestoreButton) {
+    elements.databaseRestoreButton.addEventListener("click", () => {
+      void restoreDatabaseBackup();
+    });
+  }
+
 
 
   if (pageType === "system") {
@@ -2021,6 +2353,10 @@
     void loadQueueSnapshot({ showLoader: false, silent: true });
   } else {
     stopSystemAutoRefresh();
+  }
+
+  if (pageType === "database") {
+    void loadDatabaseSummary({ showLoader: true });
   }
 
   if (pageType === "users" || pageType === "stats") {

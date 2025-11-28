@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import io
+import json
 from typing import List, Optional, Sequence
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.responses import StreamingResponse
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
 from sqlalchemy.sql import func
 
 import models
@@ -518,3 +521,141 @@ def get_user_detail(
         has_pin=user.has_pin,
         locations=locations,
     )
+
+
+@router.get("/database/summary")
+def get_database_summary(
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_read_db),
+):
+    metadata = models.Base.metadata
+    tables = []
+
+    for table in metadata.sorted_tables:
+        count_stmt = select(func.count()).select_from(table)
+        row_count = db.execute(count_stmt).scalar() or 0
+        tables.append(
+            {
+                "name": table.name,
+                "columns": [column.name for column in table.columns],
+                "row_count": int(row_count),
+            }
+        )
+
+    return {"tables": tables}
+
+
+@router.get("/database/table")
+def get_table_rows(
+    name: str = Query(..., alias="table"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_read_db),
+):
+    metadata = models.Base.metadata
+    table = metadata.tables.get(name)
+    if table is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Таблица не найдена")
+
+    rows_stmt = select(table).limit(limit).offset(offset)
+    rows = [dict(row) for row in db.execute(rows_stmt).mappings().all()]
+    total_stmt = select(func.count()).select_from(table)
+    total_rows = db.execute(total_stmt).scalar() or 0
+
+    return {
+        "name": name,
+        "columns": [column.name for column in table.columns],
+        "rows": rows,
+        "total": int(total_rows),
+    }
+
+
+@router.get("/database/backup")
+def download_database_backup(
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_read_db),
+):
+    metadata = models.Base.metadata
+    backup = {
+        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "tables": {},
+    }
+
+    for table in metadata.sorted_tables:
+        rows_stmt = select(table)
+        rows = [dict(row) for row in db.execute(rows_stmt).mappings().all()]
+        backup["tables"][table.name] = {
+            "columns": [column.name for column in table.columns],
+            "rows": rows,
+        }
+
+    payload = json.dumps(backup, ensure_ascii=False, indent=2)
+    filename = f"backup-{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
+
+    return StreamingResponse(
+        io.BytesIO(payload.encode("utf-8")),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.post("/database/restore", status_code=status.HTTP_201_CREATED)
+async def restore_database_from_backup(
+    file: UploadFile = File(...),
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        content = await file.read()
+        payload = json.loads(content)
+    except Exception as exc:  # pragma: no cover - defensive
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Не удалось прочитать бэкап") from exc
+
+    tables_payload = payload.get("tables") if isinstance(payload, dict) else None
+    if not isinstance(tables_payload, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректная структура бэкапа: отсутствует раздел tables",
+        )
+
+    metadata = models.Base.metadata
+    available_tables = {table.name: table for table in metadata.sorted_tables}
+
+    for table_name, data in tables_payload.items():
+        if table_name not in available_tables:
+            continue
+        rows = data.get("rows") if isinstance(data, dict) else None
+        if rows is not None and not isinstance(rows, list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Некорректные данные таблицы {table_name}",
+            )
+
+    try:
+        for table in reversed(metadata.sorted_tables):
+            if table.name in tables_payload:
+                db.execute(table.delete())
+
+        for table in metadata.sorted_tables:
+            table_data = tables_payload.get(table.name)
+            if not table_data:
+                continue
+
+            raw_rows = table_data.get("rows", []) if isinstance(table_data, dict) else []
+            filtered_rows = [
+                {column.name: row.get(column.name) for column in table.columns}
+                for row in raw_rows
+                if isinstance(row, dict)
+            ]
+
+            if filtered_rows:
+                db.execute(table.insert(), filtered_rows)
+
+        db.commit()
+    except Exception as exc:  # pragma: no cover - defensive
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Не удалось восстановить базу данных") from exc
+
+    restored = [name for name in tables_payload if name in available_tables]
+    return {"status": "ok", "restored_tables": restored}
