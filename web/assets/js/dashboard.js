@@ -578,6 +578,41 @@
     return map[normalized] || normalized;
   }
 
+  function formatEventMessage(event) {
+    if (!event) {
+      return "—";
+    }
+
+    const baseMessage = event.message || "—";
+    const context = event.context || {};
+    const details = [];
+
+    if (context.method && context.path) {
+      details.push(`${context.method} ${context.path}`);
+    } else if (context.method) {
+      details.push(context.method);
+    }
+
+    if (typeof context.status_code === "number") {
+      details.push(`Статус ${context.status_code}`);
+    }
+
+    if (typeof context.duration_ms === "number") {
+      const rounded = Math.round(Number(context.duration_ms));
+      details.push(`${rounded} мс`);
+    }
+
+    if (context.request_id) {
+      details.push(`ID ${context.request_id}`);
+    }
+
+    if (details.length === 0) {
+      return baseMessage;
+    }
+
+    return `${baseMessage} · ${details.join(" · ")}`;
+  }
+
   function renderSystemEvents(events) {
     if (!elements.systemEventsBody) {
       return;
@@ -614,7 +649,7 @@
       row.appendChild(levelCell);
 
       const messageCell = document.createElement("td");
-      messageCell.textContent = event.message || "—";
+      messageCell.textContent = formatEventMessage(event);
       row.appendChild(messageCell);
 
       const sourceCell = document.createElement("td");

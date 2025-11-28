@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +14,7 @@ import models
 import settings
 from cache import cache
 from database import engine
-from logging_config import configure_logging
+from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
 from routes import (
     admin,
@@ -35,6 +37,65 @@ logger = logging.getLogger(__name__)
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every HTTP request with duration, status and correlation ids."""
+
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    trace_id = request.headers.get("X-Trace-Id")
+    tokens = set_request_context(request_id=request_id, trace_id=trace_id)
+
+    client_host = request.headers.get("X-Forwarded-For")
+    if request.client and not client_host:
+        client_host = request.client.host
+
+    user_agent = request.headers.get("user-agent")
+    start_time = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+        logger.exception(
+            "Unhandled application error",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "client": client_host,
+                "user_agent": user_agent,
+                "duration_ms": duration_ms,
+                "request_id": request_id,
+            },
+        )
+        reset_request_context(*tokens)
+        raise
+
+    duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+    level = logging.INFO
+    if response.status_code >= 500:
+        level = logging.ERROR
+    elif response.status_code >= 400:
+        level = logging.WARNING
+
+    logger.log(
+        level,
+        "HTTP request completed",
+        extra={
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+            "client": client_host,
+            "user_agent": user_agent,
+            "request_id": request_id,
+        },
+    )
+
+    response.headers["X-Request-ID"] = request_id
+    reset_request_context(*tokens)
+    return response
 
 # Разрешаем CORS для доверенных источников
 app.add_middleware(

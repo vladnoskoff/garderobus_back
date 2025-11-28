@@ -8,11 +8,12 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
+import settings
 from pythonjsonlogger import jsonlogger
 
 
-DEFAULT_LOG_LEVEL = "INFO"
-DEFAULT_LOG_PATH = "/www/wwwroot/api/chkaf_update/log/garderobus/api.log"
+DEFAULT_LOG_LEVEL = settings.LOG_LEVEL
+DEFAULT_LOG_PATH = settings.LOG_FILE
 
 
 _REQUEST_ID: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -114,7 +115,7 @@ def configure_logging() -> None:
             "level": log_level,
             "filename": str(log_path),
             "when": "midnight",
-            "backupCount": int(os.getenv("LOG_FILE_BACKUP_COUNT", "7")),
+            "backupCount": int(os.getenv("LOG_FILE_BACKUP_COUNT", str(settings.LOG_FILE_BACKUP_COUNT))),
             "filters": ["request_context"],
         }
         root_handlers.append("file")
