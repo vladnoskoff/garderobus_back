@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+import base64
+import decimal
 import io
 import json
 from typing import List, Optional, Sequence
@@ -576,6 +578,18 @@ def download_database_backup(
     _: models.User = Depends(_get_current_user),
     db: Session = Depends(get_read_db),
 ):
+    def _serialize_value(value):
+        if isinstance(value, (datetime, date, time)):
+            return value.isoformat()
+        if isinstance(value, decimal.Decimal):
+            return float(value)
+        if isinstance(value, bytes):
+            try:
+                return value.decode("utf-8")
+            except UnicodeDecodeError:
+                return base64.b64encode(value).decode("ascii")
+        return value
+
     metadata = models.Base.metadata
     backup = {
         "generated_at": datetime.utcnow().isoformat() + "Z",
@@ -584,7 +598,10 @@ def download_database_backup(
 
     for table in metadata.sorted_tables:
         rows_stmt = select(table)
-        rows = [dict(row) for row in db.execute(rows_stmt).mappings().all()]
+        rows = [
+            {column.name: _serialize_value(row.get(column.name)) for column in table.columns}
+            for row in db.execute(rows_stmt).mappings().all()
+        ]
         backup["tables"][table.name] = {
             "columns": [column.name for column in table.columns],
             "rows": rows,

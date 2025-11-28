@@ -688,6 +688,21 @@
     }
   }
 
+  function formatDatabaseCellValue(value) {
+    if (value === null || value === undefined) {
+      return "—";
+    }
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        console.error("Failed to stringify value", error);
+        return String(value);
+      }
+    }
+    return String(value);
+  }
+
   function renderDatabaseRows(tableData) {
     if (!elements.databaseRowsHead || !elements.databaseRowsBody) {
       return;
@@ -707,8 +722,13 @@
       const tr = document.createElement("tr");
       columns.forEach((column) => {
         const td = document.createElement("td");
-        const value = row[column];
-        td.textContent = value === null || value === undefined ? "—" : String(value);
+        const fullValue = formatDatabaseCellValue(row[column]);
+        const shouldTruncate = fullValue.length > 180;
+        const displayValue = shouldTruncate ? `${fullValue.slice(0, 180)}…` : fullValue;
+        td.textContent = displayValue;
+        if (shouldTruncate) {
+          td.title = fullValue;
+        }
         tr.appendChild(td);
       });
       elements.databaseRowsBody.appendChild(tr);

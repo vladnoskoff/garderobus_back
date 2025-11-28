@@ -450,6 +450,21 @@ button.link {
   width: 100%;
 }
 
+body[data-page="database"] .table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+body[data-page="database"] .table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+body[data-page="database"] .table th,
+body[data-page="database"] .table td {
+  max-width: 260px;
+}
+
 .sidebar button.link {
   align-self: flex-start;
   color: #f9fafb;
