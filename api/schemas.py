@@ -341,6 +341,10 @@ class AdminActivityMetrics(BaseModel):
     platform_breakdown: dict[str, int] = Field(default_factory=dict)
 
 
+class UserActivityHeartbeat(BaseModel):
+    platform: Optional[str] = None
+
+
 class WardrobeLocationUpdate(BaseModel):
     name: Optional[str] = None
     latitude: Optional[float] = None

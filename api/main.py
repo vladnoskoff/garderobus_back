@@ -17,6 +17,7 @@ from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
 from routes import (
+    activity,
     admin,
     ai_recommendation,
     clothes,
@@ -128,6 +129,7 @@ app.mount(
 )
 
 app.include_router(admin.router)
+app.include_router(activity.router)
 app.include_router(users.router)
 app.include_router(clothes.router)
 app.include_router(outfits.router)
