@@ -3,7 +3,11 @@ import logging
 import os
 import requests
 import subprocess
+import threading
+import signal
 import time
+import pwd
+import grp
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -12,21 +16,33 @@ from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError
 from fastapi import HTTPException, status
 
-from celery_app import celery_app
-import models
-import settings
-import schemas
+from api.celery_app import celery_app
+from api import models, settings
+from api_admin import schemas
 
 logger = logging.getLogger(__name__)
 
 _START_TIME = time.time()
 _LAST_RESTART_REQUEST: Optional[datetime] = None
+_LAST_ADMIN_RESTART_REQUEST: Optional[datetime] = None
 _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 
-LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
+LOG_DATE_FORMATS = (
+    "%Y-%m-%d %H:%M:%S,%f",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y/%m/%d %H:%M:%S.%f",
+    "%Y/%m/%d %H:%M:%S,%f",
+    "%Y/%m/%d %H:%M:%S",
+    "%b %d %H:%M:%S",
+)
 
-LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
+
+def _log_managed_file_error(relative_path: str, detail: str, **extra: object) -> None:
+    logger.warning(
+        "Managed code operation failed",
+        extra={"file": relative_path, "detail": detail, **extra},
+    )
 
 
 def _parse_datetime(value: object) -> Optional[datetime]:
@@ -138,6 +154,7 @@ def _allowed_extension(path: Path) -> bool:
 def _ensure_within_root(relative_path: str) -> Path:
     candidate = Path(relative_path)
     if candidate.is_absolute() or any(part == ".." for part in candidate.parts):
+        _log_managed_file_error(relative_path, "Недопустимый путь файла")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Недопустимый путь файла",
@@ -147,12 +164,16 @@ def _ensure_within_root(relative_path: str) -> Path:
     full_path = (root / candidate).resolve()
 
     if not str(full_path).startswith(str(root)):
+        _log_managed_file_error(
+            relative_path, "Путь выходит за пределы разрешенной директории"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Путь выходит за пределы разрешенной директории",
         )
 
     if not _allowed_extension(full_path):
+        _log_managed_file_error(relative_path, "Расширение не поддерживается")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Расширение файла не поддерживается для редактирования",
@@ -161,13 +182,65 @@ def _ensure_within_root(relative_path: str) -> Path:
     return full_path
 
 
-def _validate_size(content: str) -> None:
+def _validate_size(content: str, *, path: str = "(unknown)") -> None:
     max_size = settings.ADMIN_MANAGED_CODE_MAX_SIZE
     if max_size and len(content.encode("utf-8")) > max_size:
+        _log_managed_file_error(
+            path,
+            "Размер файла превышает допустимый предел",
+            size=len(content.encode("utf-8")),
+        )
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Размер файла превышает допустимый предел",
         )
+
+
+def _content_matches(full_path: Path, expected: str) -> bool:
+    try:
+        return full_path.read_text(encoding="utf-8") == expected
+    except OSError:
+        return False
+
+
+def _is_ignored_path(path: Path) -> bool:
+    if any(part == "__pycache__" for part in path.parts):
+        return True
+
+    if path.suffix.lower() in {".pyc", ".pyo"}:
+        return True
+
+    return False
+
+
+def _permission_remediation(full_path: Path, *, process_user: str, process_group: str) -> str:
+    suggestions: list[str] = []
+
+    try:
+        file_stat = full_path.stat()
+    except OSError:
+        file_stat = None
+
+    try:
+        parent_stat = full_path.parent.stat()
+    except OSError:
+        parent_stat = None
+
+    if not os.access(full_path, os.W_OK):
+        suggestions.append(f"sudo chmod u+w {full_path}")
+
+    if parent_stat and not os.access(full_path.parent, os.W_OK):
+        suggestions.append(f"sudo chmod u+w {full_path.parent}")
+
+    if file_stat and (file_stat.st_uid != os.geteuid() or file_stat.st_gid != os.getegid()):
+        suggestions.append(
+            f"sudo chown {process_user}:{process_group} {full_path}"
+        )
+
+    if not suggestions:
+        return ""
+
+    return " Возможные действия: " + "; ".join(suggestions) + "."
 
 
 def list_managed_files() -> List[str]:
@@ -179,6 +252,8 @@ def list_managed_files() -> List[str]:
     for file_path in root.rglob("*"):
         if not file_path.is_file():
             continue
+        if _is_ignored_path(file_path):
+            continue
         if not _allowed_extension(file_path):
             continue
         try:
@@ -187,7 +262,7 @@ def list_managed_files() -> List[str]:
             continue
         files.append(relative)
 
-    files.sort()
+    files.sort(key=str.casefold)
     return files
 
 
@@ -197,8 +272,10 @@ def get_system_status() -> schemas.AdminSystemStatus:
         uptime_seconds=uptime_seconds,
         uptime_human=_humanize_duration(uptime_seconds),
         restart_supported=is_restart_supported(),
+        admin_restart_supported=is_admin_restart_supported(),
         worker_restart_supported=is_worker_restart_supported(),
         last_restart_requested_at=_LAST_RESTART_REQUEST,
+        last_admin_restart_requested_at=_LAST_ADMIN_RESTART_REQUEST,
         managed_files=list_managed_files(),
         app_name=settings.APP_NAME,
         app_version=settings.APP_VERSION,
@@ -248,6 +325,7 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
 def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:
     full_path = _ensure_within_root(relative_path)
     if not full_path.exists() or not full_path.is_file():
+        _log_managed_file_error(relative_path, "Файл не найден")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Файл не найден",
@@ -256,9 +334,18 @@ def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:
     try:
         content = full_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
+        _log_managed_file_error(
+            relative_path, "Файл не может быть прочитан как текст UTF-8"
+        )
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Файл не может быть прочитан как текст UTF-8",
+        ) from exc
+    except OSError as exc:
+        _log_managed_file_error(relative_path, "Не удалось прочитать файл", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось прочитать файл",
         ) from exc
 
     relative = full_path.relative_to(settings.ADMIN_MANAGED_CODE_ROOT).as_posix()
@@ -274,14 +361,81 @@ def write_managed_file(
 ) -> schemas.AdminCodeFile:
     full_path = _ensure_within_root(relative_path)
     if not full_path.exists() or not full_path.is_file():
+        _log_managed_file_error(relative_path, "Файл не найден")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Файл не найден",
         )
 
-    _validate_size(content)
+    _validate_size(content, path=relative_path)
 
-    full_path.write_text(content, encoding="utf-8")
+    try:
+        full_path.write_text(content, encoding="utf-8")
+    except PermissionError as exc:
+        if _content_matches(full_path, content):
+            logger.warning(
+                "Write reported permission error but content matches. Returning success.",
+                extra={"file": relative_path, "error": str(exc)},
+            )
+        else:
+            stat = full_path.stat()
+
+            try:
+                owner = pwd.getpwuid(stat.st_uid).pw_name
+            except KeyError:
+                owner = str(stat.st_uid)
+
+            try:
+                group = grp.getgrgid(stat.st_gid).gr_name
+            except KeyError:
+                group = str(stat.st_gid)
+
+            process_user = pwd.getpwuid(os.geteuid()).pw_name
+            process_group = grp.getgrgid(os.getegid()).gr_name
+            mode = oct(stat.st_mode & 0o777)
+
+            remediation = _permission_remediation(
+                full_path, process_user=process_user, process_group=process_group
+            )
+
+            detail = (
+                "Недостаточно прав для сохранения файла. "
+                "Файл принадлежит {owner}:{group} с правами {mode}; "
+                "API запущен от {user}:{proc_group}. "
+                "Сохранение всегда выполняется от имени процесса API — даже если вы редактируете код от другого пользователя. "
+                "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца." + remediation
+            ).format(owner=owner, group=group, mode=mode, user=process_user, proc_group=process_group)
+
+            _log_managed_file_error(
+                relative_path,
+                detail,
+                error=str(exc),
+                owner=owner,
+                group=group,
+                mode=mode,
+                process_user=process_user,
+                process_group=process_group,
+                remediation=remediation.strip(),
+            )
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=detail,
+            ) from exc
+    except OSError as exc:
+        if _content_matches(full_path, content):
+            logger.warning(
+                "Write reported error but content matches. Returning success.",
+                extra={"file": relative_path, "error": str(exc)},
+            )
+        else:
+            _log_managed_file_error(
+                relative_path, "Не удалось сохранить файл", error=str(exc)
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось сохранить файл",
+            ) from exc
     relative = full_path.relative_to(settings.ADMIN_MANAGED_CODE_ROOT).as_posix()
 
     logger.info(
@@ -297,27 +451,37 @@ def write_managed_file(
     return schemas.AdminCodeFile(path=relative, content=content)
 
 
+def _schedule_self_restart(delay: float = 0.5) -> None:
+    def _shutdown() -> None:
+        time.sleep(delay)
+        try:
+            os.kill(os.getpid(), signal.SIGTERM)
+        finally:
+            os._exit(0)
+
+    threading.Thread(target=_shutdown, daemon=True).start()
+
+
 def is_restart_supported() -> bool:
-    return bool(settings.ADMIN_ALLOW_RESTART and settings.ADMIN_RESTART_COMMAND)
+    return bool(settings.ADMIN_ALLOW_RESTART)
 
 
 def is_worker_restart_supported() -> bool:
     return bool(settings.ADMIN_ALLOW_WORKER_RESTART and settings.ADMIN_WORKER_RESTART_COMMAND)
 
 
+def is_admin_restart_supported() -> bool:
+    return bool(settings.ADMIN_ALLOW_ADMIN_RESTART)
+
+
 def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminRestartResponse:
-    if not is_restart_supported():
+    if not settings.ADMIN_ALLOW_RESTART:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Перезапуск API не настроен",
         )
 
-    command = settings.ADMIN_RESTART_COMMAND
-    if not command:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Команда перезапуска не задана",
-        )
+    command = (settings.ADMIN_RESTART_COMMAND or "").strip()
 
     logger.info(
         "API restart requested",
@@ -328,24 +492,78 @@ def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminR
         },
     )
 
-    sanitized_command = command.strip()
-
-    try:
-        process = subprocess.Popen(  # noqa: S603 - administrative action
-            sanitized_command,  # noqa: S607 - command configured by environment
-            shell=True,
-        )
-    except OSError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Не удалось инициировать перезапуск API",
-        ) from exc
+    process = None
+    if command:
+        try:
+            process = subprocess.Popen(  # noqa: S603 - administrative action
+                command,  # noqa: S607 - command configured by environment
+                shell=True,
+            )
+        except OSError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось инициировать перезапуск API",
+            ) from exc
+    else:
+        _schedule_self_restart()
 
     global _LAST_RESTART_REQUEST
     _LAST_RESTART_REQUEST = datetime.now(timezone.utc)
 
     return schemas.AdminRestartResponse(
-        detail="Перезапуск API инициирован",
+        detail=(
+            "Перезапуск API инициирован"
+            if command
+            else "Перезапуск API инициирован (автоматическое завершение процесса)"
+        ),
+        pid=getattr(process, "pid", None),
+    )
+
+
+def restart_admin_service(
+    *, requested_by: Optional[models.User] = None
+) -> schemas.AdminRestartResponse:
+    if not settings.ADMIN_ALLOW_ADMIN_RESTART:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Перезапуск админ-сервиса не настроен",
+        )
+
+    command = (settings.ADMIN_ADMIN_RESTART_COMMAND or "").strip()
+
+    logger.info(
+        "Admin service restart requested",
+        extra={
+            "actor_id": getattr(requested_by, "id", None),
+            "actor_email": getattr(requested_by, "email", None),
+            "command": command,
+        },
+    )
+
+    process = None
+    if command:
+        try:
+            process = subprocess.Popen(  # noqa: S603 - administrative action
+                command,  # noqa: S607 - command configured by environment
+                shell=True,
+            )
+        except OSError as exc:  # pragma: no cover - system-specific failure
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось инициировать перезапуск админ-сервиса",
+            ) from exc
+    else:
+        _schedule_self_restart()
+
+    global _LAST_ADMIN_RESTART_REQUEST
+    _LAST_ADMIN_RESTART_REQUEST = datetime.now(timezone.utc)
+
+    return schemas.AdminRestartResponse(
+        detail=(
+            "Перезапуск админ-сервиса инициирован"
+            if command
+            else "Перезапуск админ-сервиса инициирован (автозавершение процесса)"
+        ),
         pid=getattr(process, "pid", None),
     )
 
@@ -510,6 +728,8 @@ def _parse_timestamp(raw: Optional[str]) -> Optional[datetime]:
     for fmt in LOG_DATE_FORMATS:
         try:
             parsed = datetime.strptime(raw, fmt)
+            if "%Y" not in fmt:
+                parsed = parsed.replace(year=datetime.now(timezone.utc).year)
             return parsed.replace(tzinfo=timezone.utc)
         except ValueError:
             continue
@@ -539,6 +759,67 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
     ).lower()
     message = str(payload.get("message") or payload.get("msg") or "").strip()
 
+    def _detect_event_category() -> str:
+        raw_service = str(payload.get("service") or "").lower()
+        raw_logger = str(payload.get("logger") or payload.get("name") or "").lower()
+        raw_message = message.lower()
+
+        context = payload.get("context") or {}
+        context_text = " ".join(
+            str(value) for value in context.values() if isinstance(value, (str, int, float))
+        ).lower()
+
+        searchable = " ".join(
+            part for part in [raw_service, raw_logger, raw_message, context_text] if part
+        )
+
+        def has_any(text: str, tokens: tuple[str, ...]) -> bool:
+            return any(token in text for token in tokens)
+
+        if has_any(searchable, ("xray", "vpn", "socks", "proxy")):
+            return "xray"
+
+        if has_any(
+            searchable,
+            (
+                "db",
+                "database",
+                "postgres",
+                "psql",
+                "sqlalchemy",
+                "mysql",
+                "sqlite",
+                "psycopg",
+                "query",
+                "pool",
+            ),
+        ):
+            return "database"
+
+        if has_any(
+            searchable,
+            ("uvicorn", "fastapi", "http", "api", "request", "endpoint", "gunicorn"),
+        ):
+            return "api"
+
+        if has_any(
+            searchable,
+            (
+                "celery",
+                "worker",
+                "queue",
+                "task",
+                "beat",
+                "redis",
+                "amqp",
+                "rabbit",
+                "kombu",
+            ),
+        ):
+            return "workers"
+
+        return "application"
+
     known_keys = {
         "asctime",
         "timestamp",
@@ -562,8 +843,39 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
         message=message or "—",
         logger=payload.get("logger") or payload.get("name"),
         service=payload.get("service"),
+        category=_detect_event_category(),
         context=context,
     )
+
+
+def _build_plain_event(line: str) -> Optional[schemas.AdminSystemEvent]:
+    for fmt in LOG_DATE_FORMATS:
+        fmt_normalized = fmt.replace(",%f", ".%f")
+        try:
+            parsed = datetime.strptime(line[: len(fmt_normalized)], fmt_normalized)
+            timestamp = parsed.replace(tzinfo=timezone.utc)
+            remainder = line[len(fmt_normalized) :].strip(" -:")
+            break
+        except ValueError:
+            timestamp = None
+    else:
+        timestamp = None
+
+    if timestamp is None:
+        return None
+
+    level = "info"
+    lowered = line.lower()
+    if any(token in lowered for token in ("error", "err")):
+        level = "error"
+    elif "warn" in lowered:
+        level = "warning"
+    elif "debug" in lowered:
+        level = "debug"
+
+    message = remainder if remainder else line.strip()
+    payload = {"timestamp": timestamp, "level": level, "message": message}
+    return _build_event(payload)
 
 
 def get_system_events(
@@ -591,6 +903,14 @@ def get_system_events(
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
+                event = _build_plain_event(line)
+                if event is None:
+                    continue
+                if desired_level and event.level != desired_level:
+                    continue
+                if cutoff and event.timestamp < cutoff:
+                    continue
+                events.append(event)
                 continue
 
             event = _build_event(payload)

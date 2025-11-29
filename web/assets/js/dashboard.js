@@ -76,6 +76,8 @@
     systemEnvironment: document.getElementById("system-environment"),
     systemRestartState: document.getElementById("system-restart-state"),
     systemLastRestart: document.getElementById("system-last-restart"),
+    systemAdminRestartState: document.getElementById("system-admin-restart-state"),
+    systemAdminLastRestart: document.getElementById("system-admin-last-restart"),
     systemFilesCount: document.getElementById("system-files-count"),
     systemFilesList: document.getElementById("system-files-list"),
     systemServiceStatuses: document.getElementById("system-service-statuses"),
@@ -85,13 +87,16 @@
     systemActionsToggle: document.getElementById("system-actions-toggle"),
     systemActionsList: document.getElementById("system-actions-list"),
     systemEventsWrapper: document.getElementById("system-events-wrapper"),
-    systemEventsBody: document.getElementById("system-events-body"),
+    systemEventsGroups: document.getElementById("system-events-groups"),
     systemEventsLoading: document.getElementById("system-events-loading"),
     systemEventsEmpty: document.getElementById("system-events-empty"),
     systemEventsError: document.getElementById("system-events-error"),
     systemEventsLevel: document.getElementById("system-events-level"),
     systemEventsPeriod: document.getElementById("system-events-period"),
     systemEventsLimit: document.getElementById("system-events-limit"),
+    systemEventsRefresh: document.getElementById("system-events-refresh"),
+    systemEventsUpdatedAt: document.getElementById("system-events-updated-at"),
+    systemEventsShowEmpty: document.getElementById("system-events-show-empty"),
     systemEventsPrev: document.getElementById("system-events-prev"),
     systemEventsNext: document.getElementById("system-events-next"),
     systemEventsPageInfo: document.getElementById("system-events-page-info"),
@@ -157,6 +162,11 @@
       hours: "",
       total: 0,
       loadedOnce: false,
+      loading: false,
+      lastSignature: "",
+      refreshInterval: null,
+      latestEvents: [],
+      showEmpty: false,
     },
     queueSnapshot: null,
     queueLoadedOnce: false,
@@ -927,41 +937,211 @@
       return "—";
     }
 
-    const baseMessage = event.message || "—";
+    return event.message || "—";
+  }
+
+  const EVENT_CATEGORY_ORDER = [
+    "application",
+    "api",
+    "database",
+    "xray",
+    "workers",
+    "other",
+  ];
+
+  const EVENT_CATEGORY_LABELS = {
+    application: "Приложение",
+    api: "API",
+    database: "База данных",
+    xray: "VPN / Xray",
+    workers: "Очереди и воркеры",
+    other: "Прочее",
+  };
+
+  const EVENT_CATEGORY_HINTS = {
+    application: "Бизнес-логика, фоновые операции и внутренние сервисы.",
+    api: "HTTP-запросы, REST-эндпоинты и ошибки FastAPI/Uvicorn.",
+    database: "Подключения к БД, запросы и миграции.",
+    xray: "VPN/Xray-тоннель и прокси-доступ к внешним API.",
+    workers: "Очереди Celery и фоновые задания.",
+    other: "Логи без явной категории.",
+  };
+
+  function normalizeEventCategory(category) {
+    const normalized = String(category || "").toLowerCase();
+    if (EVENT_CATEGORY_ORDER.includes(normalized)) {
+      return normalized;
+    }
+    return normalized ? "other" : "application";
+  }
+
+  function detectFallbackCategory(event) {
+    const parts = [event?.service, event?.logger, event?.message]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase())
+      .join(" ");
+    const contextText = Object.values(event?.context || {})
+      .filter((value) => typeof value === "string")
+      .join(" ")
+      .toLowerCase();
+    const searchable = `${parts} ${contextText}`.trim();
+
+    const hasAny = (tokens) => tokens.some((token) => searchable.includes(token));
+
+    if (hasAny(["xray", "vpn", "socks"])) {
+      return "xray";
+    }
+    if (hasAny(["db", "database", "postgres", "psql", "sqlalchemy", "mysql", "sqlite"])) {
+      return "database";
+    }
+    if (hasAny(["uvicorn", "fastapi", "api", "http", "request", "endpoint"])) {
+      return "api";
+    }
+    if (hasAny(["celery", "worker", "queue", "task"])) {
+      return "workers";
+    }
+    return "application";
+  }
+
+  function getEventCategory(event) {
+    const hasExplicit = event?.category !== undefined && event?.category !== null && event?.category !== "";
+    if (hasExplicit) {
+      return normalizeEventCategory(event.category);
+    }
+    return detectFallbackCategory(event);
+  }
+
+  function groupEventsByCategory(events) {
+    const buckets = EVENT_CATEGORY_ORDER.reduce((acc, key) => {
+      acc[key] = [];
+      return acc;
+    }, {});
+
+    (events || []).forEach((event) => {
+      const category = getEventCategory(event);
+      const bucketKey = EVENT_CATEGORY_ORDER.includes(category) ? category : "other";
+      buckets[bucketKey].push(event);
+    });
+
+    return buckets;
+  }
+
+  function buildEventRow(event) {
+    const row = document.createElement("tr");
+
+    const timeCell = document.createElement("td");
+    const timeText = document.createElement("div");
+    timeText.className = "event-time";
+    timeText.textContent = formatDate(event.timestamp, true);
+    timeCell.appendChild(timeText);
+    row.appendChild(timeCell);
+
+    const levelCell = document.createElement("td");
+    const badge = document.createElement("span");
+    const levelClass =
+      event.level === "error"
+        ? "error"
+        : event.level === "warning"
+          ? "warning"
+          : "info";
+    badge.className = `status-badge ${levelClass}`;
+    badge.textContent = formatEventLevel(event.level);
+    levelCell.appendChild(badge);
+    row.appendChild(levelCell);
+
+    const messageCell = document.createElement("td");
+    const messagePrimary = document.createElement("div");
+    messagePrimary.className = "event-message-primary";
+    messagePrimary.textContent = formatEventMessage(event);
+    messageCell.appendChild(messagePrimary);
+
+    const categoryLabel = EVENT_CATEGORY_LABELS[getEventCategory(event)];
+    if (categoryLabel) {
+      const messageSecondary = document.createElement("div");
+      messageSecondary.className = "event-message-secondary text-muted";
+      messageSecondary.textContent = categoryLabel;
+      messageCell.appendChild(messageSecondary);
+    }
+
+    const detailParts = buildEventDetails(event);
+    if (detailParts.length) {
+      const meta = document.createElement("div");
+      meta.className = "event-meta-list";
+      detailParts.forEach((part) => {
+        const item = document.createElement("div");
+        item.className = "event-meta-item";
+
+        const label = document.createElement("span");
+        label.className = "event-meta-label";
+        label.textContent = part.label;
+
+        const value = document.createElement("span");
+        value.className = "event-meta-value";
+        value.textContent = part.value;
+
+        item.appendChild(label);
+        item.appendChild(value);
+        meta.appendChild(item);
+      });
+      messageCell.appendChild(meta);
+    }
+    row.appendChild(messageCell);
+
+    const sourceCell = document.createElement("td");
+    const parts = [event.service, event.logger].filter(Boolean);
+    const source = parts.join(" · ") || "—";
+    const sourceChip = document.createElement("span");
+    sourceChip.className = "event-message-chip";
+    const sourceLabel = document.createElement("strong");
+    sourceLabel.textContent = "Источник";
+    sourceChip.appendChild(sourceLabel);
+    sourceChip.appendChild(document.createTextNode(` ${source}`));
+    sourceCell.appendChild(sourceChip);
+    row.appendChild(sourceCell);
+
+    return row;
+  }
+
+  function buildEventDetails(event) {
+    if (!event) {
+      return [];
+    }
+
     const context = event.context || {};
     const details = [];
 
     if (context.method && context.path) {
-      details.push(`${context.method} ${context.path}`);
+      details.push({ label: "Запрос", value: `${context.method} ${context.path}` });
     } else if (context.method) {
-      details.push(context.method);
+      details.push({ label: "Метод", value: context.method });
     }
 
     if (typeof context.status_code === "number") {
-      details.push(`Статус ${context.status_code}`);
+      details.push({ label: "Статус", value: String(context.status_code) });
     }
 
     if (typeof context.duration_ms === "number") {
       const rounded = Math.round(Number(context.duration_ms));
-      details.push(`${rounded} мс`);
+      details.push({ label: "Время", value: `${rounded} мс` });
+    }
+
+    if (context.client) {
+      details.push({ label: "Клиент", value: context.client });
     }
 
     if (context.request_id) {
-      details.push(`ID ${context.request_id}`);
+      details.push({ label: "Request ID", value: context.request_id });
     }
 
-    if (details.length === 0) {
-      return baseMessage;
-    }
-
-    return `${baseMessage} · ${details.join(" · ")}`;
+    return details.filter(Boolean);
   }
 
   function renderSystemEvents(events) {
-    if (!elements.systemEventsBody) {
+    if (!elements.systemEventsGroups) {
       return;
     }
-    elements.systemEventsBody.innerHTML = "";
+
+    elements.systemEventsGroups.innerHTML = "";
 
     if (!events || !events.length) {
       toggleHidden(elements.systemEventsWrapper, true);
@@ -972,37 +1152,102 @@
     toggleHidden(elements.systemEventsWrapper, false);
     toggleHidden(elements.systemEventsEmpty, true);
 
-    events.forEach((event) => {
-      const row = document.createElement("tr");
+    const buckets = groupEventsByCategory(events);
+    const showEmpty = state.systemEvents.showEmpty;
+    let rendered = 0;
 
-      const timeCell = document.createElement("td");
-      timeCell.textContent = formatDate(event.timestamp, true);
-      row.appendChild(timeCell);
+    EVENT_CATEGORY_ORDER.forEach((category) => {
+      const bucket = buckets[category] || [];
+      if (!bucket.length && !showEmpty) {
+        return;
+      }
 
-      const levelCell = document.createElement("td");
-      const badge = document.createElement("span");
-      const levelClass =
-        event.level === "error"
-          ? "error"
-          : event.level === "warning"
-            ? "warning"
-            : "info";
-      badge.className = `status-badge ${levelClass}`;
-      badge.textContent = formatEventLevel(event.level);
-      levelCell.appendChild(badge);
-      row.appendChild(levelCell);
+      const section = document.createElement("section");
+      section.className = "event-category";
 
-      const messageCell = document.createElement("td");
-      messageCell.textContent = formatEventMessage(event);
-      row.appendChild(messageCell);
+      const header = document.createElement("div");
+      header.className = "event-category-header";
 
-      const sourceCell = document.createElement("td");
-      const parts = [event.service, event.logger].filter(Boolean);
-      sourceCell.textContent = parts.join(" · ") || "—";
-      row.appendChild(sourceCell);
+      const info = document.createElement("div");
+      info.className = "event-category-info";
 
-      elements.systemEventsBody.appendChild(row);
+      const title = document.createElement("div");
+      title.className = "event-category-title";
+      title.textContent = EVENT_CATEGORY_LABELS[category] || category;
+
+      const hint = document.createElement("p");
+      hint.className = "text-muted event-category-hint";
+      hint.textContent = EVENT_CATEGORY_HINTS[category] || "";
+
+      info.appendChild(title);
+      info.appendChild(hint);
+
+      const count = document.createElement("span");
+      count.className = "badge event-category-count";
+      count.textContent = `${bucket.length || 0} записей`;
+
+      header.appendChild(info);
+      header.appendChild(count);
+
+      section.appendChild(header);
+
+      if (!bucket.length) {
+        const empty = document.createElement("p");
+        empty.className = "text-muted event-category-empty";
+        empty.textContent = "Нет событий в этой категории";
+        section.appendChild(empty);
+        elements.systemEventsGroups.appendChild(section);
+        rendered += 1;
+        return;
+      }
+
+      const tableWrapper = document.createElement("div");
+      tableWrapper.className = "table-wrapper event-category-table";
+
+      const table = document.createElement("table");
+      table.className = "table events-table events-subtable";
+
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      ["Время", "Уровень", "Сообщение", "Источник"].forEach((label) => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      bucket.forEach((event) => {
+        tbody.appendChild(buildEventRow(event));
+      });
+      table.appendChild(tbody);
+
+      tableWrapper.appendChild(table);
+      section.appendChild(tableWrapper);
+
+      elements.systemEventsGroups.appendChild(section);
+      rendered += 1;
     });
+
+    if (rendered === 0) {
+      toggleHidden(elements.systemEventsWrapper, true);
+      toggleHidden(elements.systemEventsEmpty, false);
+    }
+  }
+
+  function computeEventsSignature(events) {
+    if (!events || !events.length) {
+      return "";
+    }
+
+    return events
+      .slice(0, 20)
+      .map((event) => {
+        const requestId = event.context?.request_id || event.request_id || "";
+        return [event.timestamp || "", event.level || "", event.message || "", requestId].join("|");
+      })
+      .join(";");
   }
 
   function updateSystemEventsPagination() {
@@ -1022,17 +1267,41 @@
     }
   }
 
+  function updateEventsTimestamp(hasChanges = false) {
+    if (!elements.systemEventsUpdatedAt) {
+      return;
+    }
+    const timestamp = formatDate(new Date(), true);
+    const suffix = hasChanges ? " · новые записи" : "";
+    elements.systemEventsUpdatedAt.textContent = `Обновлено ${timestamp}${suffix}`;
+    elements.systemEventsUpdatedAt.classList.toggle("highlight", hasChanges);
+    if (hasChanges) {
+      window.setTimeout(() => {
+        elements.systemEventsUpdatedAt?.classList.remove("highlight");
+      }, 1500);
+    }
+  }
+
   async function loadSystemEvents(options = {}) {
-    const { resetPage = false } = options;
+    const { resetPage = false, silent = false } = options;
     if (resetPage) {
       state.systemEvents.page = 1;
     }
 
+    if (state.systemEvents.loading) {
+      return;
+    }
+
+    state.systemEvents.loading = true;
+
     toggleHidden(elements.systemEventsError, true);
     toggleHidden(elements.systemEventsEmpty, true);
     if (elements.systemEventsLoading) {
-      elements.systemEventsLoading.textContent = "Загрузка событий...";
-      toggleHidden(elements.systemEventsLoading, false);
+      elements.systemEventsLoading.textContent = state.systemEvents.loadedOnce
+        ? "Обновляем события..."
+        : "Загрузка событий...";
+      const hideLoader = silent && state.systemEvents.loadedOnce;
+      toggleHidden(elements.systemEventsLoading, hideLoader);
     }
 
     const params = new URLSearchParams();
@@ -1057,10 +1326,20 @@
         throw new Error("Request failed");
       }
       const payload = await response.json();
+      const events = payload.events || [];
+      const signature = computeEventsSignature(events);
+      const isFirstLoad = !state.systemEvents.loadedOnce;
+      const hasChanges = signature !== state.systemEvents.lastSignature;
       state.systemEvents.total = payload.total || 0;
       state.systemEvents.loadedOnce = true;
-      renderSystemEvents(payload.events || []);
+      state.systemEvents.lastSignature = signature;
+      state.systemEvents.latestEvents = events;
+
+      if (isFirstLoad || hasChanges || !silent) {
+        renderSystemEvents(events);
+      }
       updateSystemEventsPagination();
+      updateEventsTimestamp(isFirstLoad || hasChanges);
     } catch (error) {
       console.error(error);
       showAlert(
@@ -1068,6 +1347,7 @@
         "Не удалось загрузить события. Проверьте подключение или логи сервера.",
       );
     } finally {
+      state.systemEvents.loading = false;
       if (elements.systemEventsLoading) {
         toggleHidden(elements.systemEventsLoading, true);
       }
@@ -1268,6 +1548,16 @@
         ? formatDate(status.last_restart_requested_at, true)
         : "—"
     );
+    setText(
+      elements.systemAdminRestartState,
+      status.admin_restart_supported ? "Доступно" : "Недоступно"
+    );
+    setText(
+      elements.systemAdminLastRestart,
+      status.last_admin_restart_requested_at
+        ? formatDate(status.last_admin_restart_requested_at, true)
+        : "—"
+    );
     setMaintenanceState(Boolean(status.maintenance_enabled));
     setText(elements.systemFilesCount, files.length);
     renderManagedFiles(files);
@@ -1305,6 +1595,9 @@
     if (!status.worker_restart_supported) {
       disableButton("restart-workers", "Нет команды перезапуска воркеров");
     }
+    if (!status.admin_restart_supported) {
+      disableButton("restart-admin", "Перезапуск админ-сервиса не настроен");
+    }
     if (!status.maintenance_supported) {
       disableButton("enable-maintenance", "Maintenance не настроен");
       disableButton("disable-maintenance", "Maintenance не настроен");
@@ -1329,6 +1622,13 @@
         "Перезапустить API сейчас? Активные соединения будут прерваны.",
       loadingLabel: "Перезапуск...",
       successMessage: "Перезапуск API инициирован.",
+    },
+    "restart-admin": {
+      url: "/admin/system/admin/restart",
+      confirm:
+        "Перезапустить админ-сервис сейчас? Вы выйдете из панели при завершении процесса.",
+      loadingLabel: "Перезапуск админ-сервиса...",
+      successMessage: "Перезапуск админ-сервиса инициирован.",
     },
     "restart-workers": {
       url: "/admin/system/workers/restart",
@@ -1500,6 +1800,23 @@
     }
   }
 
+  function startSystemEventsAutoRefresh() {
+    if (state.systemEvents.refreshInterval) {
+      return;
+    }
+
+    state.systemEvents.refreshInterval = window.setInterval(() => {
+      void loadSystemEvents({ silent: true });
+    }, 5000);
+  }
+
+  function stopSystemEventsAutoRefresh() {
+    if (state.systemEvents.refreshInterval) {
+      window.clearInterval(state.systemEvents.refreshInterval);
+      state.systemEvents.refreshInterval = null;
+    }
+  }
+
   async function loadCodeFile(path) {
     if (!path) {
       setCodeEditorEnabled(false);
@@ -1521,10 +1838,12 @@
         handleUnauthorized();
         return null;
       }
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error("Request failed");
+        const reason = payload?.detail || payload?.error || "Не удалось загрузить файл.";
+        throw new Error(reason);
       }
-      const data = await response.json();
+      const data = payload;
       state.activeCodeFile = data.path || path;
       if (elements.codeEditorSelect) {
         elements.codeEditorSelect.value = state.activeCodeFile;
@@ -1537,7 +1856,7 @@
       console.error(error);
       showAlert(
         elements.codeEditorStatus,
-        "Не удалось загрузить файл. Попробуйте позже."
+        error?.message || "Не удалось загрузить файл. Попробуйте позже."
       );
       return null;
     } finally {
@@ -1600,17 +1919,18 @@
         handleUnauthorized();
         return;
       }
+      const responseBody = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error("Request failed");
+        const reason = responseBody?.detail || responseBody?.error || "Не удалось сохранить файл.";
+        throw new Error(reason);
       }
-      await response.json();
       showAlert(elements.codeEditorStatus, "Файл успешно сохранён.", "success");
       void refreshSystemMetrics({ showLoader: false, silent: true });
     } catch (error) {
       console.error(error);
       showAlert(
         elements.codeEditorStatus,
-        "Не удалось сохранить изменения. Проверьте журнал сервера."
+        error?.message || "Не удалось сохранить изменения. Проверьте журнал сервера."
       );
     } finally {
       if (elements.codeEditorSave) {
@@ -2266,6 +2586,20 @@
     });
   }
 
+  if (elements.systemEventsShowEmpty) {
+    state.systemEvents.showEmpty = Boolean(elements.systemEventsShowEmpty.checked);
+    elements.systemEventsShowEmpty.addEventListener("change", () => {
+      state.systemEvents.showEmpty = Boolean(elements.systemEventsShowEmpty.checked);
+      renderSystemEvents(state.systemEvents.latestEvents || []);
+    });
+  }
+
+  if (elements.systemEventsRefresh) {
+    elements.systemEventsRefresh.addEventListener("click", () => {
+      void loadSystemEvents({ resetPage: true });
+    });
+  }
+
   if (elements.systemEventsPrev) {
     elements.systemEventsPrev.addEventListener("click", () => {
       if (state.systemEvents.page > 1) {
@@ -2391,11 +2725,13 @@
 
   if (pageType === "system") {
     startSystemAutoRefresh();
+    startSystemEventsAutoRefresh();
     void refreshSystemMetrics({ showLoader: true, silent: true });
     void loadSystemEvents({ resetPage: true });
     void loadQueueSnapshot({ showLoader: false, silent: true });
   } else {
     stopSystemAutoRefresh();
+    stopSystemEventsAutoRefresh();
   }
 
   if (pageType === "database") {

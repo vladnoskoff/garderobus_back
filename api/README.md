@@ -64,14 +64,72 @@ REST API для «умного» гардероба, построенный на
    - Выполните SQL-команды из раздела «Миграции базы данных» (если база создаётся с нуля, достаточно запустить приложение — SQLAlchemy создаст таблицы; однако добавление новых колонок требует ручного `ALTER TABLE`).
 
 6. **Запустить приложение**
-   ```bash
-   uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-   ```
-   или воспользуйтесь скриптом `run.sh`:
+   - Основное пользовательское API:
+     ```bash
+     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+     ```
+   - Отдельное API для админ-панели (вынесено в каталог `api_admin`, запускается в отдельном процессе/порте):
+     ```bash
+     uvicorn api_admin.main:app --host 0.0.0.0 --port 8100 --reload
+     ```
+    Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service` (он стартует от root, чтобы редактирование файлов через админку не упиралось в права):
+    ```bash
+    sudo cp deploy/systemd/garderobus-admin.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now garderobus-admin.service
+    ```
+    Если хотите, чтобы сервис автоматически перезапускался при изменении кода админки, подключите path-юнит и вспомогательный рестарт-юнит:
+    ```bash
+    sudo cp deploy/systemd/garderobus-admin-autorestart.path /etc/systemd/system/
+    sudo cp deploy/systemd/garderobus-admin-restart.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now garderobus-admin-autorestart.path
+    ```
+   Или воспользуйтесь скриптом `run.sh` для пользовательского API:
    ```bash
    chmod +x run.sh
    ./run.sh
    ```
+
+   **Реверс-прокси через Nginx (раздельные потоки для пользовательского и админского API)**
+   ```nginx
+   upstream garderobus_api {
+       least_conn;
+       server 127.0.0.1:8000;
+   }
+
+   upstream garderobus_admin_api {
+       least_conn;
+       server 127.0.0.1:8100;
+   }
+
+   server {
+       listen 80;
+       server_name _;
+
+       # Пользовательское API
+       location / {
+           proxy_pass http://garderobus_api;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_read_timeout 60s;
+       }
+
+       # Отдельный поток для админки (api_admin.main)
+       location /admin/ {
+           proxy_pass http://garderobus_admin_api;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_read_timeout 60s;
+       }
+   }
+   ```
+   Если админка должна открываться по другому домену/поддомену, вынесите её в отдельный `server { listen ...; }` блок и направьте
+   `proxy_pass` на `garderobus_admin_api`.
 
 7. **Открыть документацию**
    После запуска API будет доступно по адресу `http://localhost:8000`. Автогенерированная документация Swagger UI — `http://localhost:8000/docs`, Redoc — `http://localhost:8000/redoc`.
@@ -94,6 +152,12 @@ REST API для «умного» гардероба, построенный на
 | `UPLOADCARE_PUBLIC_KEY` / `UPLOADCARE_SECRET_KEY` | Доступ к Uploadcare CDN | — |
 | `SOCKS_PROXY_URL`, `ENABLE_SOCKS_PROXY` | Настройки прокси (если требуется) | `socks5://127.0.0.1:10808`, `true` |
 | `APP_NAME`, `ESP_DISPLAY_IP`, `DEBUG` | Дополнительные настройки сервиса | `Smart Closet`, `http://192.168.1.100`, `false` |
+| `ADMIN_RESTART_COMMAND` | Команда для перезапуска основного API (например, `systemctl restart garderobus-api`) | — |
+| `ADMIN_ALLOW_RESTART` | Разрешить ли перезапуск основного API через админку | `true` |
+| `ADMIN_ADMIN_RESTART_COMMAND` | Команда для перезапуска отдельного админ API (например, `systemctl restart garderobus-admin`) | — |
+| `ADMIN_ALLOW_ADMIN_RESTART` | Разрешить ли перезапуск админ API через панель | `true` |
+| `ADMIN_WORKER_RESTART_COMMAND` | Команда для перезапуска Celery-воркеров | — |
+| `ADMIN_ALLOW_WORKER_RESTART` | Разрешить ли перезапуск воркеров через админку | `true` |
 
 ## Миграции базы данных
 Проект не использует Alembic; изменения схемы вносятся вручную. Ниже перечислены основные команды, которые нужно выполнить при обновлении существующей базы:

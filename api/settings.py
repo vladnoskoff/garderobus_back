@@ -150,6 +150,8 @@ APP_VERSION = os.getenv("APP_VERSION", "development")
 
 ADMIN_RESTART_COMMAND = os.getenv("ADMIN_RESTART_COMMAND", "")
 ADMIN_ALLOW_RESTART = os.getenv("ADMIN_ALLOW_RESTART", "true").lower() == "true"
+ADMIN_ADMIN_RESTART_COMMAND = os.getenv("ADMIN_ADMIN_RESTART_COMMAND", "")
+ADMIN_ALLOW_ADMIN_RESTART = os.getenv("ADMIN_ALLOW_ADMIN_RESTART", "true").lower() == "true"
 ADMIN_WORKER_RESTART_COMMAND = os.getenv("ADMIN_WORKER_RESTART_COMMAND", "")
 ADMIN_ALLOW_WORKER_RESTART = os.getenv("ADMIN_ALLOW_WORKER_RESTART", "true").lower() == "true"
 ADMIN_MAINTENANCE_ENABLE_COMMAND = os.getenv("ADMIN_MAINTENANCE_ENABLE_COMMAND", "")
@@ -158,18 +160,20 @@ ADMIN_MAINTENANCE_INITIAL_STATE = os.getenv("ADMIN_MAINTENANCE_INITIAL_STATE", "
 ADMIN_TEST_WEBHOOK_URL = os.getenv("ADMIN_TEST_WEBHOOK_URL", "")
 
 ADMIN_MANAGED_CODE_ROOT = Path(
-    os.getenv("ADMIN_MANAGED_CODE_ROOT", str(BASE_DIR / "managed_code"))
+    os.getenv("ADMIN_MANAGED_CODE_ROOT", str(BASE_DIR))
 )
 ADMIN_MANAGED_CODE_ROOT.mkdir(parents=True, exist_ok=True)
 
 ADMIN_MANAGED_CODE_MAX_SIZE = int(
     os.getenv("ADMIN_MANAGED_CODE_MAX_SIZE", str(128 * 1024))
 )
-ADMIN_MANAGED_CODE_EXTENSIONS = tuple(
-    ext.strip().lower()
-    for ext in os.getenv(
-        "ADMIN_MANAGED_CODE_EXTENSIONS",
-        ".py,.txt,.json,.yaml,.yml,.sh",
-    ).split(",")
-    if ext.strip()
+_managed_code_extensions_raw = os.getenv("ADMIN_MANAGED_CODE_EXTENSIONS")
+ADMIN_MANAGED_CODE_EXTENSIONS = (
+    tuple(
+        ext.strip().lower()
+        for ext in _managed_code_extensions_raw.split(",")
+        if ext.strip()
+    )
+    if _managed_code_extensions_raw
+    else tuple()
 )

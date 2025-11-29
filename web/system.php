@@ -43,18 +43,19 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                 Очередь задач <span class="badge" id="queue-count">—</span>
               </button>
               <button class="secondary" type="button" id="open-code-editor-button">Редактировать код</button>
-              <div class="action-menu" id="system-actions-menu">
-                <button class="primary action-toggle" type="button" id="system-actions-toggle">
-                  Действия
-                  <span class="chevron" aria-hidden="true">▾</span>
-                </button>
-                <div class="action-menu-list hidden" id="system-actions-list" role="menu">
-                  <button type="button" class="action-menu-item" data-action="restart-api">Перезапустить API</button>
-                  <button type="button" class="action-menu-item" data-action="restart-workers">Перезапустить воркеры</button>
-                  <button type="button" class="action-menu-item" data-action="enable-maintenance">Включить maintenance</button>
-                  <button type="button" class="action-menu-item" data-action="disable-maintenance">Выключить maintenance</button>
-                  <button type="button" class="action-menu-item" data-action="send-test-webhook">Отправить тестовый webhook</button>
-                </div>
+                <div class="action-menu" id="system-actions-menu">
+                  <button class="primary action-toggle" type="button" id="system-actions-toggle">
+                    Действия
+                    <span class="chevron" aria-hidden="true">▾</span>
+                  </button>
+                  <div class="action-menu-list hidden" id="system-actions-list" role="menu">
+                    <button type="button" class="action-menu-item" data-action="restart-api">Перезапустить API</button>
+                    <button type="button" class="action-menu-item" data-action="restart-admin">Перезапустить админ API</button>
+                    <button type="button" class="action-menu-item" data-action="restart-workers">Перезапустить воркеры</button>
+                    <button type="button" class="action-menu-item" data-action="enable-maintenance">Включить maintenance</button>
+                    <button type="button" class="action-menu-item" data-action="disable-maintenance">Выключить maintenance</button>
+                    <button type="button" class="action-menu-item" data-action="send-test-webhook">Отправить тестовый webhook</button>
+                  </div>
               </div>
             </div>
           </div>
@@ -80,6 +81,11 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
               <span>Последний запрос: <span id="system-last-restart">—</span></span>
             </div>
             <div class="stat-card system-card">
+              <h3>Перезапуск админ API</h3>
+              <strong id="system-admin-restart-state">Недоступно</strong>
+              <span>Последний запрос: <span id="system-admin-last-restart">—</span></span>
+            </div>
+            <div class="stat-card system-card">
               <h3>Редактируемые файлы</h3>
               <strong id="system-files-count">0</strong>
               <div id="system-files-list" class="system-files-list tag-list"></div>
@@ -91,40 +97,50 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           </div>
         </section>
 
-        <section class="card" style="margin-top: 24px;">
-          <div class="flex-between" style="margin: 16px 0; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <section class="card system-events" style="margin-top: 24px;">
+          <div class="flex-between" style="margin: 16px 0; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
             <div>
               <h3 style="margin: 0;">События и логи</h3>
               <p class="text-muted" style="margin: 4px 0 0;">Отображаются последние системные записи.</p>
             </div>
-            <div class="flex gap-sm" style="flex-wrap: wrap;">
-              <label class="filter-control">
-                <span class="text-muted">Тип события</span>
-                <select id="system-events-level">
-                  <option value="">Все</option>
-                  <option value="info">Информация</option>
-                  <option value="warning">Предупреждения</option>
-                  <option value="error">Ошибки</option>
-                </select>
-              </label>
-              <label class="filter-control">
-                <span class="text-muted">Период</span>
-                <select id="system-events-period">
-                  <option value="">Весь</option>
-                  <option value="24">24 часа</option>
-                  <option value="72">3 дня</option>
-                  <option value="168">7 дней</option>
-                </select>
-              </label>
-              <label class="filter-control">
-                <span class="text-muted">На странице</span>
-                <select id="system-events-limit">
-                  <option value="10">10</option>
-                  <option value="20" selected>20</option>
-                  <option value="50">50</option>
-                  <option value="100">100</option>
-                </select>
-              </label>
+            <div class="flex-column gap-xs" style="flex: 1 1 420px;">
+              <div class="flex gap-sm" style="flex-wrap: wrap;">
+                <label class="filter-control">
+                  <span class="text-muted">Тип события</span>
+                  <select id="system-events-level">
+                    <option value="">Все</option>
+                    <option value="info">Информация</option>
+                    <option value="warning">Предупреждения</option>
+                    <option value="error">Ошибки</option>
+                  </select>
+                </label>
+                <label class="filter-control">
+                  <span class="text-muted">Период</span>
+                  <select id="system-events-period">
+                    <option value="">Весь</option>
+                    <option value="24">24 часа</option>
+                    <option value="72">3 дня</option>
+                    <option value="168">7 дней</option>
+                  </select>
+                </label>
+                <label class="filter-control">
+                  <span class="text-muted">На странице</span>
+                  <select id="system-events-limit">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </div>
+              <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
+                <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
+                <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
+                <label class="toggle" style="margin-left: auto;">
+                  <input type="checkbox" id="system-events-show-empty" />
+                  <span>Показывать пустые категории</span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -132,18 +148,8 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <p id="system-events-loading" class="text-muted">Загрузка событий...</p>
           <p id="system-events-empty" class="text-muted hidden">Событий не найдено за выбранный период.</p>
 
-          <div class="table-wrapper hidden" id="system-events-wrapper">
-            <table class="table">
-              <thead>
-                <tr>
-                  <th>Время</th>
-                  <th>Уровень</th>
-                  <th>Сообщение</th>
-                  <th>Источник</th>
-                </tr>
-              </thead>
-              <tbody id="system-events-body"></tbody>
-            </table>
+          <div class="events-group-container hidden" id="system-events-wrapper">
+            <div id="system-events-groups" class="events-groups"></div>
           </div>
 
           <div class="pagination" id="system-events-pagination">
