@@ -32,12 +32,14 @@ class AuthState extends ChangeNotifier {
     final token = await _storage.read(key: 'token');
     final userId = await _storage.read(key: 'user_id');
     if (token != null && userId != null) {
+      ApiService.rememberAccessToken(token);
       final parsedId = int.tryParse(userId);
       bool requiresPin = false;
       if (parsedId != null) {
         try {
           final user = await ApiService.getUser(parsedId);
           requiresPin = user['has_pin'] == true;
+          await ApiService.sendActivityHeartbeat();
         } catch (_) {
           requiresPin = await ApiService.loadCachedHasPin();
         }

@@ -1,7 +1,6 @@
 (function () {
   const config = window.APP_CONFIG || {};
-  const apiBaseUrl =
-    config.apiBaseUrl || "http://garderobus.tech";
+  const apiBaseUrl = (config.apiBaseUrl || window.location.origin || "http://garderobus.tech").replace(/\/$/, "");
 
   const token = localStorage.getItem("authToken");
   if (token) {

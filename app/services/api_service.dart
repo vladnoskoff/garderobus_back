@@ -11,7 +11,12 @@ import 'network_service.dart';
 import 'sync_service.dart';
 
 class ApiService {
-  static const String baseUrl = "http://aapanel-api.noksovsteam.ru";
+  static final String baseUrl = (() {
+    const configured =
+        String.fromEnvironment('API_BASE_URL', defaultValue: 'https://garderobus.noksovsteam.ru');
+    final normalized = configured.trim().replaceAll(RegExp(r'/+$'), '');
+    return normalized.isEmpty ? 'https://garderobus.noksovsteam.ru' : normalized;
+  })();
   static const String defaultHomeCoordinates = '55.755826, 37.617299';
   static final storage = FlutterSecureStorage();
   static String? _sessionToken;
@@ -172,6 +177,7 @@ class ApiService {
       if (userId != null) {
         await rememberUserTheme(userId);
         await rememberUserLanguage(userId);
+        await sendActivityHeartbeat(platform: _detectPlatform());
       }
       return data;
     } else {
@@ -339,6 +345,37 @@ class ApiService {
     final token = await storage.read(key: "token");
     rememberAccessToken(token);
     return _sessionToken;
+  }
+
+  static String _detectPlatform() {
+    if (kIsWeb) return 'web';
+    if (Platform.isAndroid) return 'android';
+    if (Platform.isIOS) return 'ios';
+    if (Platform.isMacOS) return 'macos';
+    if (Platform.isWindows) return 'windows';
+    if (Platform.isLinux) return 'linux';
+    return 'unknown';
+  }
+
+  static Future<void> sendActivityHeartbeat({String? platform}) async {
+    final token = await getToken();
+    final resolvedPlatform = platform ?? _detectPlatform();
+    if (token == null || token.isEmpty) return;
+
+    final headers = {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer $token',
+    };
+
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/activity/heartbeat'),
+        headers: headers,
+        body: jsonEncode({'platform': resolvedPlatform}),
+      );
+    } catch (_) {
+      // Не прерываем пользовательский поток при недоступности телеметрии
+    }
   }
 
 

@@ -49,6 +49,8 @@ button {
   padding: 12px;
   text-align: left;
   border-bottom: 1px solid #e5e7eb;
+  word-break: break-word;
+  white-space: normal;
 }
 
 .card {
@@ -445,6 +447,22 @@ button.link {
 
 .table-wrapper {
   overflow-x: auto;
+  width: 100%;
+}
+
+body[data-page="database"] .table-wrapper {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+body[data-page="database"] .table {
+  table-layout: fixed;
+  width: 100%;
+}
+
+body[data-page="database"] .table th,
+body[data-page="database"] .table td {
+  max-width: 260px;
 }
 
 .sidebar button.link {
