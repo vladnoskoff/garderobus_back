@@ -293,6 +293,12 @@ def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Файл не может быть прочитан как текст UTF-8",
         ) from exc
+    except OSError as exc:
+        _log_managed_file_error(relative_path, "Не удалось прочитать файл", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось прочитать файл",
+        ) from exc
 
     relative = full_path.relative_to(settings.ADMIN_MANAGED_CODE_ROOT).as_posix()
     return schemas.AdminCodeFile(path=relative, content=content)
@@ -315,7 +321,14 @@ def write_managed_file(
 
     _validate_size(content, path=relative_path)
 
-    full_path.write_text(content, encoding="utf-8")
+    try:
+        full_path.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        _log_managed_file_error(relative_path, "Не удалось сохранить файл", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Не удалось сохранить файл",
+        ) from exc
     relative = full_path.relative_to(settings.ADMIN_MANAGED_CODE_ROOT).as_posix()
 
     logger.info(

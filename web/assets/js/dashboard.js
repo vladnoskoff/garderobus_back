@@ -1521,10 +1521,12 @@
         handleUnauthorized();
         return null;
       }
+      const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error("Request failed");
+        const reason = payload?.detail || payload?.error || "Не удалось загрузить файл.";
+        throw new Error(reason);
       }
-      const data = await response.json();
+      const data = payload;
       state.activeCodeFile = data.path || path;
       if (elements.codeEditorSelect) {
         elements.codeEditorSelect.value = state.activeCodeFile;
@@ -1537,7 +1539,7 @@
       console.error(error);
       showAlert(
         elements.codeEditorStatus,
-        "Не удалось загрузить файл. Попробуйте позже."
+        error?.message || "Не удалось загрузить файл. Попробуйте позже."
       );
       return null;
     } finally {
@@ -1600,17 +1602,18 @@
         handleUnauthorized();
         return;
       }
+      const responseBody = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error("Request failed");
+        const reason = responseBody?.detail || responseBody?.error || "Не удалось сохранить файл.";
+        throw new Error(reason);
       }
-      await response.json();
       showAlert(elements.codeEditorStatus, "Файл успешно сохранён.", "success");
       void refreshSystemMetrics({ showLoader: false, silent: true });
     } catch (error) {
       console.error(error);
       showAlert(
         elements.codeEditorStatus,
-        "Не удалось сохранить изменения. Проверьте журнал сервера."
+        error?.message || "Не удалось сохранить изменения. Проверьте журнал сервера."
       );
     } finally {
       if (elements.codeEditorSave) {
