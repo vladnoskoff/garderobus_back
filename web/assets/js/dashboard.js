@@ -969,7 +969,11 @@
 
   function normalizeEventCategory(category) {
     const raw = String(category || "").toLowerCase();
-    const normalized = raw === "api" ? "api_admin" : raw;
+    const normalized = (() => {
+      if (raw === "api") return "api_admin";
+      if (["vpn", "xray", "proxy", "socks"].includes(raw)) return "xray";
+      return raw;
+    })();
     if (EVENT_CATEGORY_ORDER.includes(normalized)) {
       return normalized;
     }
