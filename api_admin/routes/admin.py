@@ -15,9 +15,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
-from api import models, schemas as base_schemas
-from api.database import get_db, get_read_db
-from api.routes import users as user_routes
+import models
+import schemas as base_schemas
+from database import get_db, get_read_db
+from routes import users as user_routes
 from api_admin import schemas as admin_schemas
 from api_admin.services import system_tools
 

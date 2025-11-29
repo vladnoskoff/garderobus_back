@@ -16,8 +16,9 @@ from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError
 from fastapi import HTTPException, status
 
-from api.celery_app import celery_app
-from api import models, settings
+from celery_app import celery_app
+import models
+import settings
 from api_admin import schemas
 
 logger = logging.getLogger(__name__)

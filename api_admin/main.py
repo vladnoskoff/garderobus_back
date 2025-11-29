@@ -10,11 +10,12 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
-from api import models, settings
-from api.cache import cache
-from api.database import engine
-from api.logging_config import configure_logging, reset_request_context, set_request_context
-from api.observability import configure_observability
+import models
+import settings
+from cache import cache
+from database import engine
+from logging_config import configure_logging, reset_request_context, set_request_context
+from observability import configure_observability
 from api_admin.routes import admin
 
 
