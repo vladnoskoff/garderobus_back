@@ -380,6 +380,7 @@ def write_managed_file(
             "Недостаточно прав для сохранения файла. "
             "Файл принадлежит {owner}:{group} с правами {mode}; "
             "API запущен от {user}:{proc_group}. "
+            "Сохранение всегда выполняется от имени процесса API — даже если вы редактируете код от другого пользователя. "
             "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца." + remediation
         ).format(owner=owner, group=group, mode=mode, user=process_user, proc_group=process_group)
 
