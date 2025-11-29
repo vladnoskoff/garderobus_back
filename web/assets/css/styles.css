@@ -853,9 +853,67 @@ body[data-page="database"] .table td {
   min-width: 140px;
 }
 
+#system-events-updated-at {
+  font-size: 13px;
+}
+
+#system-events-updated-at.highlight {
+  color: #111827;
+  font-weight: 600;
+}
+
 #system-events-wrapper table td:nth-child(3) {
-  max-width: 420px;
+  max-width: 520px;
   white-space: normal;
+}
+
+.events-table th,
+.events-table td {
+  vertical-align: top;
+}
+
+.events-table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+.events-table .event-time {
+  font-family: "SFMono-Regular", "Menlo", "Monaco", Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 600;
+  color: #111827;
+}
+
+.events-table .event-message-primary {
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 6px;
+}
+
+.events-table .event-message-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.events-table .event-message-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.events-table .event-message-chip strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.system-events .status-badge {
+  line-height: 1.4;
 }
 
 .pagination {

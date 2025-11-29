@@ -92,6 +92,8 @@
     systemEventsLevel: document.getElementById("system-events-level"),
     systemEventsPeriod: document.getElementById("system-events-period"),
     systemEventsLimit: document.getElementById("system-events-limit"),
+    systemEventsRefresh: document.getElementById("system-events-refresh"),
+    systemEventsUpdatedAt: document.getElementById("system-events-updated-at"),
     systemEventsPrev: document.getElementById("system-events-prev"),
     systemEventsNext: document.getElementById("system-events-next"),
     systemEventsPageInfo: document.getElementById("system-events-page-info"),
@@ -157,6 +159,9 @@
       hours: "",
       total: 0,
       loadedOnce: false,
+      loading: false,
+      lastSignature: "",
+      refreshInterval: null,
     },
     queueSnapshot: null,
     queueLoadedOnce: false,
@@ -927,7 +932,14 @@
       return "—";
     }
 
-    const baseMessage = event.message || "—";
+    return event.message || "—";
+  }
+
+  function buildEventDetails(event) {
+    if (!event) {
+      return [];
+    }
+
     const context = event.context || {};
     const details = [];
 
@@ -946,15 +958,15 @@
       details.push(`${rounded} мс`);
     }
 
+    if (context.client) {
+      details.push(context.client);
+    }
+
     if (context.request_id) {
       details.push(`ID ${context.request_id}`);
     }
 
-    if (details.length === 0) {
-      return baseMessage;
-    }
-
-    return `${baseMessage} · ${details.join(" · ")}`;
+    return details.filter(Boolean);
   }
 
   function renderSystemEvents(events) {
@@ -976,7 +988,10 @@
       const row = document.createElement("tr");
 
       const timeCell = document.createElement("td");
-      timeCell.textContent = formatDate(event.timestamp, true);
+      const timeText = document.createElement("div");
+      timeText.className = "event-time";
+      timeText.textContent = formatDate(event.timestamp, true);
+      timeCell.appendChild(timeText);
       row.appendChild(timeCell);
 
       const levelCell = document.createElement("td");
@@ -993,16 +1008,53 @@
       row.appendChild(levelCell);
 
       const messageCell = document.createElement("td");
-      messageCell.textContent = formatEventMessage(event);
+      const messagePrimary = document.createElement("div");
+      messagePrimary.className = "event-message-primary";
+      messagePrimary.textContent = formatEventMessage(event);
+      messageCell.appendChild(messagePrimary);
+
+      const detailParts = buildEventDetails(event);
+      if (detailParts.length) {
+        const meta = document.createElement("div");
+        meta.className = "event-message-meta";
+        detailParts.forEach((part) => {
+          const chip = document.createElement("span");
+          chip.className = "event-message-chip";
+          chip.textContent = part;
+          meta.appendChild(chip);
+        });
+        messageCell.appendChild(meta);
+      }
       row.appendChild(messageCell);
 
       const sourceCell = document.createElement("td");
       const parts = [event.service, event.logger].filter(Boolean);
-      sourceCell.textContent = parts.join(" · ") || "—";
+      const source = parts.join(" · ") || "—";
+      const sourceChip = document.createElement("span");
+      sourceChip.className = "event-message-chip";
+      const sourceLabel = document.createElement("strong");
+      sourceLabel.textContent = "Источник";
+      sourceChip.appendChild(sourceLabel);
+      sourceChip.appendChild(document.createTextNode(` ${source}`));
+      sourceCell.appendChild(sourceChip);
       row.appendChild(sourceCell);
 
       elements.systemEventsBody.appendChild(row);
     });
+  }
+
+  function computeEventsSignature(events) {
+    if (!events || !events.length) {
+      return "";
+    }
+
+    return events
+      .slice(0, 20)
+      .map((event) => {
+        const requestId = event.context?.request_id || event.request_id || "";
+        return [event.timestamp || "", event.level || "", event.message || "", requestId].join("|");
+      })
+      .join(";");
   }
 
   function updateSystemEventsPagination() {
@@ -1022,17 +1074,41 @@
     }
   }
 
+  function updateEventsTimestamp(hasChanges = false) {
+    if (!elements.systemEventsUpdatedAt) {
+      return;
+    }
+    const timestamp = formatDate(new Date(), true);
+    const suffix = hasChanges ? " · новые записи" : "";
+    elements.systemEventsUpdatedAt.textContent = `Обновлено ${timestamp}${suffix}`;
+    elements.systemEventsUpdatedAt.classList.toggle("highlight", hasChanges);
+    if (hasChanges) {
+      window.setTimeout(() => {
+        elements.systemEventsUpdatedAt?.classList.remove("highlight");
+      }, 1500);
+    }
+  }
+
   async function loadSystemEvents(options = {}) {
-    const { resetPage = false } = options;
+    const { resetPage = false, silent = false } = options;
     if (resetPage) {
       state.systemEvents.page = 1;
     }
 
+    if (state.systemEvents.loading) {
+      return;
+    }
+
+    state.systemEvents.loading = true;
+
     toggleHidden(elements.systemEventsError, true);
     toggleHidden(elements.systemEventsEmpty, true);
     if (elements.systemEventsLoading) {
-      elements.systemEventsLoading.textContent = "Загрузка событий...";
-      toggleHidden(elements.systemEventsLoading, false);
+      elements.systemEventsLoading.textContent = state.systemEvents.loadedOnce
+        ? "Обновляем события..."
+        : "Загрузка событий...";
+      const hideLoader = silent && state.systemEvents.loadedOnce;
+      toggleHidden(elements.systemEventsLoading, hideLoader);
     }
 
     const params = new URLSearchParams();
@@ -1057,10 +1133,19 @@
         throw new Error("Request failed");
       }
       const payload = await response.json();
+      const events = payload.events || [];
+      const signature = computeEventsSignature(events);
+      const isFirstLoad = !state.systemEvents.loadedOnce;
+      const hasChanges = signature !== state.systemEvents.lastSignature;
       state.systemEvents.total = payload.total || 0;
       state.systemEvents.loadedOnce = true;
-      renderSystemEvents(payload.events || []);
+      state.systemEvents.lastSignature = signature;
+
+      if (isFirstLoad || hasChanges || !silent) {
+        renderSystemEvents(events);
+      }
       updateSystemEventsPagination();
+      updateEventsTimestamp(isFirstLoad || hasChanges);
     } catch (error) {
       console.error(error);
       showAlert(
@@ -1068,6 +1153,7 @@
         "Не удалось загрузить события. Проверьте подключение или логи сервера.",
       );
     } finally {
+      state.systemEvents.loading = false;
       if (elements.systemEventsLoading) {
         toggleHidden(elements.systemEventsLoading, true);
       }
@@ -1497,6 +1583,23 @@
     if (state.systemRefreshInterval) {
       window.clearInterval(state.systemRefreshInterval);
       state.systemRefreshInterval = null;
+    }
+  }
+
+  function startSystemEventsAutoRefresh() {
+    if (state.systemEvents.refreshInterval) {
+      return;
+    }
+
+    state.systemEvents.refreshInterval = window.setInterval(() => {
+      void loadSystemEvents({ silent: true });
+    }, 5000);
+  }
+
+  function stopSystemEventsAutoRefresh() {
+    if (state.systemEvents.refreshInterval) {
+      window.clearInterval(state.systemEvents.refreshInterval);
+      state.systemEvents.refreshInterval = null;
     }
   }
 
@@ -2269,6 +2372,12 @@
     });
   }
 
+  if (elements.systemEventsRefresh) {
+    elements.systemEventsRefresh.addEventListener("click", () => {
+      void loadSystemEvents({ resetPage: true });
+    });
+  }
+
   if (elements.systemEventsPrev) {
     elements.systemEventsPrev.addEventListener("click", () => {
       if (state.systemEvents.page > 1) {
@@ -2394,11 +2503,13 @@
 
   if (pageType === "system") {
     startSystemAutoRefresh();
+    startSystemEventsAutoRefresh();
     void refreshSystemMetrics({ showLoader: true, silent: true });
     void loadSystemEvents({ resetPage: true });
     void loadQueueSnapshot({ showLoader: false, silent: true });
   } else {
     stopSystemAutoRefresh();
+    stopSystemEventsAutoRefresh();
   }
 
   if (pageType === "database") {

@@ -91,40 +91,46 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           </div>
         </section>
 
-        <section class="card" style="margin-top: 24px;">
-          <div class="flex-between" style="margin: 16px 0; align-items: center; gap: 12px; flex-wrap: wrap;">
+        <section class="card system-events" style="margin-top: 24px;">
+          <div class="flex-between" style="margin: 16px 0; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
             <div>
               <h3 style="margin: 0;">События и логи</h3>
               <p class="text-muted" style="margin: 4px 0 0;">Отображаются последние системные записи.</p>
             </div>
-            <div class="flex gap-sm" style="flex-wrap: wrap;">
-              <label class="filter-control">
-                <span class="text-muted">Тип события</span>
-                <select id="system-events-level">
-                  <option value="">Все</option>
-                  <option value="info">Информация</option>
-                  <option value="warning">Предупреждения</option>
-                  <option value="error">Ошибки</option>
-                </select>
-              </label>
-              <label class="filter-control">
-                <span class="text-muted">Период</span>
-                <select id="system-events-period">
-                  <option value="">Весь</option>
-                  <option value="24">24 часа</option>
-                  <option value="72">3 дня</option>
-                  <option value="168">7 дней</option>
-                </select>
-              </label>
-              <label class="filter-control">
-                <span class="text-muted">На странице</span>
-                <select id="system-events-limit">
-                  <option value="10">10</option>
-                  <option value="20" selected>20</option>
-                  <option value="50">50</option>
-                  <option value="100">100</option>
-                </select>
-              </label>
+            <div class="flex-column gap-xs" style="flex: 1 1 420px;">
+              <div class="flex gap-sm" style="flex-wrap: wrap;">
+                <label class="filter-control">
+                  <span class="text-muted">Тип события</span>
+                  <select id="system-events-level">
+                    <option value="">Все</option>
+                    <option value="info">Информация</option>
+                    <option value="warning">Предупреждения</option>
+                    <option value="error">Ошибки</option>
+                  </select>
+                </label>
+                <label class="filter-control">
+                  <span class="text-muted">Период</span>
+                  <select id="system-events-period">
+                    <option value="">Весь</option>
+                    <option value="24">24 часа</option>
+                    <option value="72">3 дня</option>
+                    <option value="168">7 дней</option>
+                  </select>
+                </label>
+                <label class="filter-control">
+                  <span class="text-muted">На странице</span>
+                  <select id="system-events-limit">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                  </select>
+                </label>
+              </div>
+              <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
+                <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
+                <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
+              </div>
             </div>
           </div>
 
@@ -133,7 +139,7 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <p id="system-events-empty" class="text-muted hidden">Событий не найдено за выбранный период.</p>
 
           <div class="table-wrapper hidden" id="system-events-wrapper">
-            <table class="table">
+            <table class="table events-table">
               <thead>
                 <tr>
                   <th>Время</th>
