@@ -323,6 +323,14 @@ def write_managed_file(
 
     try:
         full_path.write_text(content, encoding="utf-8")
+    except PermissionError as exc:
+        _log_managed_file_error(
+            relative_path, "Недостаточно прав для записи файла", error=str(exc)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Недостаточно прав для сохранения файла",
+        ) from exc
     except OSError as exc:
         _log_managed_file_error(relative_path, "Не удалось сохранить файл", error=str(exc))
         raise HTTPException(
