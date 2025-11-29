@@ -86,11 +86,6 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
               <span>Последний запрос: <span id="system-admin-last-restart">—</span></span>
             </div>
             <div class="stat-card system-card">
-              <h3>Редактируемые файлы</h3>
-              <strong id="system-files-count">0</strong>
-              <div id="system-files-list" class="system-files-list tag-list"></div>
-            </div>
-            <div class="stat-card system-card">
               <h3>Статусы сервисов</h3>
               <div id="system-service-statuses" class="service-status-list"></div>
             </div>
