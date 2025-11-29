@@ -13,10 +13,10 @@ from celery.result import AsyncResult, EagerResult
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
-from api import models
-from api import schemas
+import models
+import schemas
 from celery_app import celery_app
-from api.database import get_db
+from database import get_db
 from tasks.ai import generate_mannequin_task, generate_recommendation_task
 from .location_utils import ensure_location_for_user
 

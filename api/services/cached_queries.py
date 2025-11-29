@@ -6,9 +6,9 @@ from typing import Any, Dict, List, Optional
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session, load_only
 
-from api import models
-from api import settings
-from api.cache import cache
+import models
+import settings
+from cache import cache
 
 
 class CachedQueryService:

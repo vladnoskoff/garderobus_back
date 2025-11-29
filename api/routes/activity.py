@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
-from api import models
-from api import schemas
-from api.database import get_db, get_read_db
+import models
+import schemas
+from database import get_db, get_read_db
 from . import users as user_routes
 
 security = HTTPBearer(auto_error=False)

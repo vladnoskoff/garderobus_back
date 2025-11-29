@@ -2,9 +2,9 @@ import base64
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request
-from api import schemas
-from api import settings
-from api.openai_client import is_proxy_active
+import schemas
+import settings
+from openai_client import is_proxy_active
 from tasks.ai import analyze_clothes_image_task
 
 

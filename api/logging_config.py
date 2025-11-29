@@ -8,7 +8,7 @@ from contextvars import ContextVar, Token
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
-from api import settings
+import settings
 from pythonjsonlogger import jsonlogger
 
 

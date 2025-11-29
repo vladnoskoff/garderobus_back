@@ -6,9 +6,9 @@ import jwt
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from api import models, schemas
-from api import settings
-from api.database import get_db
+import models, schemas
+import settings
+from database import get_db
 
 router = APIRouter(prefix="/users", tags=["Users"])
 

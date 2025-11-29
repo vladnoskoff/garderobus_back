@@ -72,18 +72,12 @@ REST API для «умного» гардероба, построенный на
      ```bash
      uvicorn api_admin.main:app --host 0.0.0.0 --port 8100 --reload
      ```
-    Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service` (он стартует от root, чтобы редактирование файлов через админку не упиралось в права) **с отдельным окружением и зависимостями**:
+    Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service` (он стартует от root, чтобы редактирование файлов через админку не упиралось в права):
     ```bash
-    # Раздельное окружение для api_admin
-    python3 -m venv /home/garderobus/garderobus_back/.venv-admin
-    /home/garderobus/garderobus_back/.venv-admin/bin/pip install --upgrade pip
-    /home/garderobus/garderobus_back/.venv-admin/bin/pip install -r /home/garderobus/garderobus_back/api_admin/requirements.txt
-
     sudo cp deploy/systemd/garderobus-admin.service /etc/systemd/system/
     sudo systemctl daemon-reload
     sudo systemctl enable --now garderobus-admin.service
     ```
-    Если админ-панель открывается через веб-прокси, убедитесь, что переменная `API_BASE_URL` в PHP-страницах/окружении указывает на публичный URL админ API (например, `https://garderobus.tech/admin`).
     Если хотите, чтобы сервис автоматически перезапускался при изменении кода админки, подключите path-юнит и вспомогательный рестарт-юнит:
     ```bash
     sudo cp deploy/systemd/garderobus-admin-autorestart.path /etc/systemd/system/

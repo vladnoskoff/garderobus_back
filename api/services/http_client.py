@@ -10,7 +10,7 @@ from typing import Any, Deque, Dict, Optional
 import requests
 from pybreaker import CircuitBreaker, CircuitBreakerError
 
-from api import settings
+import settings
 
 logger = logging.getLogger(__name__)
 

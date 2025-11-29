@@ -3,8 +3,8 @@ from typing import Optional, Tuple
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from api import models
-from api import settings
+import models
+import settings
 
 
 def ensure_location_for_user(db: Session, user_id: int, location_id: int) -> models.WardrobeLocation:

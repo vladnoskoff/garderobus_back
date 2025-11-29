@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-from api.database import get_db, get_read_db
-from api import models
+from database import get_db, get_read_db
+import models
 import random
 from routes.weather import get_weather_by_coordinates  # Импорт функции погоды
-from api import schemas
+import schemas
 from typing import Any, Dict, List, Optional
-from api import settings
-from api.cache import cache, invalidate_outfit_history_for_user
+import settings
+from cache import cache, invalidate_outfit_history_for_user
 from .location_utils import ensure_location_for_user, resolve_location_and_coordinates
 
 router = APIRouter(prefix="/outfits", tags=["Outfits"])

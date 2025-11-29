@@ -10,16 +10,13 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
-from api import models, settings
-from api.cache import cache
-from api.database import engine
-from api.logging_config import (
-    configure_logging,
-    reset_request_context,
-    set_request_context,
-)
-from api.observability import configure_observability
-from api.routes import (
+import models
+import settings
+from cache import cache
+from database import engine
+from logging_config import configure_logging, reset_request_context, set_request_context
+from observability import configure_observability
+from routes import (
     activity,
     ai_recommendation,
     clothes,
@@ -32,7 +29,7 @@ from api.routes import (
     wardrobe_analytics,
     weather,
 )
-from api.static_files import CDNStaticFiles
+from static_files import CDNStaticFiles
 
 configure_logging()
 logger = logging.getLogger(__name__)
