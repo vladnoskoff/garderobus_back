@@ -84,6 +84,46 @@ REST API для «умного» гардероба, построенный на
    ./run.sh
    ```
 
+   **Реверс-прокси через Nginx (раздельные потоки для пользовательского и админского API)**
+   ```nginx
+   upstream garderobus_api {
+       least_conn;
+       server 127.0.0.1:8000;
+   }
+
+   upstream garderobus_admin_api {
+       least_conn;
+       server 127.0.0.1:8100;
+   }
+
+   server {
+       listen 80;
+       server_name _;
+
+       # Пользовательское API
+       location / {
+           proxy_pass http://garderobus_api;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_read_timeout 60s;
+       }
+
+       # Отдельный поток для админки (admin_main.py)
+       location /admin/ {
+           proxy_pass http://garderobus_admin_api;
+           proxy_set_header Host $host;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_read_timeout 60s;
+       }
+   }
+   ```
+   Если админка должна открываться по другому домену/поддомену, вынесите её в отдельный `server { listen ...; }` блок и направьте
+   `proxy_pass` на `garderobus_admin_api`.
+
 7. **Открыть документацию**
    После запуска API будет доступно по адресу `http://localhost:8000`. Автогенерированная документация Swagger UI — `http://localhost:8000/docs`, Redoc — `http://localhost:8000/redoc`.
 

@@ -12,7 +12,7 @@ docker compose up --build
 
 * `docker-compose.yml` builds the API image, provisions PostgreSQL, Redis cache, and exposes the service via Nginx.
 * The stack now includes observability components: Prometheus + Alertmanager (metrics/alerts), Grafana (dashboards), Jaeger (трассировки), и Elasticsearch + Kibana + Filebeat (централизованное логирование).
-* Nginx проксирует трафик к API и экспортирует метрики через `nginx-prometheus-exporter`.
+* Nginx проксирует трафик к пользовательскому API и, при необходимости, к выделенному админскому API (`/admin/` → порт 8100) и экспортирует метрики через `nginx-prometheus-exporter`.
 
 После запуска Compose стеков доступны следующие интерфейсы:
 
