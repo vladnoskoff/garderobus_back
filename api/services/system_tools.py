@@ -6,6 +6,8 @@ import subprocess
 import threading
 import signal
 import time
+import pwd
+import grp
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -324,12 +326,43 @@ def write_managed_file(
     try:
         full_path.write_text(content, encoding="utf-8")
     except PermissionError as exc:
+        stat = full_path.stat()
+
+        try:
+            owner = pwd.getpwuid(stat.st_uid).pw_name
+        except KeyError:
+            owner = str(stat.st_uid)
+
+        try:
+            group = grp.getgrgid(stat.st_gid).gr_name
+        except KeyError:
+            group = str(stat.st_gid)
+
+        process_user = pwd.getpwuid(os.geteuid()).pw_name
+        process_group = grp.getgrgid(os.getegid()).gr_name
+        mode = oct(stat.st_mode & 0o777)
+
+        detail = (
+            "Недостаточно прав для сохранения файла. "
+            "Файл принадлежит {owner}:{group} с правами {mode}; "
+            "API запущен от {user}:{proc_group}. "
+            "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца."
+        ).format(owner=owner, group=group, mode=mode, user=process_user, proc_group=process_group)
+
         _log_managed_file_error(
-            relative_path, "Недостаточно прав для записи файла", error=str(exc)
+            relative_path,
+            detail,
+            error=str(exc),
+            owner=owner,
+            group=group,
+            mode=mode,
+            process_user=process_user,
+            process_group=process_group,
         )
+
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Недостаточно прав для сохранения файла",
+            detail=detail,
         ) from exc
     except OSError as exc:
         _log_managed_file_error(relative_path, "Не удалось сохранить файл", error=str(exc))
