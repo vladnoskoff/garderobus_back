@@ -28,7 +28,14 @@ _LAST_RESTART_REQUEST: Optional[datetime] = None
 _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 
-LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
+LOG_DATE_FORMATS = (
+    "%Y-%m-%d %H:%M:%S,%f",
+    "%Y-%m-%d %H:%M:%S",
+    "%Y/%m/%d %H:%M:%S.%f",
+    "%Y/%m/%d %H:%M:%S,%f",
+    "%Y/%m/%d %H:%M:%S",
+    "%b %d %H:%M:%S",
+)
 
 
 def _log_managed_file_error(relative_path: str, detail: str, **extra: object) -> None:
@@ -667,6 +674,8 @@ def _parse_timestamp(raw: Optional[str]) -> Optional[datetime]:
     for fmt in LOG_DATE_FORMATS:
         try:
             parsed = datetime.strptime(raw, fmt)
+            if "%Y" not in fmt:
+                parsed = parsed.replace(year=datetime.now(timezone.utc).year)
             return parsed.replace(tzinfo=timezone.utc)
         except ValueError:
             continue
