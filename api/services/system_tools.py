@@ -199,6 +199,36 @@ def _is_ignored_path(path: Path) -> bool:
     return False
 
 
+def _permission_remediation(full_path: Path, *, process_user: str, process_group: str) -> str:
+    suggestions: list[str] = []
+
+    try:
+        file_stat = full_path.stat()
+    except OSError:
+        file_stat = None
+
+    try:
+        parent_stat = full_path.parent.stat()
+    except OSError:
+        parent_stat = None
+
+    if not os.access(full_path, os.W_OK):
+        suggestions.append(f"sudo chmod u+w {full_path}")
+
+    if parent_stat and not os.access(full_path.parent, os.W_OK):
+        suggestions.append(f"sudo chmod u+w {full_path.parent}")
+
+    if file_stat and (file_stat.st_uid != os.geteuid() or file_stat.st_gid != os.getegid()):
+        suggestions.append(
+            f"sudo chown {process_user}:{process_group} {full_path}"
+        )
+
+    if not suggestions:
+        return ""
+
+    return " Возможные действия: " + "; ".join(suggestions) + "."
+
+
 def list_managed_files() -> List[str]:
     root = settings.ADMIN_MANAGED_CODE_ROOT
     if not root.exists():
@@ -342,11 +372,15 @@ def write_managed_file(
         process_group = grp.getgrgid(os.getegid()).gr_name
         mode = oct(stat.st_mode & 0o777)
 
+        remediation = _permission_remediation(
+            full_path, process_user=process_user, process_group=process_group
+        )
+
         detail = (
             "Недостаточно прав для сохранения файла. "
             "Файл принадлежит {owner}:{group} с правами {mode}; "
             "API запущен от {user}:{proc_group}. "
-            "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца."
+            "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца." + remediation
         ).format(owner=owner, group=group, mode=mode, user=process_user, proc_group=process_group)
 
         _log_managed_file_error(
@@ -358,6 +392,7 @@ def write_managed_file(
             mode=mode,
             process_user=process_user,
             process_group=process_group,
+            remediation=remediation.strip(),
         )
 
         raise HTTPException(
