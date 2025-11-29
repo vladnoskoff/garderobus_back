@@ -15,11 +15,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
-import models
-import schemas
-from database import get_db, get_read_db
-from services import system_tools
-from . import users as user_routes
+from api import models, schemas as base_schemas
+from api.database import get_db, get_read_db
+from api.routes import users as user_routes
+from api_admin import schemas as admin_schemas
+from api_admin.services import system_tools
 
 security = HTTPBearer(auto_error=False)
 
@@ -50,7 +50,7 @@ def _get_current_user(
     return user
 
 
-def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[schemas.AdminUserSummary]:
+def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[admin_schemas.AdminUserSummary]:
     if not users:
         return []
 
@@ -153,7 +153,7 @@ def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[sch
         .all()
     )
 
-    summaries: List[schemas.AdminUserSummary] = []
+    summaries: List[admin_schemas.AdminUserSummary] = []
 
     for user in users:
         top_worn_rows = (
@@ -171,7 +171,7 @@ def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[sch
         )
 
         top_worn_items = [
-            schemas.AdminUserUsageItem(
+            admin_schemas.AdminUserUsageItem(
                 clothing_id=row[0],
                 name=row[1],
                 usage_count=row[2],
@@ -180,7 +180,7 @@ def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[sch
         ]
 
         summaries.append(
-            schemas.AdminUserSummary(
+            admin_schemas.AdminUserSummary(
                 id=user.id,
                 name=user.name,
                 email=user.email,
@@ -203,7 +203,7 @@ def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[sch
     return summaries
 
 
-def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUserLocationDetail]:
+def _build_location_details(db: Session, user_id: int) -> List[admin_schemas.AdminUserLocationDetail]:
     locations = (
         db.query(models.WardrobeLocation)
         .filter(models.WardrobeLocation.user_id == user_id)
@@ -270,11 +270,11 @@ def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUser
         .all()
     )
 
-    details: List[schemas.AdminUserLocationDetail] = []
+    details: List[admin_schemas.AdminUserLocationDetail] = []
 
     for location in locations:
         details.append(
-            schemas.AdminUserLocationDetail(
+            admin_schemas.AdminUserLocationDetail(
                 id=location.id,
                 name=location.name,
                 created_at=location.created_at,
@@ -302,7 +302,7 @@ def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUser
     if has_unassigned:
         details.insert(
             0,
-            schemas.AdminUserLocationDetail(
+            admin_schemas.AdminUserLocationDetail(
                 id=None,
                 name="Без локации",
                 created_at=None,
@@ -319,7 +319,7 @@ def _build_location_details(db: Session, user_id: int) -> List[schemas.AdminUser
     return details
 
 
-def _build_activity_metrics(db: Session) -> schemas.AdminActivityMetrics:
+def _build_activity_metrics(db: Session) -> admin_schemas.AdminActivityMetrics:
     now = datetime.utcnow()
     active_threshold = now - timedelta(minutes=30)
     day_threshold = now - timedelta(days=1)
@@ -362,59 +362,59 @@ def _build_activity_metrics(db: Session) -> schemas.AdminActivityMetrics:
     if not platform_breakdown and (active_sessions_now > 0 or active_sessions_day > 0):
         platform_breakdown = {"unknown": active_sessions_now or active_sessions_day}
 
-    return schemas.AdminActivityMetrics(
+    return admin_schemas.AdminActivityMetrics(
         active_now=active_sessions_now,
         active_24h=active_sessions_day,
         platform_breakdown=platform_breakdown,
     )
 
 
-@router.get("/system/status", response_model=schemas.AdminSystemStatus)
+@router.get("/system/status", response_model=admin_schemas.AdminSystemStatus)
 def get_system_status(
     _: models.User = Depends(_get_current_user),
-) -> schemas.AdminSystemStatus:
+) -> admin_schemas.AdminSystemStatus:
     return system_tools.get_system_status()
 
 
-@router.get("/system/queue", response_model=schemas.AdminQueueSnapshot)
+@router.get("/system/queue", response_model=admin_schemas.AdminQueueSnapshot)
 def get_queue_snapshot(
     _: models.User = Depends(_get_current_user),
-) -> schemas.AdminQueueSnapshot:
+) -> admin_schemas.AdminQueueSnapshot:
     return system_tools.get_queue_snapshot()
 
 
-@router.get("/system/events", response_model=schemas.AdminSystemEventList)
+@router.get("/system/events", response_model=admin_schemas.AdminSystemEventList)
 def get_system_events(
     level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),
     hours: Optional[int] = Query(None, ge=1, le=24 * 30),
     limit: int = Query(50, ge=1, le=200),
     page: int = Query(1, ge=1),
     _: models.User = Depends(_get_current_user),
-) -> schemas.AdminSystemEventList:
+) -> admin_schemas.AdminSystemEventList:
     return system_tools.get_system_events(level=level, hours=hours, limit=limit, page=page)
 
 
-@router.get("/system/files", response_model=schemas.AdminManagedFileList)
+@router.get("/system/files", response_model=admin_schemas.AdminManagedFileList)
 def list_managed_files(
     _: models.User = Depends(_get_current_user),
-) -> schemas.AdminManagedFileList:
-    return schemas.AdminManagedFileList(files=system_tools.list_managed_files())
+) -> admin_schemas.AdminManagedFileList:
+    return admin_schemas.AdminManagedFileList(files=system_tools.list_managed_files())
 
 
-@router.get("/system/files/{relative_path:path}", response_model=schemas.AdminCodeFile)
+@router.get("/system/files/{relative_path:path}", response_model=admin_schemas.AdminCodeFile)
 def read_managed_file_endpoint(
     relative_path: str,
     _: models.User = Depends(_get_current_user),
-) -> schemas.AdminCodeFile:
+) -> admin_schemas.AdminCodeFile:
     return system_tools.read_managed_file(relative_path)
 
 
-@router.put("/system/files/{relative_path:path}", response_model=schemas.AdminCodeFile)
+@router.put("/system/files/{relative_path:path}", response_model=admin_schemas.AdminCodeFile)
 def update_managed_file(
     relative_path: str,
-    payload: schemas.AdminCodeUpdateRequest,
+    payload: admin_schemas.AdminCodeUpdateRequest,
     current_user: models.User = Depends(_get_current_user),
-) -> schemas.AdminCodeFile:
+) -> admin_schemas.AdminCodeFile:
     return system_tools.write_managed_file(
         relative_path,
         payload.content,
@@ -423,63 +423,63 @@ def update_managed_file(
     )
 
 
-@router.post("/system/restart", response_model=schemas.AdminRestartResponse)
+@router.post("/system/restart", response_model=admin_schemas.AdminRestartResponse)
 def restart_api_endpoint(
     current_user: models.User = Depends(_get_current_user),
-) -> schemas.AdminRestartResponse:
+) -> admin_schemas.AdminRestartResponse:
     return system_tools.restart_api(requested_by=current_user)
 
 
-@router.post("/system/admin/restart", response_model=schemas.AdminRestartResponse)
+@router.post("/system/admin/restart", response_model=admin_schemas.AdminRestartResponse)
 def restart_admin_endpoint(
     current_user: models.User = Depends(_get_current_user),
-) -> schemas.AdminRestartResponse:
+) -> admin_schemas.AdminRestartResponse:
     return system_tools.restart_admin_service(requested_by=current_user)
 
 
-@router.post("/system/workers/restart", response_model=schemas.AdminActionResponse)
+@router.post("/system/workers/restart", response_model=admin_schemas.AdminActionResponse)
 def restart_workers_endpoint(
     current_user: models.User = Depends(_get_current_user),
-) -> schemas.AdminActionResponse:
+) -> admin_schemas.AdminActionResponse:
     return system_tools.restart_workers(requested_by=current_user)
 
 
-@router.post("/system/maintenance", response_model=schemas.AdminActionResponse)
+@router.post("/system/maintenance", response_model=admin_schemas.AdminActionResponse)
 def maintenance_toggle_endpoint(
-    payload: schemas.AdminMaintenanceRequest,
+    payload: admin_schemas.AdminMaintenanceRequest,
     current_user: models.User = Depends(_get_current_user),
-) -> schemas.AdminActionResponse:
+) -> admin_schemas.AdminActionResponse:
     return system_tools.set_maintenance_mode(
         enabled=payload.enabled,
         requested_by=current_user,
     )
 
 
-@router.post("/system/test-webhook", response_model=schemas.AdminActionResponse)
+@router.post("/system/test-webhook", response_model=admin_schemas.AdminActionResponse)
 def send_test_webhook_endpoint(
     current_user: models.User = Depends(_get_current_user),
-) -> schemas.AdminActionResponse:
+) -> admin_schemas.AdminActionResponse:
     return system_tools.send_test_webhook(requested_by=current_user)
 
 
-@router.get("/activity/metrics", response_model=schemas.AdminActivityMetrics)
+@router.get("/activity/metrics", response_model=admin_schemas.AdminActivityMetrics)
 def get_activity_metrics(
     _: models.User = Depends(_get_current_user),
     db: Session = Depends(get_read_db),
-) -> schemas.AdminActivityMetrics:
+) -> admin_schemas.AdminActivityMetrics:
     return _build_activity_metrics(db)
 
 
 @router.post("/login")
-def admin_login(credentials: schemas.UserLogin, db: Session = Depends(get_db)):
+def admin_login(credentials: base_schemas.UserLogin, db: Session = Depends(get_db)):
     """Делегируем авторизацию стандартному пользовательскому логину."""
 
     return user_routes.login(credentials, db)  # type: ignore[arg-type]
 
 
-@router.post("/users", response_model=schemas.UserResponse)
+@router.post("/users", response_model=base_schemas.UserResponse)
 def create_user(
-    payload: schemas.UserCreate,
+    payload: base_schemas.UserCreate,
     _: models.User = Depends(_get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -497,21 +497,21 @@ def remove_user(
     return user_routes.delete_user(user_id, db)
 
 
-@router.get("/users/summary", response_model=List[schemas.AdminUserSummary])
+@router.get("/users/summary", response_model=List[admin_schemas.AdminUserSummary])
 def get_users_summary(
     _: models.User = Depends(_get_current_user),
     db: Session = Depends(get_read_db),
-) -> List[schemas.AdminUserSummary]:
+) -> List[admin_schemas.AdminUserSummary]:
     users = db.query(models.User).order_by(models.User.id).all()
     return _build_user_summaries(db, users)
 
 
-@router.get("/users/{user_id}", response_model=schemas.AdminUserDetail)
+@router.get("/users/{user_id}", response_model=admin_schemas.AdminUserDetail)
 def get_user_detail(
     user_id: int,
     _: models.User = Depends(_get_current_user),
     db: Session = Depends(get_read_db),
-) -> schemas.AdminUserDetail:
+) -> admin_schemas.AdminUserDetail:
     user = db.query(models.User).filter(models.User.id == user_id).first()
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Пользователь не найден")
@@ -522,7 +522,7 @@ def get_user_detail(
 
     locations = _build_location_details(db, user.id)
 
-    return schemas.AdminUserDetail(
+    return admin_schemas.AdminUserDetail(
         **summary[0].model_dump(),
         theme_preference=user.theme_preference,
         language_preference=user.language_preference,

@@ -2,9 +2,10 @@
 Description=Restart Garderobus Admin API when backend files change
 
 [Path]
-PathModified=/home/garderobus/garderobus_back/api/admin_main.py
-PathModified=/home/garderobus/garderobus_back/api/routes/admin.py
-PathModified=/home/garderobus/garderobus_back/api/services/system_tools.py
+PathModified=/home/garderobus/garderobus_back/api_admin/main.py
+PathModified=/home/garderobus/garderobus_back/api_admin/routes/admin.py
+PathModified=/home/garderobus/garderobus_back/api_admin/services/system_tools.py
+PathModified=/home/garderobus/garderobus_back/api_admin/schemas.py
 PathModified=/home/garderobus/garderobus_back/api/settings.py
 Unit=garderobus-admin-restart.service
 
