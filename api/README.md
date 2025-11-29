@@ -74,6 +74,12 @@ REST API для «умного» гардероба, построенный на
      ```
     Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service` (он стартует от root, чтобы редактирование файлов через админку не упиралось в права):
     ```bash
+    # Юнит рассчитывает на виртуальное окружение в /home/garderobus/garderobus_back/.venv
+    # (создайте его и установите зависимости один раз):
+    #   python3 -m venv /home/garderobus/garderobus_back/.venv
+    #   /home/garderobus/garderobus_back/.venv/bin/pip install --upgrade pip
+    #   /home/garderobus/garderobus_back/.venv/bin/pip install -r /home/garderobus/garderobus_back/api/requirements.txt
+
     sudo cp deploy/systemd/garderobus-admin.service /etc/systemd/system/
     sudo systemctl daemon-reload
     sudo systemctl enable --now garderobus-admin.service
