@@ -1,6 +1,8 @@
 # Deployment Guide
 
 This folder contains reference configurations for running the Smart Closet API in containerized environments.
+For host-based installs with PHP adminpanel and separate FastAPI admin endpoints, see
+`../docs/nginx_host_example.md` for a ready-to-use nginx server block.
 
 ## Docker Compose
 
