@@ -28,7 +28,12 @@ _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 
 LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
 
-LOG_DATE_FORMATS = ("%Y-%m-%d %H:%M:%S,%f", "%Y-%m-%d %H:%M:%S")
+
+def _log_managed_file_error(relative_path: str, detail: str, **extra: object) -> None:
+    logger.warning(
+        "Managed code operation failed",
+        extra={"file": relative_path, "detail": detail, **extra},
+    )
 
 
 def _parse_datetime(value: object) -> Optional[datetime]:
@@ -140,6 +145,7 @@ def _allowed_extension(path: Path) -> bool:
 def _ensure_within_root(relative_path: str) -> Path:
     candidate = Path(relative_path)
     if candidate.is_absolute() or any(part == ".." for part in candidate.parts):
+        _log_managed_file_error(relative_path, "Недопустимый путь файла")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Недопустимый путь файла",
@@ -149,12 +155,16 @@ def _ensure_within_root(relative_path: str) -> Path:
     full_path = (root / candidate).resolve()
 
     if not str(full_path).startswith(str(root)):
+        _log_managed_file_error(
+            relative_path, "Путь выходит за пределы разрешенной директории"
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Путь выходит за пределы разрешенной директории",
         )
 
     if not _allowed_extension(full_path):
+        _log_managed_file_error(relative_path, "Расширение не поддерживается")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Расширение файла не поддерживается для редактирования",
@@ -163,13 +173,28 @@ def _ensure_within_root(relative_path: str) -> Path:
     return full_path
 
 
-def _validate_size(content: str) -> None:
+def _validate_size(content: str, *, path: str = "(unknown)") -> None:
     max_size = settings.ADMIN_MANAGED_CODE_MAX_SIZE
     if max_size and len(content.encode("utf-8")) > max_size:
+        _log_managed_file_error(
+            path,
+            "Размер файла превышает допустимый предел",
+            size=len(content.encode("utf-8")),
+        )
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Размер файла превышает допустимый предел",
         )
+
+
+def _is_ignored_path(path: Path) -> bool:
+    if any(part == "__pycache__" for part in path.parts):
+        return True
+
+    if path.suffix.lower() in {".pyc", ".pyo"}:
+        return True
+
+    return False
 
 
 def list_managed_files() -> List[str]:
@@ -181,6 +206,8 @@ def list_managed_files() -> List[str]:
     for file_path in root.rglob("*"):
         if not file_path.is_file():
             continue
+        if _is_ignored_path(file_path):
+            continue
         if not _allowed_extension(file_path):
             continue
         try:
@@ -189,7 +216,7 @@ def list_managed_files() -> List[str]:
             continue
         files.append(relative)
 
-    files.sort()
+    files.sort(key=str.casefold)
     return files
 
 
@@ -250,6 +277,7 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
 def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:
     full_path = _ensure_within_root(relative_path)
     if not full_path.exists() or not full_path.is_file():
+        _log_managed_file_error(relative_path, "Файл не найден")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Файл не найден",
@@ -258,6 +286,9 @@ def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:
     try:
         content = full_path.read_text(encoding="utf-8")
     except UnicodeDecodeError as exc:
+        _log_managed_file_error(
+            relative_path, "Файл не может быть прочитан как текст UTF-8"
+        )
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="Файл не может быть прочитан как текст UTF-8",
@@ -276,12 +307,13 @@ def write_managed_file(
 ) -> schemas.AdminCodeFile:
     full_path = _ensure_within_root(relative_path)
     if not full_path.exists() or not full_path.is_file():
+        _log_managed_file_error(relative_path, "Файл не найден")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Файл не найден",
         )
 
-    _validate_size(content)
+    _validate_size(content, path=relative_path)
 
     full_path.write_text(content, encoding="utf-8")
     relative = full_path.relative_to(settings.ADMIN_MANAGED_CODE_ROOT).as_posix()
