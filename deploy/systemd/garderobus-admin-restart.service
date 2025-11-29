@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart Garderobus Admin API
+
+[Service]
+Type=oneshot
+ExecStart=/bin/systemctl restart garderobus-admin.service

@@ -72,12 +72,19 @@ REST API для «умного» гардероба, построенный на
      ```bash
      uvicorn admin_main:app --host 0.0.0.0 --port 8100 --reload
      ```
-     Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service`:
-     ```bash
-     sudo cp deploy/systemd/garderobus-admin.service /etc/systemd/system/
-     sudo systemctl daemon-reload
-     sudo systemctl enable --now garderobus-admin.service
-     ```
+    Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service` (он стартует от root, чтобы редактирование файлов через админку не упиралось в права):
+    ```bash
+    sudo cp deploy/systemd/garderobus-admin.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now garderobus-admin.service
+    ```
+    Если хотите, чтобы сервис автоматически перезапускался при изменении кода админки, подключите path-юнит и вспомогательный рестарт-юнит:
+    ```bash
+    sudo cp deploy/systemd/garderobus-admin-autorestart.path /etc/systemd/system/
+    sudo cp deploy/systemd/garderobus-admin-restart.service /etc/systemd/system/
+    sudo systemctl daemon-reload
+    sudo systemctl enable --now garderobus-admin-autorestart.path
+    ```
    Или воспользуйтесь скриптом `run.sh` для пользовательского API:
    ```bash
    chmod +x run.sh
