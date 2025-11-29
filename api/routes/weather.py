@@ -4,10 +4,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
-import models, schemas
-from database import get_db
-import settings
-from cache import cache
+from api import models, schemas
+from api.database import get_db
+from api import settings
+from api.cache import cache
 from .location_utils import resolve_location_and_coordinates
 from services.http_client import (
     CircuitOpenError,

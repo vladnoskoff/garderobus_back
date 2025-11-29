@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from sqlalchemy.orm import Session
 from datetime import datetime
-import models
-from database import get_db, get_read_db
+from api import models
+from api.database import get_db, get_read_db
 import shutil
 import os
 import base64
-import settings
-import schemas
-from openai_client import get_openai_client
+from api import settings
+from api import schemas
+from api.openai_client import get_openai_client
 from pyuploadcare import Uploadcare
 import io
 from typing import Optional

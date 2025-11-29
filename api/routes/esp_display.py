@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-import settings
+from api import settings
 from services.http_client import (
     CircuitOpenError,
     HTTPRequestError,

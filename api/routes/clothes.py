@@ -11,13 +11,13 @@ import shutil
 
 from pydantic import ValidationError
 
-import models
-from database import get_db, get_read_db
-import schemas
-import settings
-from openai_client import get_openai_client
+from api import models
+from api.database import get_db, get_read_db
+from api import schemas
+from api import settings
+from api.openai_client import get_openai_client
 from .location_utils import ensure_location_for_user
-from cache import (
+from api.cache import (
     cache,
     invalidate_clothes_for_user,
     invalidate_outfit_history_for_user,

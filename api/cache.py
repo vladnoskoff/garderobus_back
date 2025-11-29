@@ -9,7 +9,7 @@ from typing import Any, Optional
 import redis
 from prometheus_client import Counter
 
-import settings
+from api import settings
 
 logger = logging.getLogger(__name__)
 

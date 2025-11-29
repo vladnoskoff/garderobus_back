@@ -4,9 +4,9 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-import models
-import schemas
-from database import get_db
+from api import models
+from api import schemas
+from api.database import get_db
 from .admin import _get_current_user
 
 router = APIRouter(prefix="/admin/notifications", tags=["Notifications"])

@@ -11,10 +11,10 @@ from prometheus_client import Counter, Histogram
 from sqlalchemy.orm import joinedload
 
 from celery_app import celery_app
-from database import db_session
-import models
-import schemas
-from openai_client import get_openai_client
+from api.database import db_session
+from api import models
+from api import schemas
+from api.openai_client import get_openai_client
 from services.ai import (
     build_mannequin_prompt,
     coerce_int,

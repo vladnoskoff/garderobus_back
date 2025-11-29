@@ -10,7 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 from typing import Iterable, List, Optional, Tuple, Union
 
-import settings
+from api import settings
 
 MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)

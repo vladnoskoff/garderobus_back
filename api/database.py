@@ -11,7 +11,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.sql import Select
 
-import settings
+from api import settings
 
 
 def _build_engine(url: str) -> Engine:

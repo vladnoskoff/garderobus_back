@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
-import models
-import schemas
-from database import get_db
-import settings
-from cache import (
+from api import models
+from api import schemas
+from api.database import get_db
+from api import settings
+from api.cache import (
     cache,
     invalidate_locations_for_user,
     invalidate_outfit_history_for_user,

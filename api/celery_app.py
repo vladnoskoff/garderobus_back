@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from celery import Celery
 
-import settings
+from api import settings
 
 
 celery_app = Celery(

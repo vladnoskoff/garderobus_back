@@ -7,7 +7,7 @@ import httpx
 from httpx_socks import SyncProxyTransport
 from openai import OpenAI
 
-import settings
+from api import settings
 
 
 def _build_http_client() -> Optional[httpx.Client]:

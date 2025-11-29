@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 from datetime import datetime, timedelta
-import models
-from database import get_read_db
+from api import models
+from api.database import get_read_db
 
 router = APIRouter(prefix="/analytics", tags=["Wardrobe Analytics"])
 

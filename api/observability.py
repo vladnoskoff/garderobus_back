@@ -19,7 +19,7 @@ from slowapi import Limiter
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
-import settings
+from api import settings
 
 logger = logging.getLogger(__name__)
 

@@ -10,7 +10,7 @@ from typing import Iterable
 from fastapi import FastAPI
 from prometheus_client import Histogram
 
-import settings
+from api import settings
 
 try:  # pragma: no cover - optional dependency
     from pyinstrument import Profiler
