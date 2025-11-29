@@ -35,3 +35,14 @@ Choose the option that matches your security requirements. If you edit as `root`
      sudo chown garderobus:garderobus /home/garderobus/garderobus_back/api/run.sh
      ```
 - После изменения прав снова сохраните файл из панели; ошибка должна исчезнуть, когда у `garderobus` появится запись.
+
+## Можно ли просто запустить сервис от root?
+
+- **Возможно, но нежелательно.** Запуск API под `root` снимает проблему прав, но убирает изоляцию и усиливает риски безопасности.
+- **Лучше выдать права папке/файлам.** Это сохраняет принцип наименьших привилегий и позволяет аудировать изменение прав точечно.
+- **Если все-таки нужно запускать как root (systemd):**
+  - Откройте unit-файл сервиса (например, `/etc/systemd/system/garderobus.service`).
+  - Уберите или замените строку `User=garderobus` на `User=root` (и, при наличии, `Group=root`).
+  - Выполните `sudo systemctl daemon-reload && sudo systemctl restart garderobus`.
+  - Проверьте, что API поднялось и сохраняет файлы без ошибок.
+- После смены пользователя убедитесь, что доступ к API ограничен и что файлы не получают лишние права (`umask` и владельцы новых файлов будут `root`).
