@@ -1,5 +1,8 @@
 <?php
-$apiBaseUrl = getenv('API_BASE_URL') ?: 'http://garderobus.tech';
+$host = $_SERVER['HTTP_HOST'] ?? '';
+$scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https://' : 'http://';
+$guessedBaseUrl = $host ? $scheme . $host : 'http://localhost';
+$apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
 ?>
 <!DOCTYPE html>
 <html lang="ru">
