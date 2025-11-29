@@ -24,7 +24,12 @@ logger = logging.getLogger(__name__)
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Garderobus Admin API")
+app = FastAPI(
+    title="Garderobus Admin API",
+    docs_url="/admin/docs",
+    redoc_url="/admin/redoc",
+    openapi_url="/admin/openapi.json",
+)
 
 
 @app.middleware("http")
