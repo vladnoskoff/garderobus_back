@@ -138,18 +138,8 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <p id="system-events-loading" class="text-muted">Загрузка событий...</p>
           <p id="system-events-empty" class="text-muted hidden">Событий не найдено за выбранный период.</p>
 
-          <div class="table-wrapper hidden" id="system-events-wrapper">
-            <table class="table events-table">
-              <thead>
-                <tr>
-                  <th>Время</th>
-                  <th>Уровень</th>
-                  <th>Сообщение</th>
-                  <th>Источник</th>
-                </tr>
-              </thead>
-              <tbody id="system-events-body"></tbody>
-            </table>
+          <div class="events-group-container hidden" id="system-events-wrapper">
+            <div id="system-events-groups" class="events-groups"></div>
           </div>
 
           <div class="pagination" id="system-events-pagination">

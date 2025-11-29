@@ -325,6 +325,7 @@ class AdminSystemEvent(BaseModel):
     message: str
     logger: Optional[str] = None
     service: Optional[str] = None
+    category: str = "application"
     context: dict[str, Any] = Field(default_factory=dict)
 
 

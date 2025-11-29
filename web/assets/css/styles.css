@@ -916,6 +916,67 @@ body[data-page="database"] .table td {
   line-height: 1.4;
 }
 
+.events-group-container {
+  margin-top: 8px;
+}
+
+.events-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.event-category {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.event-category-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.event-category-title {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.event-category-hint {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+
+.event-category-count {
+  align-self: flex-start;
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.event-category-table table {
+  margin: 0;
+}
+
+.event-category-table th {
+  background: #f9fafb;
+}
+
+.event-category-empty {
+  margin: 0;
+  font-size: 13px;
+}
+
+.events-subtable td:nth-child(3) {
+  max-width: 480px;
+  white-space: normal;
+}
+
 .pagination {
   display: flex;
   align-items: center;

@@ -696,6 +696,37 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
     ).lower()
     message = str(payload.get("message") or payload.get("msg") or "").strip()
 
+    def _detect_event_category() -> str:
+        raw_service = str(payload.get("service") or "").lower()
+        raw_logger = str(payload.get("logger") or payload.get("name") or "").lower()
+        raw_message = message.lower()
+
+        context = payload.get("context") or {}
+        context_text = " ".join(
+            str(value) for value in context.values() if isinstance(value, (str, int, float))
+        ).lower()
+
+        searchable = " ".join(
+            part for part in [raw_service, raw_logger, raw_message, context_text] if part
+        )
+
+        def has_any(text: str, tokens: tuple[str, ...]) -> bool:
+            return any(token in text for token in tokens)
+
+        if has_any(searchable, ("xray", "vpn", "socks")):
+            return "xray"
+
+        if has_any(searchable, ("db", "database", "postgres", "psql", "sqlalchemy")):
+            return "database"
+
+        if has_any(searchable, ("uvicorn", "fastapi", "http", "api", "request")):
+            return "api"
+
+        if has_any(searchable, ("celery", "worker", "queue")):
+            return "workers"
+
+        return "application"
+
     known_keys = {
         "asctime",
         "timestamp",
@@ -719,6 +750,7 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
         message=message or "—",
         logger=payload.get("logger") or payload.get("name"),
         service=payload.get("service"),
+        category=_detect_event_category(),
         context=context,
     )
 

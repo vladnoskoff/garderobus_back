@@ -85,7 +85,7 @@
     systemActionsToggle: document.getElementById("system-actions-toggle"),
     systemActionsList: document.getElementById("system-actions-list"),
     systemEventsWrapper: document.getElementById("system-events-wrapper"),
-    systemEventsBody: document.getElementById("system-events-body"),
+    systemEventsGroups: document.getElementById("system-events-groups"),
     systemEventsLoading: document.getElementById("system-events-loading"),
     systemEventsEmpty: document.getElementById("system-events-empty"),
     systemEventsError: document.getElementById("system-events-error"),
@@ -935,6 +935,150 @@
     return event.message || "—";
   }
 
+  const EVENT_CATEGORY_ORDER = [
+    "application",
+    "api",
+    "database",
+    "xray",
+    "workers",
+    "other",
+  ];
+
+  const EVENT_CATEGORY_LABELS = {
+    application: "Приложение",
+    api: "API",
+    database: "База данных",
+    xray: "VPN / Xray",
+    workers: "Очереди и воркеры",
+    other: "Прочее",
+  };
+
+  const EVENT_CATEGORY_HINTS = {
+    application: "Бизнес-логика, фоновые операции и внутренние сервисы.",
+    api: "HTTP-запросы, REST-эндпоинты и ошибки FastAPI/Uvicorn.",
+    database: "Подключения к БД, запросы и миграции.",
+    xray: "VPN/Xray-тоннель и прокси-доступ к внешним API.",
+    workers: "Очереди Celery и фоновые задания.",
+    other: "Логи без явной категории.",
+  };
+
+  function normalizeEventCategory(category) {
+    const normalized = String(category || "").toLowerCase();
+    if (EVENT_CATEGORY_ORDER.includes(normalized)) {
+      return normalized;
+    }
+    return normalized ? "other" : "application";
+  }
+
+  function detectFallbackCategory(event) {
+    const parts = [event?.service, event?.logger, event?.message]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase())
+      .join(" ");
+    const contextText = Object.values(event?.context || {})
+      .filter((value) => typeof value === "string")
+      .join(" ")
+      .toLowerCase();
+    const searchable = `${parts} ${contextText}`.trim();
+
+    const hasAny = (tokens) => tokens.some((token) => searchable.includes(token));
+
+    if (hasAny(["xray", "vpn", "socks"])) {
+      return "xray";
+    }
+    if (hasAny(["db", "database", "postgres", "psql", "sqlalchemy", "mysql", "sqlite"])) {
+      return "database";
+    }
+    if (hasAny(["uvicorn", "fastapi", "api", "http", "request", "endpoint"])) {
+      return "api";
+    }
+    if (hasAny(["celery", "worker", "queue", "task"])) {
+      return "workers";
+    }
+    return "application";
+  }
+
+  function getEventCategory(event) {
+    const hasExplicit = event?.category !== undefined && event?.category !== null && event?.category !== "";
+    if (hasExplicit) {
+      return normalizeEventCategory(event.category);
+    }
+    return detectFallbackCategory(event);
+  }
+
+  function groupEventsByCategory(events) {
+    const buckets = EVENT_CATEGORY_ORDER.reduce((acc, key) => {
+      acc[key] = [];
+      return acc;
+    }, {});
+
+    (events || []).forEach((event) => {
+      const category = getEventCategory(event);
+      const bucketKey = EVENT_CATEGORY_ORDER.includes(category) ? category : "other";
+      buckets[bucketKey].push(event);
+    });
+
+    return buckets;
+  }
+
+  function buildEventRow(event) {
+    const row = document.createElement("tr");
+
+    const timeCell = document.createElement("td");
+    const timeText = document.createElement("div");
+    timeText.className = "event-time";
+    timeText.textContent = formatDate(event.timestamp, true);
+    timeCell.appendChild(timeText);
+    row.appendChild(timeCell);
+
+    const levelCell = document.createElement("td");
+    const badge = document.createElement("span");
+    const levelClass =
+      event.level === "error"
+        ? "error"
+        : event.level === "warning"
+          ? "warning"
+          : "info";
+    badge.className = `status-badge ${levelClass}`;
+    badge.textContent = formatEventLevel(event.level);
+    levelCell.appendChild(badge);
+    row.appendChild(levelCell);
+
+    const messageCell = document.createElement("td");
+    const messagePrimary = document.createElement("div");
+    messagePrimary.className = "event-message-primary";
+    messagePrimary.textContent = formatEventMessage(event);
+    messageCell.appendChild(messagePrimary);
+
+    const detailParts = buildEventDetails(event);
+    if (detailParts.length) {
+      const meta = document.createElement("div");
+      meta.className = "event-message-meta";
+      detailParts.forEach((part) => {
+        const chip = document.createElement("span");
+        chip.className = "event-message-chip";
+        chip.textContent = part;
+        meta.appendChild(chip);
+      });
+      messageCell.appendChild(meta);
+    }
+    row.appendChild(messageCell);
+
+    const sourceCell = document.createElement("td");
+    const parts = [event.service, event.logger].filter(Boolean);
+    const source = parts.join(" · ") || "—";
+    const sourceChip = document.createElement("span");
+    sourceChip.className = "event-message-chip";
+    const sourceLabel = document.createElement("strong");
+    sourceLabel.textContent = "Источник";
+    sourceChip.appendChild(sourceLabel);
+    sourceChip.appendChild(document.createTextNode(` ${source}`));
+    sourceCell.appendChild(sourceChip);
+    row.appendChild(sourceCell);
+
+    return row;
+  }
+
   function buildEventDetails(event) {
     if (!event) {
       return [];
@@ -967,13 +1111,14 @@
     }
 
     return details.filter(Boolean);
-  }
+    }
 
   function renderSystemEvents(events) {
-    if (!elements.systemEventsBody) {
+    if (!elements.systemEventsGroups) {
       return;
     }
-    elements.systemEventsBody.innerHTML = "";
+
+    elements.systemEventsGroups.innerHTML = "";
 
     if (!events || !events.length) {
       toggleHidden(elements.systemEventsWrapper, true);
@@ -984,62 +1129,74 @@
     toggleHidden(elements.systemEventsWrapper, false);
     toggleHidden(elements.systemEventsEmpty, true);
 
-    events.forEach((event) => {
-      const row = document.createElement("tr");
+    const buckets = groupEventsByCategory(events);
 
-      const timeCell = document.createElement("td");
-      const timeText = document.createElement("div");
-      timeText.className = "event-time";
-      timeText.textContent = formatDate(event.timestamp, true);
-      timeCell.appendChild(timeText);
-      row.appendChild(timeCell);
+    EVENT_CATEGORY_ORDER.forEach((category) => {
+      const bucket = buckets[category] || [];
+      const section = document.createElement("section");
+      section.className = "event-category";
 
-      const levelCell = document.createElement("td");
-      const badge = document.createElement("span");
-      const levelClass =
-        event.level === "error"
-          ? "error"
-          : event.level === "warning"
-            ? "warning"
-            : "info";
-      badge.className = `status-badge ${levelClass}`;
-      badge.textContent = formatEventLevel(event.level);
-      levelCell.appendChild(badge);
-      row.appendChild(levelCell);
+      const header = document.createElement("div");
+      header.className = "event-category-header";
 
-      const messageCell = document.createElement("td");
-      const messagePrimary = document.createElement("div");
-      messagePrimary.className = "event-message-primary";
-      messagePrimary.textContent = formatEventMessage(event);
-      messageCell.appendChild(messagePrimary);
+      const info = document.createElement("div");
+      info.className = "event-category-info";
 
-      const detailParts = buildEventDetails(event);
-      if (detailParts.length) {
-        const meta = document.createElement("div");
-        meta.className = "event-message-meta";
-        detailParts.forEach((part) => {
-          const chip = document.createElement("span");
-          chip.className = "event-message-chip";
-          chip.textContent = part;
-          meta.appendChild(chip);
-        });
-        messageCell.appendChild(meta);
+      const title = document.createElement("div");
+      title.className = "event-category-title";
+      title.textContent = EVENT_CATEGORY_LABELS[category] || category;
+
+      const hint = document.createElement("p");
+      hint.className = "text-muted event-category-hint";
+      hint.textContent = EVENT_CATEGORY_HINTS[category] || "";
+
+      info.appendChild(title);
+      info.appendChild(hint);
+
+      const count = document.createElement("span");
+      count.className = "badge event-category-count";
+      count.textContent = `${bucket.length || 0} записей`;
+
+      header.appendChild(info);
+      header.appendChild(count);
+
+      section.appendChild(header);
+
+      if (!bucket.length) {
+        const empty = document.createElement("p");
+        empty.className = "text-muted event-category-empty";
+        empty.textContent = "Нет событий в этой категории";
+        section.appendChild(empty);
+        elements.systemEventsGroups.appendChild(section);
+        return;
       }
-      row.appendChild(messageCell);
 
-      const sourceCell = document.createElement("td");
-      const parts = [event.service, event.logger].filter(Boolean);
-      const source = parts.join(" · ") || "—";
-      const sourceChip = document.createElement("span");
-      sourceChip.className = "event-message-chip";
-      const sourceLabel = document.createElement("strong");
-      sourceLabel.textContent = "Источник";
-      sourceChip.appendChild(sourceLabel);
-      sourceChip.appendChild(document.createTextNode(` ${source}`));
-      sourceCell.appendChild(sourceChip);
-      row.appendChild(sourceCell);
+      const tableWrapper = document.createElement("div");
+      tableWrapper.className = "table-wrapper event-category-table";
 
-      elements.systemEventsBody.appendChild(row);
+      const table = document.createElement("table");
+      table.className = "table events-table events-subtable";
+
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      ["Время", "Уровень", "Сообщение", "Источник"].forEach((label) => {
+        const th = document.createElement("th");
+        th.textContent = label;
+        headerRow.appendChild(th);
+      });
+      thead.appendChild(headerRow);
+      table.appendChild(thead);
+
+      const tbody = document.createElement("tbody");
+      bucket.forEach((event) => {
+        tbody.appendChild(buildEventRow(event));
+      });
+      table.appendChild(tbody);
+
+      tableWrapper.appendChild(table);
+      section.appendChild(tableWrapper);
+
+      elements.systemEventsGroups.appendChild(section);
     });
   }
 
