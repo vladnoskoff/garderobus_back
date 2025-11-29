@@ -43,18 +43,19 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                 Очередь задач <span class="badge" id="queue-count">—</span>
               </button>
               <button class="secondary" type="button" id="open-code-editor-button">Редактировать код</button>
-              <div class="action-menu" id="system-actions-menu">
-                <button class="primary action-toggle" type="button" id="system-actions-toggle">
-                  Действия
-                  <span class="chevron" aria-hidden="true">▾</span>
-                </button>
-                <div class="action-menu-list hidden" id="system-actions-list" role="menu">
-                  <button type="button" class="action-menu-item" data-action="restart-api">Перезапустить API</button>
-                  <button type="button" class="action-menu-item" data-action="restart-workers">Перезапустить воркеры</button>
-                  <button type="button" class="action-menu-item" data-action="enable-maintenance">Включить maintenance</button>
-                  <button type="button" class="action-menu-item" data-action="disable-maintenance">Выключить maintenance</button>
-                  <button type="button" class="action-menu-item" data-action="send-test-webhook">Отправить тестовый webhook</button>
-                </div>
+                <div class="action-menu" id="system-actions-menu">
+                  <button class="primary action-toggle" type="button" id="system-actions-toggle">
+                    Действия
+                    <span class="chevron" aria-hidden="true">▾</span>
+                  </button>
+                  <div class="action-menu-list hidden" id="system-actions-list" role="menu">
+                    <button type="button" class="action-menu-item" data-action="restart-api">Перезапустить API</button>
+                    <button type="button" class="action-menu-item" data-action="restart-admin">Перезапустить админ API</button>
+                    <button type="button" class="action-menu-item" data-action="restart-workers">Перезапустить воркеры</button>
+                    <button type="button" class="action-menu-item" data-action="enable-maintenance">Включить maintenance</button>
+                    <button type="button" class="action-menu-item" data-action="disable-maintenance">Выключить maintenance</button>
+                    <button type="button" class="action-menu-item" data-action="send-test-webhook">Отправить тестовый webhook</button>
+                  </div>
               </div>
             </div>
           </div>
@@ -78,6 +79,11 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
               <h3>Перезапуск API</h3>
               <strong id="system-restart-state">Недоступно</strong>
               <span>Последний запрос: <span id="system-last-restart">—</span></span>
+            </div>
+            <div class="stat-card system-card">
+              <h3>Перезапуск админ API</h3>
+              <strong id="system-admin-restart-state">Недоступно</strong>
+              <span>Последний запрос: <span id="system-admin-last-restart">—</span></span>
             </div>
             <div class="stat-card system-card">
               <h3>Редактируемые файлы</h3>

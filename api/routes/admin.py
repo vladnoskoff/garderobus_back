@@ -430,6 +430,13 @@ def restart_api_endpoint(
     return system_tools.restart_api(requested_by=current_user)
 
 
+@router.post("/system/admin/restart", response_model=schemas.AdminRestartResponse)
+def restart_admin_endpoint(
+    current_user: models.User = Depends(_get_current_user),
+) -> schemas.AdminRestartResponse:
+    return system_tools.restart_admin_service(requested_by=current_user)
+
+
 @router.post("/system/workers/restart", response_model=schemas.AdminActionResponse)
 def restart_workers_endpoint(
     current_user: models.User = Depends(_get_current_user),

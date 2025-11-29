@@ -76,6 +76,8 @@
     systemEnvironment: document.getElementById("system-environment"),
     systemRestartState: document.getElementById("system-restart-state"),
     systemLastRestart: document.getElementById("system-last-restart"),
+    systemAdminRestartState: document.getElementById("system-admin-restart-state"),
+    systemAdminLastRestart: document.getElementById("system-admin-last-restart"),
     systemFilesCount: document.getElementById("system-files-count"),
     systemFilesList: document.getElementById("system-files-list"),
     systemServiceStatuses: document.getElementById("system-service-statuses"),
@@ -1546,6 +1548,16 @@
         ? formatDate(status.last_restart_requested_at, true)
         : "—"
     );
+    setText(
+      elements.systemAdminRestartState,
+      status.admin_restart_supported ? "Доступно" : "Недоступно"
+    );
+    setText(
+      elements.systemAdminLastRestart,
+      status.last_admin_restart_requested_at
+        ? formatDate(status.last_admin_restart_requested_at, true)
+        : "—"
+    );
     setMaintenanceState(Boolean(status.maintenance_enabled));
     setText(elements.systemFilesCount, files.length);
     renderManagedFiles(files);
@@ -1583,6 +1595,9 @@
     if (!status.worker_restart_supported) {
       disableButton("restart-workers", "Нет команды перезапуска воркеров");
     }
+    if (!status.admin_restart_supported) {
+      disableButton("restart-admin", "Перезапуск админ-сервиса не настроен");
+    }
     if (!status.maintenance_supported) {
       disableButton("enable-maintenance", "Maintenance не настроен");
       disableButton("disable-maintenance", "Maintenance не настроен");
@@ -1607,6 +1622,13 @@
         "Перезапустить API сейчас? Активные соединения будут прерваны.",
       loadingLabel: "Перезапуск...",
       successMessage: "Перезапуск API инициирован.",
+    },
+    "restart-admin": {
+      url: "/admin/system/admin/restart",
+      confirm:
+        "Перезапустить админ-сервис сейчас? Вы выйдете из панели при завершении процесса.",
+      loadingLabel: "Перезапуск админ-сервиса...",
+      successMessage: "Перезапуск админ-сервиса инициирован.",
     },
     "restart-workers": {
       url: "/admin/system/workers/restart",

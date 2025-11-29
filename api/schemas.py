@@ -263,8 +263,10 @@ class AdminSystemStatus(BaseModel):
     uptime_seconds: float = Field(..., ge=0)
     uptime_human: str
     restart_supported: bool
+    admin_restart_supported: bool = False
     worker_restart_supported: bool = False
     last_restart_requested_at: Optional[datetime] = None
+    last_admin_restart_requested_at: Optional[datetime] = None
     managed_files: List[str] = Field(default_factory=list)
     app_name: str
     app_version: str

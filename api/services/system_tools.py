@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 _START_TIME = time.time()
 _LAST_RESTART_REQUEST: Optional[datetime] = None
+_LAST_ADMIN_RESTART_REQUEST: Optional[datetime] = None
 _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 
@@ -272,8 +273,10 @@ def get_system_status() -> schemas.AdminSystemStatus:
         uptime_seconds=uptime_seconds,
         uptime_human=_humanize_duration(uptime_seconds),
         restart_supported=is_restart_supported(),
+        admin_restart_supported=is_admin_restart_supported(),
         worker_restart_supported=is_worker_restart_supported(),
         last_restart_requested_at=_LAST_RESTART_REQUEST,
+        last_admin_restart_requested_at=_LAST_ADMIN_RESTART_REQUEST,
         managed_files=list_managed_files(),
         app_name=settings.APP_NAME,
         app_version=settings.APP_VERSION,
@@ -468,6 +471,10 @@ def is_worker_restart_supported() -> bool:
     return bool(settings.ADMIN_ALLOW_WORKER_RESTART and settings.ADMIN_WORKER_RESTART_COMMAND)
 
 
+def is_admin_restart_supported() -> bool:
+    return bool(settings.ADMIN_ALLOW_ADMIN_RESTART)
+
+
 def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminRestartResponse:
     if not settings.ADMIN_ALLOW_RESTART:
         raise HTTPException(
@@ -509,6 +516,54 @@ def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminR
             "Перезапуск API инициирован"
             if command
             else "Перезапуск API инициирован (автоматическое завершение процесса)"
+        ),
+        pid=getattr(process, "pid", None),
+    )
+
+
+def restart_admin_service(
+    *, requested_by: Optional[models.User] = None
+) -> schemas.AdminRestartResponse:
+    if not settings.ADMIN_ALLOW_ADMIN_RESTART:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Перезапуск админ-сервиса не настроен",
+        )
+
+    command = (settings.ADMIN_ADMIN_RESTART_COMMAND or "").strip()
+
+    logger.info(
+        "Admin service restart requested",
+        extra={
+            "actor_id": getattr(requested_by, "id", None),
+            "actor_email": getattr(requested_by, "email", None),
+            "command": command,
+        },
+    )
+
+    process = None
+    if command:
+        try:
+            process = subprocess.Popen(  # noqa: S603 - administrative action
+                command,  # noqa: S607 - command configured by environment
+                shell=True,
+            )
+        except OSError as exc:  # pragma: no cover - system-specific failure
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось инициировать перезапуск админ-сервиса",
+            ) from exc
+    else:
+        _schedule_self_restart()
+
+    global _LAST_ADMIN_RESTART_REQUEST
+    _LAST_ADMIN_RESTART_REQUEST = datetime.now(timezone.utc)
+
+    return schemas.AdminRestartResponse(
+        detail=(
+            "Перезапуск админ-сервиса инициирован"
+            if command
+            else "Перезапуск админ-сервиса инициирован (автозавершение процесса)"
         ),
         pid=getattr(process, "pid", None),
     )

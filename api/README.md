@@ -72,6 +72,12 @@ REST API для «умного» гардероба, построенный на
      ```bash
      uvicorn admin_main:app --host 0.0.0.0 --port 8100 --reload
      ```
+     Для systemd-запуска используйте готовый unit-файл `deploy/systemd/garderobus-admin.service`:
+     ```bash
+     sudo cp deploy/systemd/garderobus-admin.service /etc/systemd/system/
+     sudo systemctl daemon-reload
+     sudo systemctl enable --now garderobus-admin.service
+     ```
    Или воспользуйтесь скриптом `run.sh` для пользовательского API:
    ```bash
    chmod +x run.sh
@@ -99,6 +105,12 @@ REST API для «умного» гардероба, построенный на
 | `UPLOADCARE_PUBLIC_KEY` / `UPLOADCARE_SECRET_KEY` | Доступ к Uploadcare CDN | — |
 | `SOCKS_PROXY_URL`, `ENABLE_SOCKS_PROXY` | Настройки прокси (если требуется) | `socks5://127.0.0.1:10808`, `true` |
 | `APP_NAME`, `ESP_DISPLAY_IP`, `DEBUG` | Дополнительные настройки сервиса | `Smart Closet`, `http://192.168.1.100`, `false` |
+| `ADMIN_RESTART_COMMAND` | Команда для перезапуска основного API (например, `systemctl restart garderobus-api`) | — |
+| `ADMIN_ALLOW_RESTART` | Разрешить ли перезапуск основного API через админку | `true` |
+| `ADMIN_ADMIN_RESTART_COMMAND` | Команда для перезапуска отдельного админ API (например, `systemctl restart garderobus-admin`) | — |
+| `ADMIN_ALLOW_ADMIN_RESTART` | Разрешить ли перезапуск админ API через панель | `true` |
+| `ADMIN_WORKER_RESTART_COMMAND` | Команда для перезапуска Celery-воркеров | — |
+| `ADMIN_ALLOW_WORKER_RESTART` | Разрешить ли перезапуск воркеров через админку | `true` |
 
 ## Миграции базы данных
 Проект не использует Alembic; изменения схемы вносятся вручную. Ниже перечислены основные команды, которые нужно выполнить при обновлении существующей базы:
