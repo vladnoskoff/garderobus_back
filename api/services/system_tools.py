@@ -713,16 +713,46 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
         def has_any(text: str, tokens: tuple[str, ...]) -> bool:
             return any(token in text for token in tokens)
 
-        if has_any(searchable, ("xray", "vpn", "socks")):
+        if has_any(searchable, ("xray", "vpn", "socks", "proxy")):
             return "xray"
 
-        if has_any(searchable, ("db", "database", "postgres", "psql", "sqlalchemy")):
+        if has_any(
+            searchable,
+            (
+                "db",
+                "database",
+                "postgres",
+                "psql",
+                "sqlalchemy",
+                "mysql",
+                "sqlite",
+                "psycopg",
+                "query",
+                "pool",
+            ),
+        ):
             return "database"
 
-        if has_any(searchable, ("uvicorn", "fastapi", "http", "api", "request")):
+        if has_any(
+            searchable,
+            ("uvicorn", "fastapi", "http", "api", "request", "endpoint", "gunicorn"),
+        ):
             return "api"
 
-        if has_any(searchable, ("celery", "worker", "queue")):
+        if has_any(
+            searchable,
+            (
+                "celery",
+                "worker",
+                "queue",
+                "task",
+                "beat",
+                "redis",
+                "amqp",
+                "rabbit",
+                "kombu",
+            ),
+        ):
             return "workers"
 
         return "application"
@@ -755,6 +785,36 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
     )
 
 
+def _build_plain_event(line: str) -> Optional[schemas.AdminSystemEvent]:
+    for fmt in LOG_DATE_FORMATS:
+        fmt_normalized = fmt.replace(",%f", ".%f")
+        try:
+            parsed = datetime.strptime(line[: len(fmt_normalized)], fmt_normalized)
+            timestamp = parsed.replace(tzinfo=timezone.utc)
+            remainder = line[len(fmt_normalized) :].strip(" -:")
+            break
+        except ValueError:
+            timestamp = None
+    else:
+        timestamp = None
+
+    if timestamp is None:
+        return None
+
+    level = "info"
+    lowered = line.lower()
+    if any(token in lowered for token in ("error", "err")):
+        level = "error"
+    elif "warn" in lowered:
+        level = "warning"
+    elif "debug" in lowered:
+        level = "debug"
+
+    message = remainder if remainder else line.strip()
+    payload = {"timestamp": timestamp, "level": level, "message": message}
+    return _build_event(payload)
+
+
 def get_system_events(
     *,
     level: Optional[str] = None,
@@ -780,6 +840,14 @@ def get_system_events(
             try:
                 payload = json.loads(line)
             except json.JSONDecodeError:
+                event = _build_plain_event(line)
+                if event is None:
+                    continue
+                if desired_level and event.level != desired_level:
+                    continue
+                if cutoff and event.timestamp < cutoff:
+                    continue
+                events.append(event)
                 continue
 
             event = _build_event(payload)
