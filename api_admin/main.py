@@ -16,7 +16,7 @@ from cache import cache
 from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
-from api_admin.routes import admin
+from api_admin.routes import admin, notifications
 
 
 configure_logging()
@@ -100,6 +100,7 @@ app.add_middleware(
 )
 
 app.include_router(admin.router)
+app.include_router(notifications.router)
 
 configure_observability(app)
 
