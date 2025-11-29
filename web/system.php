@@ -130,6 +130,10 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
               <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
                 <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
                 <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
+                <label class="toggle" style="margin-left: auto;">
+                  <input type="checkbox" id="system-events-show-empty" />
+                  <span>Показывать пустые категории</span>
+                </label>
               </div>
             </div>
           </div>

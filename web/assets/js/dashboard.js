@@ -94,6 +94,7 @@
     systemEventsLimit: document.getElementById("system-events-limit"),
     systemEventsRefresh: document.getElementById("system-events-refresh"),
     systemEventsUpdatedAt: document.getElementById("system-events-updated-at"),
+    systemEventsShowEmpty: document.getElementById("system-events-show-empty"),
     systemEventsPrev: document.getElementById("system-events-prev"),
     systemEventsNext: document.getElementById("system-events-next"),
     systemEventsPageInfo: document.getElementById("system-events-page-info"),
@@ -162,6 +163,8 @@
       loading: false,
       lastSignature: "",
       refreshInterval: null,
+      latestEvents: [],
+      showEmpty: false,
     },
     queueSnapshot: null,
     queueLoadedOnce: false,
@@ -1050,15 +1053,33 @@
     messagePrimary.textContent = formatEventMessage(event);
     messageCell.appendChild(messagePrimary);
 
+    const categoryLabel = EVENT_CATEGORY_LABELS[getEventCategory(event)];
+    if (categoryLabel) {
+      const messageSecondary = document.createElement("div");
+      messageSecondary.className = "event-message-secondary text-muted";
+      messageSecondary.textContent = categoryLabel;
+      messageCell.appendChild(messageSecondary);
+    }
+
     const detailParts = buildEventDetails(event);
     if (detailParts.length) {
       const meta = document.createElement("div");
-      meta.className = "event-message-meta";
+      meta.className = "event-meta-list";
       detailParts.forEach((part) => {
-        const chip = document.createElement("span");
-        chip.className = "event-message-chip";
-        chip.textContent = part;
-        meta.appendChild(chip);
+        const item = document.createElement("div");
+        item.className = "event-meta-item";
+
+        const label = document.createElement("span");
+        label.className = "event-meta-label";
+        label.textContent = part.label;
+
+        const value = document.createElement("span");
+        value.className = "event-meta-value";
+        value.textContent = part.value;
+
+        item.appendChild(label);
+        item.appendChild(value);
+        meta.appendChild(item);
       });
       messageCell.appendChild(meta);
     }
@@ -1088,30 +1109,30 @@
     const details = [];
 
     if (context.method && context.path) {
-      details.push(`${context.method} ${context.path}`);
+      details.push({ label: "Запрос", value: `${context.method} ${context.path}` });
     } else if (context.method) {
-      details.push(context.method);
+      details.push({ label: "Метод", value: context.method });
     }
 
     if (typeof context.status_code === "number") {
-      details.push(`Статус ${context.status_code}`);
+      details.push({ label: "Статус", value: String(context.status_code) });
     }
 
     if (typeof context.duration_ms === "number") {
       const rounded = Math.round(Number(context.duration_ms));
-      details.push(`${rounded} мс`);
+      details.push({ label: "Время", value: `${rounded} мс` });
     }
 
     if (context.client) {
-      details.push(context.client);
+      details.push({ label: "Клиент", value: context.client });
     }
 
     if (context.request_id) {
-      details.push(`ID ${context.request_id}`);
+      details.push({ label: "Request ID", value: context.request_id });
     }
 
     return details.filter(Boolean);
-    }
+  }
 
   function renderSystemEvents(events) {
     if (!elements.systemEventsGroups) {
@@ -1130,9 +1151,15 @@
     toggleHidden(elements.systemEventsEmpty, true);
 
     const buckets = groupEventsByCategory(events);
+    const showEmpty = state.systemEvents.showEmpty;
+    let rendered = 0;
 
     EVENT_CATEGORY_ORDER.forEach((category) => {
       const bucket = buckets[category] || [];
+      if (!bucket.length && !showEmpty) {
+        return;
+      }
+
       const section = document.createElement("section");
       section.className = "event-category";
 
@@ -1168,6 +1195,7 @@
         empty.textContent = "Нет событий в этой категории";
         section.appendChild(empty);
         elements.systemEventsGroups.appendChild(section);
+        rendered += 1;
         return;
       }
 
@@ -1197,7 +1225,13 @@
       section.appendChild(tableWrapper);
 
       elements.systemEventsGroups.appendChild(section);
+      rendered += 1;
     });
+
+    if (rendered === 0) {
+      toggleHidden(elements.systemEventsWrapper, true);
+      toggleHidden(elements.systemEventsEmpty, false);
+    }
   }
 
   function computeEventsSignature(events) {
@@ -1297,6 +1331,7 @@
       state.systemEvents.total = payload.total || 0;
       state.systemEvents.loadedOnce = true;
       state.systemEvents.lastSignature = signature;
+      state.systemEvents.latestEvents = events;
 
       if (isFirstLoad || hasChanges || !silent) {
         renderSystemEvents(events);
@@ -2526,6 +2561,14 @@
       const value = Number(elements.systemEventsLimit.value) || 20;
       state.systemEvents.limit = value;
       void loadSystemEvents({ resetPage: true });
+    });
+  }
+
+  if (elements.systemEventsShowEmpty) {
+    state.systemEvents.showEmpty = Boolean(elements.systemEventsShowEmpty.checked);
+    elements.systemEventsShowEmpty.addEventListener("change", () => {
+      state.systemEvents.showEmpty = Boolean(elements.systemEventsShowEmpty.checked);
+      renderSystemEvents(state.systemEvents.latestEvents || []);
     });
   }
 
