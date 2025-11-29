@@ -189,6 +189,13 @@ def _validate_size(content: str, *, path: str = "(unknown)") -> None:
         )
 
 
+def _content_matches(full_path: Path, expected: str) -> bool:
+    try:
+        return full_path.read_text(encoding="utf-8") == expected
+    except OSError:
+        return False
+
+
 def _is_ignored_path(path: Path) -> bool:
     if any(part == "__pycache__" for part in path.parts):
         return True
@@ -356,56 +363,70 @@ def write_managed_file(
     try:
         full_path.write_text(content, encoding="utf-8")
     except PermissionError as exc:
-        stat = full_path.stat()
+        if _content_matches(full_path, content):
+            logger.warning(
+                "Write reported permission error but content matches. Returning success.",
+                extra={"file": relative_path, "error": str(exc)},
+            )
+        else:
+            stat = full_path.stat()
 
-        try:
-            owner = pwd.getpwuid(stat.st_uid).pw_name
-        except KeyError:
-            owner = str(stat.st_uid)
+            try:
+                owner = pwd.getpwuid(stat.st_uid).pw_name
+            except KeyError:
+                owner = str(stat.st_uid)
 
-        try:
-            group = grp.getgrgid(stat.st_gid).gr_name
-        except KeyError:
-            group = str(stat.st_gid)
+            try:
+                group = grp.getgrgid(stat.st_gid).gr_name
+            except KeyError:
+                group = str(stat.st_gid)
 
-        process_user = pwd.getpwuid(os.geteuid()).pw_name
-        process_group = grp.getgrgid(os.getegid()).gr_name
-        mode = oct(stat.st_mode & 0o777)
+            process_user = pwd.getpwuid(os.geteuid()).pw_name
+            process_group = grp.getgrgid(os.getegid()).gr_name
+            mode = oct(stat.st_mode & 0o777)
 
-        remediation = _permission_remediation(
-            full_path, process_user=process_user, process_group=process_group
-        )
+            remediation = _permission_remediation(
+                full_path, process_user=process_user, process_group=process_group
+            )
 
-        detail = (
-            "Недостаточно прав для сохранения файла. "
-            "Файл принадлежит {owner}:{group} с правами {mode}; "
-            "API запущен от {user}:{proc_group}. "
-            "Сохранение всегда выполняется от имени процесса API — даже если вы редактируете код от другого пользователя. "
-            "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца." + remediation
-        ).format(owner=owner, group=group, mode=mode, user=process_user, proc_group=process_group)
+            detail = (
+                "Недостаточно прав для сохранения файла. "
+                "Файл принадлежит {owner}:{group} с правами {mode}; "
+                "API запущен от {user}:{proc_group}. "
+                "Сохранение всегда выполняется от имени процесса API — даже если вы редактируете код от другого пользователя. "
+                "Дайте доступ на запись (например, chown/chmod) или сохраните файл от имени владельца." + remediation
+            ).format(owner=owner, group=group, mode=mode, user=process_user, proc_group=process_group)
 
-        _log_managed_file_error(
-            relative_path,
-            detail,
-            error=str(exc),
-            owner=owner,
-            group=group,
-            mode=mode,
-            process_user=process_user,
-            process_group=process_group,
-            remediation=remediation.strip(),
-        )
+            _log_managed_file_error(
+                relative_path,
+                detail,
+                error=str(exc),
+                owner=owner,
+                group=group,
+                mode=mode,
+                process_user=process_user,
+                process_group=process_group,
+                remediation=remediation.strip(),
+            )
 
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=detail,
-        ) from exc
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=detail,
+            ) from exc
     except OSError as exc:
-        _log_managed_file_error(relative_path, "Не удалось сохранить файл", error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Не удалось сохранить файл",
-        ) from exc
+        if _content_matches(full_path, content):
+            logger.warning(
+                "Write reported error but content matches. Returning success.",
+                extra={"file": relative_path, "error": str(exc)},
+            )
+        else:
+            _log_managed_file_error(
+                relative_path, "Не удалось сохранить файл", error=str(exc)
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось сохранить файл",
+            ) from exc
     relative = full_path.relative_to(settings.ADMIN_MANAGED_CODE_ROOT).as_posix()
 
     logger.info(
