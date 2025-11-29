@@ -3,6 +3,8 @@ import logging
 import os
 import requests
 import subprocess
+import threading
+import signal
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -297,8 +299,19 @@ def write_managed_file(
     return schemas.AdminCodeFile(path=relative, content=content)
 
 
+def _schedule_self_restart(delay: float = 0.5) -> None:
+    def _shutdown() -> None:
+        time.sleep(delay)
+        try:
+            os.kill(os.getpid(), signal.SIGTERM)
+        finally:
+            os._exit(0)
+
+    threading.Thread(target=_shutdown, daemon=True).start()
+
+
 def is_restart_supported() -> bool:
-    return bool(settings.ADMIN_ALLOW_RESTART and settings.ADMIN_RESTART_COMMAND)
+    return bool(settings.ADMIN_ALLOW_RESTART)
 
 
 def is_worker_restart_supported() -> bool:
@@ -306,18 +319,13 @@ def is_worker_restart_supported() -> bool:
 
 
 def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminRestartResponse:
-    if not is_restart_supported():
+    if not settings.ADMIN_ALLOW_RESTART:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Перезапуск API не настроен",
         )
 
-    command = settings.ADMIN_RESTART_COMMAND
-    if not command:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Команда перезапуска не задана",
-        )
+    command = (settings.ADMIN_RESTART_COMMAND or "").strip()
 
     logger.info(
         "API restart requested",
@@ -328,24 +336,30 @@ def restart_api(*, requested_by: Optional[models.User] = None) -> schemas.AdminR
         },
     )
 
-    sanitized_command = command.strip()
-
-    try:
-        process = subprocess.Popen(  # noqa: S603 - administrative action
-            sanitized_command,  # noqa: S607 - command configured by environment
-            shell=True,
-        )
-    except OSError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Не удалось инициировать перезапуск API",
-        ) from exc
+    process = None
+    if command:
+        try:
+            process = subprocess.Popen(  # noqa: S603 - administrative action
+                command,  # noqa: S607 - command configured by environment
+                shell=True,
+            )
+        except OSError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Не удалось инициировать перезапуск API",
+            ) from exc
+    else:
+        _schedule_self_restart()
 
     global _LAST_RESTART_REQUEST
     _LAST_RESTART_REQUEST = datetime.now(timezone.utc)
 
     return schemas.AdminRestartResponse(
-        detail="Перезапуск API инициирован",
+        detail=(
+            "Перезапуск API инициирован"
+            if command
+            else "Перезапуск API инициирован (автоматическое завершение процесса)"
+        ),
         pid=getattr(process, "pid", None),
     )
 
