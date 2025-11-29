@@ -9,7 +9,10 @@ User=root
 Group=root
 WorkingDirectory=/home/garderobus/garderobus_back
 EnvironmentFile=-/etc/garderobus/admin-api.env
-ExecStart=/usr/bin/python3 -m uvicorn api_admin.main:app --host 0.0.0.0 --port 8100 --workers 2
+# Ensure admin API uses its dedicated virtualenv and can resolve legacy imports.
+Environment="PATH=/home/garderobus/garderobus_back/.venv-admin/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+Environment="PYTHONPATH=/home/garderobus/garderobus_back:/home/garderobus/garderobus_back/api"
+ExecStart=/home/garderobus/garderobus_back/.venv-admin/bin/uvicorn api_admin.main:app --host 0.0.0.0 --port 8100 --workers 2
 Restart=always
 RestartSec=5s
 TimeoutStartSec=60

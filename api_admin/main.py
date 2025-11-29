@@ -10,12 +10,13 @@ from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
-from api import models, settings
-from api.cache import cache
-from api.database import engine
-from api.logging_config import configure_logging, reset_request_context, set_request_context
-from api.observability import configure_observability
-from api_admin.routes import admin
+import models
+import settings
+from cache import cache
+from database import engine
+from logging_config import configure_logging, reset_request_context, set_request_context
+from observability import configure_observability
+from api_admin.routes import admin, notifications
 
 
 configure_logging()
@@ -23,7 +24,12 @@ logger = logging.getLogger(__name__)
 
 models.Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="Garderobus Admin API")
+app = FastAPI(
+    title="Garderobus Admin API",
+    docs_url="/admin/docs",
+    redoc_url="/admin/redoc",
+    openapi_url="/admin/openapi.json",
+)
 
 
 @app.middleware("http")
@@ -94,6 +100,7 @@ app.add_middleware(
 )
 
 app.include_router(admin.router)
+app.include_router(notifications.router)
 
 configure_observability(app)
 
