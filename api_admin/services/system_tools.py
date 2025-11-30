@@ -797,6 +797,9 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
         ):
             return "database"
 
+        if has_any(searchable, ("api_admin", "admin", "8100", "api-admin")):
+            return "api_admin"
+
         if has_any(
             searchable,
             ("uvicorn", "fastapi", "http", "api", "request", "endpoint", "gunicorn"),
