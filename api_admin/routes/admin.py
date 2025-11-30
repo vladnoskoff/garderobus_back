@@ -395,6 +395,39 @@ def get_system_events(
     return system_tools.get_system_events(level=level, hours=hours, limit=limit, page=page)
 
 
+@router.get(
+    "/system/events/exclusions",
+    response_model=admin_schemas.AdminSystemEventExclusionList,
+)
+def get_event_exclusions(
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminSystemEventExclusionList:
+    return system_tools.list_event_exclusions()
+
+
+@router.post(
+    "/system/events/exclusions",
+    response_model=admin_schemas.AdminSystemEventExclusionList,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_event_exclusion(
+    payload: admin_schemas.AdminSystemEventExclusionRequest,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminSystemEventExclusionList:
+    return system_tools.add_event_exclusion(payload)
+
+
+@router.delete(
+    "/system/events/exclusions/{exclusion_id}",
+    response_model=admin_schemas.AdminSystemEventExclusionList,
+)
+def delete_event_exclusion(
+    exclusion_id: str,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminSystemEventExclusionList:
+    return system_tools.remove_event_exclusion(exclusion_id)
+
+
 @router.get("/system/files", response_model=admin_schemas.AdminManagedFileList)
 def list_managed_files(
     _: models.User = Depends(_get_current_user),

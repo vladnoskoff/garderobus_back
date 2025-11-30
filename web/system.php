@@ -128,14 +128,15 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                   </select>
                 </label>
               </div>
-              <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
-                <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
-                <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
-                <label class="toggle" style="margin-left: auto;">
-                  <input type="checkbox" id="system-events-show-empty" />
-                  <span>Показывать пустые категории</span>
-                </label>
-              </div>
+                <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
+                  <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
+                  <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
+                  <button class="secondary" type="button" id="system-events-exclusions">Исключения запросов</button>
+                  <label class="toggle" style="margin-left: auto;">
+                    <input type="checkbox" id="system-events-show-empty" />
+                    <span>Показывать пустые категории</span>
+                  </label>
+                </div>
             </div>
           </div>
 
@@ -188,10 +189,10 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
             <div id="queue-list" class="queue-list"></div>
           </section>
 
-          <section id="drawer-code-editor" class="drawer-section hidden">
-            <p class="text-muted" style="margin-top: 0;">
-              Управляйте сервисными сценариями прямо из браузера. Все изменения сразу сохраняются в файловой системе API.
-            </p>
+            <section id="drawer-code-editor" class="drawer-section hidden">
+              <p class="text-muted" style="margin-top: 0;">
+                Управляйте сервисными сценариями прямо из браузера. Все изменения сразу сохраняются в файловой системе API.
+              </p>
             <div class="flex-column gap-md">
               <label class="flex-column gap-sm">
                 <span>Файл</span>
@@ -214,12 +215,62 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                 <button class="primary" type="button" id="code-editor-save">Сохранить изменения</button>
               </div>
             </div>
-            <p id="code-editor-loading" class="text-muted hidden">Загрузка файла...</p>
-            <div id="code-editor-status" class="alert hidden" style="margin-top: 16px;"></div>
-          </section>
+              <p id="code-editor-loading" class="text-muted hidden">Загрузка файла...</p>
+              <div id="code-editor-status" class="alert hidden" style="margin-top: 16px;"></div>
+            </section>
+
+            <section id="drawer-event-exclusions" class="drawer-section hidden">
+              <p class="text-muted" style="margin-top: 0;">
+                Настройте, какие запросы скрывать из лент событий. Добавленные правила сразу применяются ко всем категориям
+                логов.
+              </p>
+              <form id="event-exclusions-form" class="flex-column gap-sm" style="margin-bottom: 16px;">
+                <div class="flex gap-sm" style="flex-wrap: wrap;">
+                  <label class="flex-column gap-xs" style="flex: 1 1 200px; min-width: 200px;">
+                    <span>Категория</span>
+                    <select id="event-exclusions-category"></select>
+                  </label>
+                  <label class="flex-column gap-xs" style="width: 140px;">
+                    <span>Метод</span>
+                    <select id="event-exclusions-method">
+                      <option value="">Любой</option>
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                      <option value="PUT">PUT</option>
+                      <option value="PATCH">PATCH</option>
+                      <option value="DELETE">DELETE</option>
+                    </select>
+                  </label>
+                  <label class="flex-column gap-xs" style="flex: 2 1 260px; min-width: 240px;">
+                    <span>Путь запроса</span>
+                    <input id="event-exclusions-path" type="text" placeholder="Например: /admin/system/status" required />
+                  </label>
+                </div>
+                <div class="flex gap-sm" style="flex-wrap: wrap; align-items: center;">
+                  <button class="primary" type="submit">Добавить правило</button>
+                  <span class="text-muted">Сравнение выполняется по точному пути. Метод можно оставить пустым.</span>
+                </div>
+              </form>
+
+              <div id="event-exclusions-status" class="alert hidden" style="margin-bottom: 12px;"></div>
+              <div class="table-wrapper">
+                <table class="table events-table" id="event-exclusions-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 180px;">Категория</th>
+                      <th style="width: 100px;">Метод</th>
+                      <th>Путь</th>
+                      <th style="width: 100px; text-align: right;">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody id="event-exclusions-body"></tbody>
+                </table>
+              </div>
+              <p class="text-muted" id="event-exclusions-empty">Пока нет скрытых запросов.</p>
+            </section>
+          </div>
         </div>
       </div>
-    </div>
 
     <script>
       window.APP_CONFIG = {

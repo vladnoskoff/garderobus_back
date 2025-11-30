@@ -135,6 +135,23 @@ class AdminSystemEventList(BaseModel):
     limit: int = 50
 
 
+class AdminSystemEventExclusion(BaseModel):
+    id: str
+    category: str
+    path: str
+    method: Optional[str] = None
+
+
+class AdminSystemEventExclusionRequest(BaseModel):
+    category: str
+    path: str
+    method: Optional[str] = None
+
+
+class AdminSystemEventExclusionList(BaseModel):
+    exclusions: List[AdminSystemEventExclusion] = Field(default_factory=list)
+
+
 class AdminActivityMetrics(BaseModel):
     active_now: int = 0
     active_24h: int = 0

@@ -8,6 +8,7 @@ import signal
 import time
 import pwd
 import grp
+import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -28,6 +29,7 @@ _LAST_RESTART_REQUEST: Optional[datetime] = None
 _LAST_ADMIN_RESTART_REQUEST: Optional[datetime] = None
 _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
+_EVENT_EXCLUSIONS_LOCK = threading.Lock()
 
 LOG_DATE_FORMATS = (
     "%Y-%m-%d %H:%M:%S,%f",
@@ -37,6 +39,62 @@ LOG_DATE_FORMATS = (
     "%Y/%m/%d %H:%M:%S",
     "%b %d %H:%M:%S",
 )
+
+
+def _load_event_exclusions() -> list[schemas.AdminSystemEventExclusion]:
+    path = settings.ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    exclusions: list[schemas.AdminSystemEventExclusion] = []
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            exclusion = schemas.AdminSystemEventExclusion(
+                id=str(item.get("id") or uuid.uuid4()),
+                category=str(item.get("category") or "application").lower(),
+                path=str(item.get("path") or "").strip(),
+                method=(item.get("method") or None)
+                and str(item.get("method")).strip().upper(),
+            )
+            if exclusion.path:
+                exclusions.append(exclusion)
+    return exclusions
+
+
+def _save_event_exclusions(exclusions: list[schemas.AdminSystemEventExclusion]) -> None:
+    path = settings.ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH
+    payload = [
+        {
+            "id": exclusion.id,
+            "category": exclusion.category,
+            "path": exclusion.path,
+            "method": exclusion.method,
+        }
+        for exclusion in exclusions
+    ]
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to persist system event exclusions", exc_info=True)
+
+
+def _normalize_event_exclusion_request(
+    request: schemas.AdminSystemEventExclusionRequest,
+) -> schemas.AdminSystemEventExclusion:
+    return schemas.AdminSystemEventExclusion(
+        id=str(uuid.uuid4()),
+        category=str(request.category or "application").strip().lower() or "application",
+        path=str(request.path or "").strip(),
+        method=(request.method or None) and str(request.method).upper(),
+    )
 
 
 def _log_managed_file_error(relative_path: str, detail: str, **extra: object) -> None:
@@ -903,6 +961,46 @@ def _iter_log_files() -> list[Path]:
     return paths
 
 
+def _is_event_excluded(
+    event: schemas.AdminSystemEvent, exclusions: list[schemas.AdminSystemEventExclusion]
+) -> bool:
+    if not exclusions:
+        return False
+
+    category = event.category
+    context = event.context or {}
+    event_path = None
+    for key in ("path", "url", "request_path"):
+        value = context.get(key)
+        if isinstance(value, str) and value:
+            event_path = value.strip()
+            break
+    event_method = None
+    for key in ("method", "http_method", "request_method"):
+        value = context.get(key)
+        if isinstance(value, str) and value:
+            event_method = value.strip().upper()
+            break
+
+    for rule in exclusions:
+        if rule.category != category:
+            continue
+        if rule.method and event_method and rule.method.upper() != event_method:
+            continue
+        if rule.method and not event_method:
+            continue
+
+        candidate_paths = [event_path] if event_path else []
+        if event.message:
+            candidate_paths.append(event.message)
+
+        for candidate in candidate_paths:
+            if candidate and rule.path and (candidate == rule.path or candidate.startswith(rule.path)):
+                return True
+
+    return False
+
+
 def get_system_events(
     *,
     level: Optional[str] = None,
@@ -910,6 +1008,7 @@ def get_system_events(
     limit: int = 50,
     page: int = 1,
 ) -> schemas.AdminSystemEventList:
+    exclusions = _load_event_exclusions()
     log_files = _iter_log_files()
     if not log_files:
         return schemas.AdminSystemEventList(events=[], total=0, page=page, limit=limit)
@@ -932,6 +1031,8 @@ def get_system_events(
                     event = _build_plain_event(line)
                     if event is None:
                         continue
+                    if _is_event_excluded(event, exclusions):
+                        continue
                     if desired_level and event.level != desired_level:
                         continue
                     if cutoff and event.timestamp < cutoff:
@@ -941,6 +1042,9 @@ def get_system_events(
 
                 event = _build_event(payload)
                 if event is None:
+                    continue
+
+                if _is_event_excluded(event, exclusions):
                     continue
 
                 if desired_level and event.level != desired_level:
@@ -963,3 +1067,43 @@ def get_system_events(
         page=page,
         limit=limit,
     )
+
+
+def list_event_exclusions() -> schemas.AdminSystemEventExclusionList:
+    with _EVENT_EXCLUSIONS_LOCK:
+        exclusions = _load_event_exclusions()
+    return schemas.AdminSystemEventExclusionList(exclusions=exclusions)
+
+
+def add_event_exclusion(
+    request: schemas.AdminSystemEventExclusionRequest,
+) -> schemas.AdminSystemEventExclusionList:
+    normalized = _normalize_event_exclusion_request(request)
+    if not normalized.path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Путь запроса обязателен",
+        )
+
+    with _EVENT_EXCLUSIONS_LOCK:
+        exclusions = _load_event_exclusions()
+        exclusions.append(normalized)
+        _save_event_exclusions(exclusions)
+
+    return schemas.AdminSystemEventExclusionList(exclusions=exclusions)
+
+
+def remove_event_exclusion(exclusion_id: str) -> schemas.AdminSystemEventExclusionList:
+    if not exclusion_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный идентификатор правила",
+        )
+
+    with _EVENT_EXCLUSIONS_LOCK:
+        exclusions = [
+            item for item in _load_event_exclusions() if item.id != exclusion_id
+        ]
+        _save_event_exclusions(exclusions)
+
+    return schemas.AdminSystemEventExclusionList(exclusions=exclusions)

@@ -95,6 +95,7 @@
     systemEventsPeriod: document.getElementById("system-events-period"),
     systemEventsLimit: document.getElementById("system-events-limit"),
     systemEventsRefresh: document.getElementById("system-events-refresh"),
+    systemEventsExclusions: document.getElementById("system-events-exclusions"),
     systemEventsUpdatedAt: document.getElementById("system-events-updated-at"),
     systemEventsShowEmpty: document.getElementById("system-events-show-empty"),
     systemEventsPrev: document.getElementById("system-events-prev"),
@@ -110,6 +111,14 @@
     codeEditorSave: document.getElementById("code-editor-save"),
     codeEditorStatus: document.getElementById("code-editor-status"),
     codeEditorLoading: document.getElementById("code-editor-loading"),
+    drawerEventExclusionsSection: document.getElementById("drawer-event-exclusions"),
+    eventExclusionsForm: document.getElementById("event-exclusions-form"),
+    eventExclusionsCategory: document.getElementById("event-exclusions-category"),
+    eventExclusionsMethod: document.getElementById("event-exclusions-method"),
+    eventExclusionsPath: document.getElementById("event-exclusions-path"),
+    eventExclusionsBody: document.getElementById("event-exclusions-body"),
+    eventExclusionsEmpty: document.getElementById("event-exclusions-empty"),
+    eventExclusionsStatus: document.getElementById("event-exclusions-status"),
     queueButton: document.getElementById("queue-button"),
     queueCount: document.getElementById("queue-count"),
     queueDrawerSection: document.getElementById("drawer-queue"),
@@ -167,6 +176,9 @@
       refreshInterval: null,
       latestEvents: [],
       showEmpty: false,
+      exclusions: [],
+      exclusionsLoaded: false,
+      exclusionsLoading: false,
     },
     queueSnapshot: null,
     queueLoadedOnce: false,
@@ -211,6 +223,7 @@
       elements.drawerDetailSection,
       elements.drawerCodeEditorSection,
       elements.queueDrawerSection,
+      elements.drawerEventExclusionsSection,
     ];
     sections.forEach((item) => {
       if (item) {
@@ -229,6 +242,8 @@
         title = "Редактор кода";
       } else if (mode === "queue") {
         title = "Очередь задач";
+      } else if (mode === "event-exclusions") {
+        title = "Исключения событий";
       }
       elements.drawerTitle.textContent = title;
     }
@@ -244,6 +259,8 @@
       }
     } else if (mode === "queue") {
       showDrawerSection(elements.queueDrawerSection);
+    } else if (mode === "event-exclusions") {
+      showDrawerSection(elements.drawerEventExclusionsSection);
     } else {
       showDrawerSection(elements.drawerDetailSection);
     }
@@ -1287,6 +1304,199 @@
       window.setTimeout(() => {
         elements.systemEventsUpdatedAt?.classList.remove("highlight");
       }, 1500);
+    }
+  }
+
+  function populateExclusionCategoriesSelect() {
+    if (!elements.eventExclusionsCategory) {
+      return;
+    }
+    if (elements.eventExclusionsCategory.childElementCount > 0) {
+      return;
+    }
+    EVENT_CATEGORY_ORDER.forEach((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = EVENT_CATEGORY_LABELS[category] || category;
+      elements.eventExclusionsCategory.appendChild(option);
+    });
+  }
+
+  function renderEventExclusions() {
+    if (!elements.eventExclusionsBody || !elements.eventExclusionsEmpty) {
+      return;
+    }
+
+    const list = state.systemEvents.exclusions || [];
+    elements.eventExclusionsBody.innerHTML = "";
+
+    if (!list.length) {
+      toggleHidden(elements.eventExclusionsEmpty, false);
+      return;
+    }
+
+    toggleHidden(elements.eventExclusionsEmpty, true);
+
+    list.forEach((item) => {
+      const row = document.createElement("tr");
+
+      const categoryCell = document.createElement("td");
+      categoryCell.textContent = EVENT_CATEGORY_LABELS[item.category] || item.category;
+      row.appendChild(categoryCell);
+
+      const methodCell = document.createElement("td");
+      methodCell.textContent = item.method || "Любой";
+      row.appendChild(methodCell);
+
+      const pathCell = document.createElement("td");
+      pathCell.textContent = item.path;
+      row.appendChild(pathCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.style.textAlign = "right";
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link";
+      remove.dataset.action = "delete-exclusion";
+      remove.dataset.id = item.id;
+      remove.textContent = "Удалить";
+      actionsCell.appendChild(remove);
+      row.appendChild(actionsCell);
+
+      elements.eventExclusionsBody.appendChild(row);
+    });
+  }
+
+  function setEventExclusionsStatus(message, type = "error") {
+    showAlert(elements.eventExclusionsStatus, message, type);
+  }
+
+  async function loadEventExclusions(options = {}) {
+    const { silent = false } = options;
+    if (state.systemEvents.exclusionsLoading) {
+      return;
+    }
+
+    state.systemEvents.exclusionsLoading = true;
+    if (!silent) {
+      setEventExclusionsStatus("Загружаем правила...", "success");
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/events/exclusions`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const payload = await response.json();
+      state.systemEvents.exclusions = payload.exclusions || [];
+      state.systemEvents.exclusionsLoaded = true;
+      renderEventExclusions();
+      if (!silent) {
+        setEventExclusionsStatus("Правила обновлены", "success");
+      } else {
+        setEventExclusionsStatus("");
+      }
+    } catch (error) {
+      console.error(error);
+      setEventExclusionsStatus(
+        "Не удалось загрузить правила исключений. Попробуйте позже.",
+        "error",
+      );
+    } finally {
+      state.systemEvents.exclusionsLoading = false;
+    }
+  }
+
+  async function submitEventExclusion(event) {
+    event.preventDefault();
+    if (!elements.eventExclusionsForm) {
+      return;
+    }
+
+    const category = elements.eventExclusionsCategory?.value || "application";
+    const method = elements.eventExclusionsMethod?.value || "";
+    const path = (elements.eventExclusionsPath?.value || "").trim();
+
+    if (!path) {
+      setEventExclusionsStatus("Укажите путь запроса", "error");
+      return;
+    }
+
+    setEventExclusionsStatus("Добавляем правило...", "success");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/events/exclusions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ category, path, method }),
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось добавить правило");
+      }
+      const payload = await response.json();
+      state.systemEvents.exclusions = payload.exclusions || [];
+      state.systemEvents.exclusionsLoaded = true;
+      renderEventExclusions();
+      elements.eventExclusionsForm.reset();
+      setEventExclusionsStatus("Правило добавлено", "success");
+      void loadSystemEvents({ resetPage: true, silent: true });
+    } catch (error) {
+      console.error(error);
+      setEventExclusionsStatus(
+        error?.message || "Не удалось добавить правило исключения",
+        "error",
+      );
+    }
+  }
+
+  async function deleteEventExclusion(exclusionId) {
+    if (!exclusionId) {
+      return;
+    }
+    setEventExclusionsStatus("Удаляем правило...", "success");
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/admin/system/events/exclusions/${encodeURIComponent(exclusionId)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+        },
+      );
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось удалить правило");
+      }
+      const payload = await response.json();
+      state.systemEvents.exclusions = payload.exclusions || [];
+      state.systemEvents.exclusionsLoaded = true;
+      renderEventExclusions();
+      setEventExclusionsStatus("Правило удалено", "success");
+      void loadSystemEvents({ resetPage: true, silent: true });
+    } catch (error) {
+      console.error(error);
+      setEventExclusionsStatus(
+        error?.message || "Не удалось удалить правило исключения",
+        "error",
+      );
     }
   }
 
@@ -2605,6 +2815,31 @@
   if (elements.systemEventsRefresh) {
     elements.systemEventsRefresh.addEventListener("click", () => {
       void loadSystemEvents({ resetPage: true });
+    });
+  }
+
+  if (elements.systemEventsExclusions) {
+    elements.systemEventsExclusions.addEventListener("click", () => {
+      populateExclusionCategoriesSelect();
+      showAlert(elements.eventExclusionsStatus, "");
+      openDrawer("event-exclusions");
+      void loadEventExclusions({ silent: state.systemEvents.exclusionsLoaded });
+    });
+  }
+
+  if (elements.eventExclusionsForm) {
+    elements.eventExclusionsForm.addEventListener("submit", (event) => {
+      void submitEventExclusion(event);
+    });
+  }
+
+  if (elements.eventExclusionsBody) {
+    elements.eventExclusionsBody.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action=\"delete-exclusion\"]");
+      if (!target || !target.dataset.id) {
+        return;
+      }
+      void deleteEventExclusion(target.dataset.id);
     });
   }
 
