@@ -951,7 +951,7 @@
 
   const EVENT_CATEGORY_LABELS = {
     application: "Приложение",
-    api_admin: "API_admin",
+    api_admin: "Api_admin",
     database: "База данных",
     xray: "VPN / Xray",
     workers: "Очереди и воркеры",
@@ -959,8 +959,8 @@
   };
 
   const EVENT_CATEGORY_HINTS = {
-    application: "Основные сервисы и логи из папки api.",
-    api_admin: "HTTP-запросы и ошибки админского API (папка api_admin).",
+    application: "Основные сервисы и логи из папки api (main:8000).",
+    api_admin: "HTTP-запросы и ошибки админского API (api_admin:8100).",
     database: "Подключения к БД, запросы и миграции.",
     xray: "VPN/Xray-тоннель и прокси-доступ к внешним API.",
     workers: "Очереди Celery и фоновые задания.",
@@ -970,7 +970,7 @@
   function normalizeEventCategory(category) {
     const raw = String(category || "").toLowerCase();
     const normalized = (() => {
-      if (raw === "api") return "api_admin";
+      if (raw === "api") return "application";
       if (["vpn", "xray", "proxy", "socks"].includes(raw)) return "xray";
       return raw;
     })();
@@ -999,10 +999,10 @@
     if (hasAny(["db", "database", "postgres", "psql", "sqlalchemy", "mysql", "sqlite"])) {
       return "database";
     }
-    if (hasAny(["admin", "api_admin"])) {
+    if (hasAny(["admin", "api_admin", "8100"])) {
       return "api_admin";
     }
-    if (hasAny(["uvicorn", "fastapi", "api", "http", "request", "endpoint"])) {
+    if (hasAny(["uvicorn", "fastapi", "api", "http", "request", "endpoint", "8000", "main"])) {
       return "application";
     }
     if (hasAny(["celery", "worker", "queue", "task"])) {
