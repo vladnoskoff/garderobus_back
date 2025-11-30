@@ -204,6 +204,25 @@ def _humanize_duration(seconds: float) -> str:
     return " ".join(parts)
 
 
+def _fetch_service_uptime(url: str) -> tuple[Optional[float], Optional[str]]:
+    if not url:
+        return None, None
+
+    try:
+        response = requests.get(url, timeout=1.5)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError):
+        logger.debug("Failed to fetch service health", exc_info=True, extra={"url": url})
+        return None, None
+
+    uptime_seconds = data.get("uptime_seconds") if isinstance(data, dict) else None
+    if isinstance(uptime_seconds, (int, float)):
+        return float(uptime_seconds), _humanize_duration(float(uptime_seconds))
+
+    return None, None
+
+
 def _allowed_extension(path: Path) -> bool:
     if not settings.ADMIN_MANAGED_CODE_EXTENSIONS:
         return True
@@ -327,6 +346,13 @@ def list_managed_files() -> List[str]:
 
 def get_system_status() -> schemas.AdminSystemStatus:
     uptime_seconds = time.time() - _START_TIME
+    api_uptime_seconds, api_uptime_human = _fetch_service_uptime(settings.API_HEALTH_URL)
+    admin_api_uptime_seconds, admin_api_uptime_human = _fetch_service_uptime(
+        settings.ADMIN_API_HEALTH_URL
+    )
+    if admin_api_uptime_seconds is None:
+        admin_api_uptime_seconds = uptime_seconds
+        admin_api_uptime_human = _humanize_duration(uptime_seconds)
     return schemas.AdminSystemStatus(
         uptime_seconds=uptime_seconds,
         uptime_human=_humanize_duration(uptime_seconds),
@@ -342,6 +368,10 @@ def get_system_status() -> schemas.AdminSystemStatus:
         maintenance_enabled=_MAINTENANCE_ENABLED,
         maintenance_supported=is_maintenance_supported(),
         test_webhook_configured=bool(settings.ADMIN_TEST_WEBHOOK_URL),
+        api_uptime_seconds=api_uptime_seconds,
+        api_uptime_human=api_uptime_human,
+        admin_api_uptime_seconds=admin_api_uptime_seconds,
+        admin_api_uptime_human=admin_api_uptime_human,
     )
 
 

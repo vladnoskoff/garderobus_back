@@ -71,6 +71,10 @@ class AdminSystemStatus(BaseModel):
     maintenance_enabled: bool = False
     maintenance_supported: bool = False
     test_webhook_configured: bool = False
+    api_uptime_seconds: Optional[float] = None
+    api_uptime_human: Optional[str] = None
+    admin_api_uptime_seconds: Optional[float] = None
+    admin_api_uptime_human: Optional[str] = None
 
 
 class AdminQueueTask(BaseModel):

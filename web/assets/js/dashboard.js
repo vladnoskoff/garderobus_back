@@ -69,8 +69,10 @@
     systemStatusLoading: document.getElementById("system-status-loading"),
     systemStatusError: document.getElementById("system-status-error"),
     systemStatusFeedback: document.getElementById("system-status-feedback"),
-    systemUptime: document.getElementById("system-uptime"),
-    systemUptimeSeconds: document.getElementById("system-uptime-seconds"),
+    systemApiUptime: document.getElementById("system-api-uptime"),
+    systemApiUptimeSeconds: document.getElementById("system-api-uptime-seconds"),
+    systemAdminUptime: document.getElementById("system-admin-uptime"),
+    systemAdminUptimeSeconds: document.getElementById("system-admin-uptime-seconds"),
     systemAppName: document.getElementById("system-app-name"),
     systemAppVersion: document.getElementById("system-app-version"),
     systemEnvironment: document.getElementById("system-environment"),
@@ -1748,11 +1750,19 @@
     if (elements.systemStatusGrid) {
       toggleHidden(elements.systemStatusGrid, false);
     }
-    setText(elements.systemUptime, status.uptime_human || "—");
+    setText(elements.systemApiUptime, status.api_uptime_human || "—");
     setText(
-      elements.systemUptimeSeconds,
-      Math.round(Number(status.uptime_seconds ?? 0))
+      elements.systemApiUptimeSeconds,
+      Math.round(Number(status.api_uptime_seconds ?? 0))
     );
+    const adminUptimeSeconds = Number(
+      status.admin_api_uptime_seconds ?? status.uptime_seconds ?? 0
+    );
+    setText(
+      elements.systemAdminUptime,
+      status.admin_api_uptime_human || status.uptime_human || "—"
+    );
+    setText(elements.systemAdminUptimeSeconds, Math.round(adminUptimeSeconds));
     setText(elements.systemAppName, status.app_name || "—");
     setText(elements.systemAppVersion, status.app_version || "—");
     setText(elements.systemEnvironment, status.environment || "—");

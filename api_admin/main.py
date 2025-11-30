@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,6 +22,27 @@ from api_admin.routes import admin, notifications
 
 configure_logging()
 logger = logging.getLogger(__name__)
+
+_START_TIME = time.time()
+
+
+def _humanize_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    days, remainder = divmod(seconds, 86400)
+    hours, remainder = divmod(remainder, 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    parts: list[str] = []
+    if days:
+        parts.append(f"{days} д")
+    if hours:
+        parts.append(f"{hours} ч")
+    if minutes:
+        parts.append(f"{minutes} мин")
+    if seconds or not parts:
+        parts.append(f"{seconds} с")
+
+    return " ".join(parts)
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -135,7 +157,15 @@ def rate_limit_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
 def healthcheck() -> dict[str, str]:
     """Simple endpoint used by load balancers and orchestrators."""
 
-    return {"status": "ok"}
+    uptime_seconds = time.time() - _START_TIME
+    started_at = datetime.fromtimestamp(_START_TIME, tz=timezone.utc)
+
+    return {
+        "status": "ok",
+        "uptime_seconds": uptime_seconds,
+        "uptime_human": _humanize_duration(uptime_seconds),
+        "started_at": started_at.isoformat(),
+    }
 
 
 @app.on_event("shutdown")

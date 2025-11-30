@@ -66,24 +66,23 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <p id="system-status-loading" class="text-muted">Загрузка состояния сервиса...</p>
           <div class="system-metrics-grid hidden" id="system-status-grid">
             <div class="stat-card system-card">
-              <h3>Аптайм сервиса</h3>
-              <strong id="system-uptime">—</strong>
-              <span>В секундах: <span id="system-uptime-seconds">0</span></span>
+              <h3>Приложение (api:8000)</h3>
+              <strong id="system-api-uptime">—</strong>
+              <span>В секундах: <span id="system-api-uptime-seconds">0</span></span>
+              <span class="text-muted">Последний запрос на перезапуск: <span id="system-last-restart">—</span></span>
+              <span>Перезапуск: <span id="system-restart-state">Недоступно</span></span>
+            </div>
+            <div class="stat-card system-card">
+              <h3>Админ API (api_admin:8100)</h3>
+              <strong id="system-admin-uptime">—</strong>
+              <span>В секундах: <span id="system-admin-uptime-seconds">0</span></span>
+              <span class="text-muted">Последний запрос на перезапуск: <span id="system-admin-last-restart">—</span></span>
+              <span>Перезапуск: <span id="system-admin-restart-state">Недоступно</span></span>
             </div>
             <div class="stat-card system-card">
               <h3>Версия и окружение</h3>
               <strong id="system-app-name">—</strong>
               <span>Версия: <span id="system-app-version">—</span> · Окружение: <span id="system-environment">—</span></span>
-            </div>
-            <div class="stat-card system-card">
-              <h3>Перезапуск API</h3>
-              <strong id="system-restart-state">Недоступно</strong>
-              <span>Последний запрос: <span id="system-last-restart">—</span></span>
-            </div>
-            <div class="stat-card system-card">
-              <h3>Перезапуск админ API</h3>
-              <strong id="system-admin-restart-state">Недоступно</strong>
-              <span>Последний запрос: <span id="system-admin-last-restart">—</span></span>
             </div>
             <div class="stat-card system-card">
               <h3>Статусы сервисов</h3>
