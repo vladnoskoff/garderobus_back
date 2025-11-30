@@ -882,6 +882,27 @@ def _build_plain_event(line: str) -> Optional[schemas.AdminSystemEvent]:
     return _build_event(payload)
 
 
+def _iter_log_files() -> list[Path]:
+    seen: set[str] = set()
+    paths: list[Path] = []
+
+    for raw in (
+        settings.LOG_FILE,
+        "/var/log/garderobus/api.log",
+        "/var/log/garderobus/api_admin.log",
+    ):
+        if not raw:
+            continue
+        candidate = Path(raw)
+        key = str(candidate.resolve())
+        if key in seen or not candidate.exists() or not candidate.is_file():
+            continue
+        seen.add(key)
+        paths.append(candidate)
+
+    return paths
+
+
 def get_system_events(
     *,
     level: Optional[str] = None,
@@ -889,8 +910,8 @@ def get_system_events(
     limit: int = 50,
     page: int = 1,
 ) -> schemas.AdminSystemEventList:
-    log_path = Path(settings.LOG_FILE)
-    if not log_path.exists() or not log_path.is_file():
+    log_files = _iter_log_files()
+    if not log_files:
         return schemas.AdminSystemEventList(events=[], total=0, page=page, limit=limit)
 
     cutoff = None
@@ -900,34 +921,35 @@ def get_system_events(
     desired_level = level.lower() if level else None
     events: list[schemas.AdminSystemEvent] = []
 
-    with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                event = _build_plain_event(line)
+    for log_path in log_files:
+        with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    event = _build_plain_event(line)
+                    if event is None:
+                        continue
+                    if desired_level and event.level != desired_level:
+                        continue
+                    if cutoff and event.timestamp < cutoff:
+                        continue
+                    events.append(event)
+                    continue
+
+                event = _build_event(payload)
                 if event is None:
                     continue
+
                 if desired_level and event.level != desired_level:
                     continue
+
                 if cutoff and event.timestamp < cutoff:
                     continue
+
                 events.append(event)
-                continue
-
-            event = _build_event(payload)
-            if event is None:
-                continue
-
-            if desired_level and event.level != desired_level:
-                continue
-
-            if cutoff and event.timestamp < cutoff:
-                continue
-
-            events.append(event)
 
     events.sort(key=lambda item: item.timestamp, reverse=True)
 
