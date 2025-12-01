@@ -142,13 +142,15 @@ def detect_client_origin(
 def is_public_path(path: str, extra_public: Optional[Iterable[str]] = None) -> bool:
     """Return True when path should bypass auth enforcement."""
 
-    if path in _PUBLIC_PATHS or any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
+    normalized = path.rstrip("/") or "/"
+
+    if normalized in _PUBLIC_PATHS or any(normalized.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
         return True
 
-    if extra_public and any(path.startswith(prefix) for prefix in extra_public):
+    if extra_public and any(normalized.startswith(prefix.rstrip("/")) for prefix in extra_public):
         return True
 
-    return any(path.startswith(prefix) for prefix in _PUBLIC_ROUTE_PREFIXES)
+    return any(normalized.startswith(prefix) for prefix in _PUBLIC_ROUTE_PREFIXES)
 
 
 def authenticate(credentials: Optional[HTTPAuthorizationCredentials]) -> models.User:

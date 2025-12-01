@@ -146,7 +146,14 @@ async def enforce_authentication(request: Request, call_next):
         return await call_next(request)
 
     credentials = await auth_scheme(request)
-    authenticate(credentials)
+    try:
+        authenticate(credentials)
+    except Exception as exc:
+        status_code = getattr(exc, "status_code", status.HTTP_401_UNAUTHORIZED)
+        detail = getattr(exc, "detail", "Требуется авторизация")
+        response = JSONResponse(status_code=status_code, content={"detail": detail})
+        response.headers["X-Request-ID"] = request.headers.get("X-Request-ID", "")
+        return response
 
     return await call_next(request)
 

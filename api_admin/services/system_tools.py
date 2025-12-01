@@ -32,6 +32,8 @@ _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 _EVENT_EXCLUSIONS_LOCK = threading.Lock()
 _IP_BLOCKLIST_LOCK = threading.Lock()
+_LAST_API_UPTIME: tuple[Optional[float], Optional[str]] = (None, None)
+_LAST_ADMIN_API_UPTIME: tuple[Optional[float], Optional[str]] = (None, None)
 
 LOG_DATE_FORMATS = (
     "%Y-%m-%d %H:%M:%S,%f",
@@ -398,6 +400,17 @@ def get_system_status() -> schemas.AdminSystemStatus:
     admin_api_uptime_seconds, admin_api_uptime_human = _fetch_service_uptime(
         settings.ADMIN_API_HEALTH_URL
     )
+
+    global _LAST_API_UPTIME, _LAST_ADMIN_API_UPTIME
+    if api_uptime_seconds is not None:
+        _LAST_API_UPTIME = (api_uptime_seconds, api_uptime_human)
+    else:
+        api_uptime_seconds, api_uptime_human = _LAST_API_UPTIME
+    if admin_api_uptime_seconds is not None:
+        _LAST_ADMIN_API_UPTIME = (admin_api_uptime_seconds, admin_api_uptime_human)
+    else:
+        admin_api_uptime_seconds, admin_api_uptime_human = _LAST_ADMIN_API_UPTIME
+
     if api_uptime_seconds is None:
         api_uptime_seconds = uptime_seconds
         api_uptime_human = _humanize_duration(uptime_seconds)
