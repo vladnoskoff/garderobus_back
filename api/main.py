@@ -6,8 +6,8 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import FastAPI, Request, Response
-from fastapi.openapi.utils import get_openapi
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
@@ -30,6 +30,7 @@ from routes import (
     wardrobe_analytics,
     weather,
 )
+from security import authenticate, auth_scheme, is_public_path
 from static_files import CDNStaticFiles
 
 configure_logging()
@@ -140,6 +141,17 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Request-ID"] = request_id
     reset_request_context(*tokens)
     return response
+
+
+@app.middleware("http")
+async def enforce_authentication(request: Request, call_next):
+    if is_public_path(request.url.path):
+        return await call_next(request)
+
+    credentials = await auth_scheme(request)
+    authenticate(credentials)
+
+    return await call_next(request)
 
 # Разрешаем CORS для доверенных источников
 app.add_middleware(

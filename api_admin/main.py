@@ -18,6 +18,7 @@ from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
 from api_admin.routes import admin, notifications
+from security import authenticate, auth_scheme, is_public_path
 
 
 configure_logging()
@@ -111,6 +112,19 @@ async def log_requests(request: Request, call_next):
     response.headers["X-Request-ID"] = request_id
     reset_request_context(*tokens)
     return response
+
+
+@app.middleware("http")
+async def enforce_authentication(request: Request, call_next):
+    extra_public = ("/admin/login", "/admin/docs", "/admin/openapi.json", "/admin/redoc")
+
+    if is_public_path(request.url.path, extra_public=extra_public):
+        return await call_next(request)
+
+    credentials = await auth_scheme(request)
+    authenticate(credentials)
+
+    return await call_next(request)
 
 
 app.add_middleware(
