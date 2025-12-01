@@ -3208,13 +3208,10 @@
 
   if (pageType === "system") {
     startSystemAutoRefresh();
-    startSystemEventsAutoRefresh();
     void refreshSystemMetrics({ showLoader: true, silent: true });
-    void loadSystemEvents({ resetPage: true });
     void loadQueueSnapshot({ showLoader: false, silent: true });
   } else {
     stopSystemAutoRefresh();
-    stopSystemEventsAutoRefresh();
   }
 
   if (pageType === "database") {
