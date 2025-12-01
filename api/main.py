@@ -169,6 +169,10 @@ async def log_requests(request: Request, call_next):
 
 @app.middleware("http")
 async def enforce_authentication(request: Request, call_next):
+    # Allow CORS preflight checks to pass without auth to avoid blocking browsers
+    if request.method == "OPTIONS":
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     if is_public_path(request.url.path):
         return await call_next(request)
 
