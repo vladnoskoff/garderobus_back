@@ -96,17 +96,26 @@ async def log_requests(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        logger.exception(
-            "Unhandled application error",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "client": client_host,
-                "user_agent": user_agent,
-                "duration_ms": duration_ms,
-                "request_id": request_id,
-            },
-        )
+        payload = {
+            "method": request.method,
+            "path": request.url.path,
+            "client": client_host,
+            "user_agent": user_agent,
+            "duration_ms": duration_ms,
+            "request_id": request_id,
+        }
+
+        if request.url.path.rstrip("/") == "/healthz":
+            logger.warning("Health probe failed", extra=payload, exc_info=True)
+            reset_request_context(*tokens)
+            error_response = JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"detail": "Health probe failed"},
+            )
+            error_response.headers["X-Request-ID"] = request_id
+            return error_response
+
+        logger.exception("Unhandled application error", extra=payload)
         reset_request_context(*tokens)
         error_response = JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
