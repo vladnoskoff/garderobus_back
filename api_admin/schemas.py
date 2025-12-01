@@ -139,6 +139,21 @@ class AdminSystemEventList(BaseModel):
     limit: int = 50
 
 
+class AdminIpBlock(BaseModel):
+    ip: str
+    note: Optional[str] = None
+    added_at: datetime
+
+
+class AdminIpBlockRequest(BaseModel):
+    ip: str
+    note: Optional[str] = None
+
+
+class AdminIpBlockList(BaseModel):
+    blocks: List[AdminIpBlock] = Field(default_factory=list)
+
+
 class AdminSystemEventExclusion(BaseModel):
     id: str
     category: str

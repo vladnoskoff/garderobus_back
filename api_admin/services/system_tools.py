@@ -9,6 +9,7 @@ import time
 import pwd
 import grp
 import uuid
+from ipaddress import ip_address
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
@@ -30,6 +31,7 @@ _LAST_ADMIN_RESTART_REQUEST: Optional[datetime] = None
 _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
 _EVENT_EXCLUSIONS_LOCK = threading.Lock()
+_IP_BLOCKLIST_LOCK = threading.Lock()
 
 LOG_DATE_FORMATS = (
     "%Y-%m-%d %H:%M:%S,%f",
@@ -95,6 +97,52 @@ def _normalize_event_exclusion_request(
         path=str(request.path or "").strip(),
         method=(request.method or None) and str(request.method).upper(),
     )
+
+
+def _load_ip_blocks() -> list[schemas.AdminIpBlock]:
+    path = settings.IP_BLOCKLIST_PATH
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    blocks: list[schemas.AdminIpBlock] = []
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            raw_ip = str(item.get("ip") or "").strip()
+            try:
+                normalized_ip = str(ip_address(raw_ip))
+            except ValueError:
+                continue
+            note = (item.get("note") or None) and str(item.get("note")).strip()
+            added_at = _parse_datetime(item.get("added_at")) or datetime.now(timezone.utc)
+            blocks.append(
+                schemas.AdminIpBlock(ip=normalized_ip, note=note, added_at=added_at)
+            )
+
+    return blocks
+
+
+def _save_ip_blocks(blocks: list[schemas.AdminIpBlock]) -> None:
+    path = settings.IP_BLOCKLIST_PATH
+    payload = [
+        {
+            "ip": block.ip,
+            "note": block.note,
+            "added_at": block.added_at.isoformat(),
+        }
+        for block in blocks
+    ]
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to persist IP blocklist", exc_info=True)
 
 
 def _log_managed_file_error(relative_path: str, detail: str, **extra: object) -> None:
@@ -1140,3 +1188,48 @@ def remove_event_exclusion(exclusion_id: str) -> schemas.AdminSystemEventExclusi
         _save_event_exclusions(exclusions)
 
     return schemas.AdminSystemEventExclusionList(exclusions=exclusions)
+
+
+def list_ip_blocks() -> schemas.AdminIpBlockList:
+    with _IP_BLOCKLIST_LOCK:
+        blocks = _load_ip_blocks()
+    return schemas.AdminIpBlockList(blocks=blocks)
+
+
+def add_ip_block(request: schemas.AdminIpBlockRequest) -> schemas.AdminIpBlockList:
+    try:
+        normalized_ip = str(ip_address(str(request.ip).strip()))
+    except ValueError as exc:  # pragma: no cover - validated at runtime
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный IP-адрес",
+        ) from exc
+
+    with _IP_BLOCKLIST_LOCK:
+        blocks = _load_ip_blocks()
+        if any(block.ip == normalized_ip for block in blocks):
+            return schemas.AdminIpBlockList(blocks=blocks)
+
+        blocks.append(
+            schemas.AdminIpBlock(
+                ip=normalized_ip,
+                note=(request.note or None) and str(request.note).strip(),
+                added_at=datetime.now(timezone.utc),
+            )
+        )
+        _save_ip_blocks(blocks)
+
+    return schemas.AdminIpBlockList(blocks=blocks)
+
+
+def remove_ip_block(ip: str) -> schemas.AdminIpBlockList:
+    try:
+        normalized_ip = str(ip_address(ip))
+    except ValueError:
+        normalized_ip = ip
+
+    with _IP_BLOCKLIST_LOCK:
+        blocks = [block for block in _load_ip_blocks() if block.ip != normalized_ip]
+        _save_ip_blocks(blocks)
+
+    return schemas.AdminIpBlockList(blocks=blocks)

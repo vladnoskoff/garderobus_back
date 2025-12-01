@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
@@ -30,7 +30,7 @@ from routes import (
     wardrobe_analytics,
     weather,
 )
-from security import authenticate, auth_scheme, is_public_path
+from security import authenticate, auth_scheme, detect_client_origin, is_ip_blocked, is_public_path
 from static_files import CDNStaticFiles
 
 configure_logging()
@@ -97,7 +97,29 @@ async def log_requests(request: Request, call_next):
         client_host = request.client.host
 
     user_agent = request.headers.get("user-agent")
+    client_origin, origin_hint = detect_client_origin(user_agent, headers=request.headers)
     start_time = time.perf_counter()
+
+    if is_ip_blocked(client_host):
+        logger.warning(
+            "Blocked request due to IP blocklist",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "client": client_host,
+                "user_agent": user_agent,
+                "client_origin": client_origin,
+                "client_origin_hint": origin_hint,
+                "request_id": request_id,
+            },
+        )
+        reset_request_context(*tokens)
+        response = JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={"detail": "Доступ с этого IP заблокирован"},
+        )
+        response.headers["X-Request-ID"] = request_id
+        return response
 
     try:
         response = await call_next(request)
@@ -134,6 +156,8 @@ async def log_requests(request: Request, call_next):
             "duration_ms": duration_ms,
             "client": client_host,
             "user_agent": user_agent,
+            "client_origin": client_origin,
+            "client_origin_hint": origin_hint,
             "request_id": request_id,
         },
     )

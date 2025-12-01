@@ -165,6 +165,11 @@ ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH = Path(
 )
 ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
 
+IP_BLOCKLIST_PATH = Path(
+    os.getenv("IP_BLOCKLIST_PATH", str(BASE_DIR / "ip_blocklist.json"))
+)
+IP_BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
+
 ADMIN_MANAGED_CODE_ROOT = Path(
     os.getenv("ADMIN_MANAGED_CODE_ROOT", str(BASE_DIR))
 )

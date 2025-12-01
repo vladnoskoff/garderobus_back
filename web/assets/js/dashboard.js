@@ -97,6 +97,7 @@
     systemEventsPeriod: document.getElementById("system-events-period"),
     systemEventsLimit: document.getElementById("system-events-limit"),
     systemEventsRefresh: document.getElementById("system-events-refresh"),
+    systemIpBlocks: document.getElementById("system-ip-blocks"),
     systemEventsExclusions: document.getElementById("system-events-exclusions"),
     systemEventsUpdatedAt: document.getElementById("system-events-updated-at"),
     systemEventsShowEmpty: document.getElementById("system-events-show-empty"),
@@ -114,6 +115,7 @@
     codeEditorStatus: document.getElementById("code-editor-status"),
     codeEditorLoading: document.getElementById("code-editor-loading"),
     drawerEventExclusionsSection: document.getElementById("drawer-event-exclusions"),
+    drawerIpBlocksSection: document.getElementById("drawer-ip-blocks"),
     eventExclusionsForm: document.getElementById("event-exclusions-form"),
     eventExclusionsCategory: document.getElementById("event-exclusions-category"),
     eventExclusionsMethod: document.getElementById("event-exclusions-method"),
@@ -121,6 +123,12 @@
     eventExclusionsBody: document.getElementById("event-exclusions-body"),
     eventExclusionsEmpty: document.getElementById("event-exclusions-empty"),
     eventExclusionsStatus: document.getElementById("event-exclusions-status"),
+    ipBlocksForm: document.getElementById("ip-blocks-form"),
+    ipBlocksAddress: document.getElementById("ip-blocks-address"),
+    ipBlocksNote: document.getElementById("ip-blocks-note"),
+    ipBlocksStatus: document.getElementById("ip-blocks-status"),
+    ipBlocksBody: document.getElementById("ip-blocks-body"),
+    ipBlocksEmpty: document.getElementById("ip-blocks-empty"),
     queueButton: document.getElementById("queue-button"),
     queueCount: document.getElementById("queue-count"),
     queueDrawerSection: document.getElementById("drawer-queue"),
@@ -182,6 +190,11 @@
       exclusionsLoaded: false,
       exclusionsLoading: false,
     },
+    ipBlocks: {
+      items: [],
+      loaded: false,
+      loading: false,
+    },
     queueSnapshot: null,
     queueLoadedOnce: false,
     queueLoading: false,
@@ -226,6 +239,7 @@
       elements.drawerCodeEditorSection,
       elements.queueDrawerSection,
       elements.drawerEventExclusionsSection,
+      elements.drawerIpBlocksSection,
     ];
     sections.forEach((item) => {
       if (item) {
@@ -246,6 +260,8 @@
         title = "Очередь задач";
       } else if (mode === "event-exclusions") {
         title = "Исключения событий";
+      } else if (mode === "ip-blocks") {
+        title = "Блокировка IP";
       }
       elements.drawerTitle.textContent = title;
     }
@@ -263,6 +279,8 @@
       showDrawerSection(elements.queueDrawerSection);
     } else if (mode === "event-exclusions") {
       showDrawerSection(elements.drawerEventExclusionsSection);
+    } else if (mode === "ip-blocks") {
+        showDrawerSection(elements.drawerIpBlocksSection);
     } else {
       showDrawerSection(elements.drawerDetailSection);
     }
@@ -959,6 +977,15 @@
     return event.message || "—";
   }
 
+  function formatClientOrigin(origin, hint) {
+    const normalized = String(origin || "unknown").toLowerCase();
+    const label = CLIENT_ORIGIN_LABELS[normalized] || CLIENT_ORIGIN_LABELS.unknown;
+    if (hint) {
+      return `${label} (${hint})`;
+    }
+    return label;
+  }
+
   const EVENT_CATEGORY_ORDER = [
     "application",
     "api_admin",
@@ -984,6 +1011,13 @@
     xray: "VPN/Xray-тоннель и прокси-доступ к внешним API.",
     workers: "Очереди Celery и фоновые задания.",
     other: "Логи без явной категории.",
+  };
+
+  const CLIENT_ORIGIN_LABELS = {
+    flutter_app: "Мобильное приложение",
+    browser: "Браузер",
+    api_client: "Инструмент API",
+    unknown: "Неизвестно",
   };
 
   function normalizeEventCategory(category) {
@@ -1154,6 +1188,13 @@
 
     if (context.client) {
       details.push({ label: "Клиент", value: context.client });
+    }
+
+    if (context.client_origin || context.client_origin_hint) {
+      details.push({
+        label: "Источник клиента",
+        value: formatClientOrigin(context.client_origin, context.client_origin_hint),
+      });
     }
 
     if (context.request_id) {
@@ -1499,6 +1540,171 @@
         error?.message || "Не удалось удалить правило исключения",
         "error",
       );
+    }
+  }
+
+  function setIpBlocksStatus(message, type = "error") {
+    showAlert(elements.ipBlocksStatus, message, type);
+  }
+
+  function renderIpBlocks() {
+    if (!elements.ipBlocksBody || !elements.ipBlocksEmpty) {
+      return;
+    }
+
+    const list = state.ipBlocks.items || [];
+    elements.ipBlocksBody.innerHTML = "";
+
+    if (!list.length) {
+      toggleHidden(elements.ipBlocksEmpty, false);
+      return;
+    }
+
+    toggleHidden(elements.ipBlocksEmpty, true);
+
+    list.forEach((item) => {
+      const row = document.createElement("tr");
+
+      const ipCell = document.createElement("td");
+      ipCell.textContent = item.ip;
+      row.appendChild(ipCell);
+
+      const noteCell = document.createElement("td");
+      noteCell.textContent = item.note || "—";
+      row.appendChild(noteCell);
+
+      const addedCell = document.createElement("td");
+      addedCell.textContent = formatDate(item.added_at, true);
+      row.appendChild(addedCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.style.textAlign = "right";
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link";
+      remove.dataset.action = "delete-ip-block";
+      remove.dataset.ip = item.ip;
+      remove.textContent = "Удалить";
+      actionsCell.appendChild(remove);
+      row.appendChild(actionsCell);
+
+      elements.ipBlocksBody.appendChild(row);
+    });
+  }
+
+  async function loadIpBlocks(options = {}) {
+    const { silent = false } = options;
+    if (state.ipBlocks.loading) {
+      return;
+    }
+
+    state.ipBlocks.loading = true;
+    if (!silent) {
+      setIpBlocksStatus("Обновляем список...", "success");
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/ip-blocks`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const payload = await response.json();
+      state.ipBlocks.items = payload.blocks || [];
+      state.ipBlocks.loaded = true;
+      renderIpBlocks();
+      if (!silent) {
+        setIpBlocksStatus("Список обновлён", "success");
+      } else {
+        setIpBlocksStatus("");
+      }
+    } catch (error) {
+      console.error(error);
+      setIpBlocksStatus("Не удалось загрузить список блокировок", "error");
+    } finally {
+      state.ipBlocks.loading = false;
+    }
+  }
+
+  async function createIpBlock(event) {
+    event.preventDefault();
+    const ip = (elements.ipBlocksAddress?.value || "").trim();
+    const note = (elements.ipBlocksNote?.value || "").trim();
+
+    if (!ip) {
+      setIpBlocksStatus("Введите IP-адрес", "error");
+      return;
+    }
+
+    setIpBlocksStatus("Добавляем блокировку...", "success");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/ip-blocks`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ip, note }),
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось добавить IP");
+      }
+
+      const payload = await response.json();
+      state.ipBlocks.items = payload.blocks || [];
+      state.ipBlocks.loaded = true;
+      renderIpBlocks();
+      elements.ipBlocksForm?.reset();
+      setIpBlocksStatus("IP добавлен в блокировку", "success");
+    } catch (error) {
+      console.error(error);
+      setIpBlocksStatus(error?.message || "Не удалось добавить IP", "error");
+    }
+  }
+
+  async function deleteIpBlock(ip) {
+    if (!ip) {
+      return;
+    }
+
+    setIpBlocksStatus("Удаляем блокировку...", "success");
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/admin/system/ip-blocks/${encodeURIComponent(ip)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+        },
+      );
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось удалить IP");
+      }
+
+      const payload = await response.json();
+      state.ipBlocks.items = payload.blocks || [];
+      state.ipBlocks.loaded = true;
+      renderIpBlocks();
+      setIpBlocksStatus("IP удалён из блокировки", "success");
+    } catch (error) {
+      console.error(error);
+      setIpBlocksStatus(error?.message || "Не удалось удалить IP", "error");
     }
   }
 
@@ -2828,12 +3034,36 @@
     });
   }
 
+  if (elements.systemIpBlocks) {
+    elements.systemIpBlocks.addEventListener("click", () => {
+      showAlert(elements.ipBlocksStatus, "");
+      openDrawer("ip-blocks");
+      void loadIpBlocks({ silent: state.ipBlocks.loaded });
+    });
+  }
+
   if (elements.systemEventsExclusions) {
     elements.systemEventsExclusions.addEventListener("click", () => {
       populateExclusionCategoriesSelect();
       showAlert(elements.eventExclusionsStatus, "");
       openDrawer("event-exclusions");
       void loadEventExclusions({ silent: state.systemEvents.exclusionsLoaded });
+    });
+  }
+
+  if (elements.ipBlocksForm) {
+    elements.ipBlocksForm.addEventListener("submit", (event) => {
+      void createIpBlock(event);
+    });
+  }
+
+  if (elements.ipBlocksBody) {
+    elements.ipBlocksBody.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action=\"delete-ip-block\"]");
+      if (!target || !target.dataset.ip) {
+        return;
+      }
+      void deleteIpBlock(target.dataset.ip);
     });
   }
 

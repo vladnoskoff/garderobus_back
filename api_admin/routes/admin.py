@@ -428,6 +428,33 @@ def delete_event_exclusion(
     return system_tools.remove_event_exclusion(exclusion_id)
 
 
+@router.get("/system/ip-blocks", response_model=admin_schemas.AdminIpBlockList)
+def get_ip_blocks(
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminIpBlockList:
+    return system_tools.list_ip_blocks()
+
+
+@router.post(
+    "/system/ip-blocks",
+    response_model=admin_schemas.AdminIpBlockList,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_ip_block(
+    payload: admin_schemas.AdminIpBlockRequest,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminIpBlockList:
+    return system_tools.add_ip_block(payload)
+
+
+@router.delete("/system/ip-blocks/{ip}", response_model=admin_schemas.AdminIpBlockList)
+def delete_ip_block(
+    ip: str,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminIpBlockList:
+    return system_tools.remove_ip_block(ip)
+
+
 @router.get("/system/files", response_model=admin_schemas.AdminManagedFileList)
 def list_managed_files(
     _: models.User = Depends(_get_current_user),

@@ -130,6 +130,7 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                 <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
                   <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
                   <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
+                  <button class="secondary" type="button" id="system-ip-blocks">Блокировка IP</button>
                   <button class="secondary" type="button" id="system-events-exclusions">Исключения запросов</button>
                   <label class="toggle" style="margin-left: auto;">
                     <input type="checkbox" id="system-events-show-empty" />
@@ -266,6 +267,43 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                 </table>
               </div>
               <p class="text-muted" id="event-exclusions-empty">Пока нет скрытых запросов.</p>
+            </section>
+
+            <section id="drawer-ip-blocks" class="drawer-section hidden">
+              <p class="text-muted" style="margin-top: 0;">
+                Управляйте списком IP-адресов, которым запрещено обращаться к API. Блокировка применяется как к
+                пользовательскому API, так и к админ-панели.
+              </p>
+
+              <form id="ip-blocks-form" class="flex-column gap-sm" style="margin-bottom: 16px;">
+                <div class="flex gap-sm" style="flex-wrap: wrap; align-items: flex-end;">
+                  <label class="flex-column gap-xs" style="flex: 1 1 220px; min-width: 200px;">
+                    <span>IP-адрес</span>
+                    <input id="ip-blocks-address" type="text" placeholder="Например: 203.0.113.42" required />
+                  </label>
+                  <label class="flex-column gap-xs" style="flex: 1 1 240px; min-width: 200px;">
+                    <span>Комментарий</span>
+                    <input id="ip-blocks-note" type="text" placeholder="Например: тестовый стенд" />
+                  </label>
+                  <button class="primary" type="submit">Добавить блокировку</button>
+                </div>
+              </form>
+
+              <div id="ip-blocks-status" class="alert hidden" style="margin-bottom: 12px;"></div>
+              <div class="table-wrapper">
+                <table class="table events-table" id="ip-blocks-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 200px;">IP-адрес</th>
+                      <th>Комментарий</th>
+                      <th style="width: 180px;">Добавлено</th>
+                      <th style="width: 120px; text-align: right;">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ip-blocks-body"></tbody>
+                </table>
+              </div>
+              <p class="text-muted" id="ip-blocks-empty">Список блокировок пуст.</p>
             </section>
           </div>
         </div>
