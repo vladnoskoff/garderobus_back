@@ -80,6 +80,11 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = os.getenv("LOG_FILE", "/var/log/garderobus/api.log")
 LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "7"))
+POSTGRES_LOG_DIR = Path(
+    os.getenv("POSTGRES_LOG_DIR", "/var/lib/postgresql/16/main/log")
+)
+# Вторичный путь, если стандартный каталог журналов PostgreSQL отличается.
+POSTGRES_FALLBACK_LOG_DIR = Path("/var/log/postgresql")
 API_RATE_LIMIT = os.getenv("API_RATE_LIMIT", "120/minute")
 
 # Distributed tracing / OpenTelemetry

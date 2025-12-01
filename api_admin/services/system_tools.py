@@ -1038,6 +1038,16 @@ def _iter_log_files() -> list[Path]:
     seen: set[str] = set()
     paths: list[Path] = []
 
+    def add_candidate(path: Path) -> None:
+        try:
+            key = str(path.resolve())
+        except OSError:
+            return
+        if key in seen or not path.exists() or not path.is_file():
+            return
+        seen.add(key)
+        paths.append(path)
+
     for raw in (
         settings.LOG_FILE,
         "/var/log/garderobus/api.log",
@@ -1045,12 +1055,28 @@ def _iter_log_files() -> list[Path]:
     ):
         if not raw:
             continue
-        candidate = Path(raw)
-        key = str(candidate.resolve())
-        if key in seen or not candidate.exists() or not candidate.is_file():
+        add_candidate(Path(raw))
+
+    for pg_dir in (settings.POSTGRES_LOG_DIR, settings.POSTGRES_FALLBACK_LOG_DIR):
+        try:
+            directory = Path(pg_dir)
+        except TypeError:
             continue
-        seen.add(key)
-        paths.append(candidate)
+
+        if not directory.exists() or not directory.is_dir():
+            continue
+
+        try:
+            log_files = sorted(
+                directory.glob("*.log"),
+                key=lambda item: item.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            continue
+
+        for candidate in log_files[:5]:
+            add_candidate(candidate)
 
     return paths
 
