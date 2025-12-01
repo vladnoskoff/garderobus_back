@@ -190,10 +190,14 @@ async def enforce_authentication(request: Request, call_next):
     return await call_next(request)
 
 # Разрешаем CORS для доверенных источников
+allowed_origins = settings.CORS_ALLOWED_ORIGINS or ["*"]
+allow_all = "*" in allowed_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=[] if allow_all else allowed_origins,
+    allow_origin_regex=".*" if allow_all else None,
+    allow_credentials=not allow_all,
     allow_methods=["*"],
     allow_headers=["*"],
 )
