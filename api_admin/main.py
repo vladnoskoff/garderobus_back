@@ -108,7 +108,12 @@ async def log_requests(request: Request, call_next):
             },
         )
         reset_request_context(*tokens)
-        raise
+        error_response = JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "Внутренняя ошибка сервера"},
+        )
+        error_response.headers["X-Request-ID"] = request_id
+        return error_response
 
     duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
     level = logging.INFO
