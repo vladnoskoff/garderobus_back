@@ -350,6 +350,9 @@ def get_system_status() -> schemas.AdminSystemStatus:
     admin_api_uptime_seconds, admin_api_uptime_human = _fetch_service_uptime(
         settings.ADMIN_API_HEALTH_URL
     )
+    if api_uptime_seconds is None:
+        api_uptime_seconds = uptime_seconds
+        api_uptime_human = _humanize_duration(uptime_seconds)
     if admin_api_uptime_seconds is None:
         admin_api_uptime_seconds = uptime_seconds
         admin_api_uptime_human = _humanize_duration(uptime_seconds)
