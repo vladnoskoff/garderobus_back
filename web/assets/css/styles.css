@@ -1107,6 +1107,8 @@ body[data-page="database"] .table td {
 .event-meta-value {
   color: #374151;
   font-size: 13px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .events-subtable td:nth-child(3) {
