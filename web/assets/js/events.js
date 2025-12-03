@@ -489,9 +489,32 @@
   }
 
   function getEventsForCurrentPage() {
+    const history = state.systemEvents.history || [];
     const start = Math.max(0, (state.systemEvents.page - 1) * state.systemEvents.limit);
     const end = start + state.systemEvents.limit;
-    return (state.systemEvents.history || []).slice(start, end);
+
+    const pageSlice = history.slice(start, end);
+    const presentCategories = new Set(pageSlice.map((event) => event.category || "unknown"));
+
+    // Always surface at least one recent entry per category so buckets stay visible
+    history.forEach((event) => {
+      const category = event.category || "unknown";
+      if (presentCategories.has(category)) return;
+      presentCategories.add(category);
+      pageSlice.push(event);
+    });
+
+    const unique = [];
+    const seen = new Set();
+    pageSlice.forEach((event) => {
+      const key = buildEventKey(event);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      unique.push(event);
+    });
+
+    unique.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    return unique;
   }
 
   function updateSystemEventsPagination() {
