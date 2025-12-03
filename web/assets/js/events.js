@@ -267,59 +267,87 @@
     return buckets;
   }
 
-  function buildEventRow(event) {
-    const row = document.createElement("tr");
-
-    const timeCell = document.createElement("td");
-    const timeText = document.createElement("div");
-    timeText.className = "event-time";
-    timeText.textContent = formatDate(event.timestamp, true);
-    timeCell.appendChild(timeText);
-    row.appendChild(timeCell);
-
-    const levelCell = document.createElement("td");
-    const badge = document.createElement("span");
+  function buildEventCard(event) {
     const levelClass = event.level === "error" ? "error" : event.level === "warning" ? "warning" : "info";
-    badge.className = `status-badge ${levelClass}`;
-    badge.textContent = formatEventLevel(event.level);
-    levelCell.appendChild(badge);
-    row.appendChild(levelCell);
+    const categoryLabel = EVENT_CATEGORY_LABELS[getEventCategory(event)];
 
-    const messageCell = document.createElement("td");
+    const card = document.createElement("article");
+    card.className = `event-card level-${levelClass}`;
+
+    const header = document.createElement("div");
+    header.className = "event-card-header";
+
+    const headerLeft = document.createElement("div");
+    headerLeft.className = "event-card-header-left";
+
+    const time = document.createElement("span");
+    time.className = "event-time";
+    time.textContent = formatDate(event.timestamp, true);
+    headerLeft.appendChild(time);
+
+    if (categoryLabel) {
+      const categoryBadge = document.createElement("span");
+      categoryBadge.className = "pill pill-soft";
+      categoryBadge.textContent = categoryLabel;
+      headerLeft.appendChild(categoryBadge);
+    }
+
+    const source = event.source || event.service;
+    if (source) {
+      const sourceBadge = document.createElement("span");
+      sourceBadge.className = "pill pill-ghost";
+      sourceBadge.textContent = source;
+      headerLeft.appendChild(sourceBadge);
+    }
+
+    const headerRight = document.createElement("div");
+    headerRight.className = "event-card-header-right";
+    const levelBadge = document.createElement("span");
+    levelBadge.className = `pill pill-${levelClass}`;
+    levelBadge.textContent = formatEventLevel(event.level);
+    headerRight.appendChild(levelBadge);
+
+    header.appendChild(headerLeft);
+    header.appendChild(headerRight);
+    card.appendChild(header);
+
+    const body = document.createElement("div");
+    body.className = "event-card-body";
+
     const messagePrimary = document.createElement("div");
     messagePrimary.className = "event-message-primary";
     messagePrimary.textContent = formatEventMessage(event);
-    messageCell.appendChild(messagePrimary);
+    body.appendChild(messagePrimary);
 
-    const categoryLabel = EVENT_CATEGORY_LABELS[getEventCategory(event)];
-    if (categoryLabel) {
-      const messageMeta = document.createElement("div");
-      messageMeta.className = "event-message-meta";
-      messageMeta.textContent = categoryLabel;
-      messageCell.appendChild(messageMeta);
+    if (event?.context?.method && event?.context?.path) {
+      const requestLine = document.createElement("div");
+      requestLine.className = "event-message-secondary";
+      requestLine.textContent = `${event.context.method} ${event.context.path}`;
+      body.appendChild(requestLine);
     }
 
     const details = buildEventDetails(event);
     if (details.length) {
-      const detailsContainer = document.createElement("ul");
-      detailsContainer.className = "event-message-details";
+      const detailsList = document.createElement("div");
+      detailsList.className = "event-meta-list";
       details.forEach((item) => {
-        const li = document.createElement("li");
-        li.textContent = `${item.label}: ${item.value}`;
-        detailsContainer.appendChild(li);
+        const meta = document.createElement("div");
+        meta.className = "event-meta-item";
+        const label = document.createElement("span");
+        label.className = "event-meta-label";
+        label.textContent = item.label;
+        const value = document.createElement("span");
+        value.className = "event-meta-value";
+        value.textContent = item.value || "-";
+        meta.appendChild(label);
+        meta.appendChild(value);
+        detailsList.appendChild(meta);
       });
-      messageCell.appendChild(detailsContainer);
+      body.appendChild(detailsList);
     }
-    row.appendChild(messageCell);
 
-    const sourceCell = document.createElement("td");
-    const sourceChip = document.createElement("span");
-    sourceChip.className = "tag";
-    sourceChip.textContent = event.source || event.service || "—";
-    sourceCell.appendChild(sourceChip);
-    row.appendChild(sourceCell);
-
-    return row;
+    card.appendChild(body);
+    return card;
   }
 
   function buildEventDetails(event) {
@@ -405,26 +433,12 @@
         rendered += 1;
         return;
       }
-      const tableWrapper = document.createElement("div");
-      tableWrapper.className = "table-wrapper event-category-table";
-      const table = document.createElement("table");
-      table.className = "table events-table events-subtable";
-      const thead = document.createElement("thead");
-      const headerRow = document.createElement("tr");
-      ["Время", "Уровень", "Сообщение", "Источник"].forEach((label) => {
-        const th = document.createElement("th");
-        th.textContent = label;
-        headerRow.appendChild(th);
-      });
-      thead.appendChild(headerRow);
-      table.appendChild(thead);
-      const tbody = document.createElement("tbody");
+      const list = document.createElement("div");
+      list.className = "event-cards";
       bucket.forEach((event) => {
-        tbody.appendChild(buildEventRow(event));
+        list.appendChild(buildEventCard(event));
       });
-      table.appendChild(tbody);
-      tableWrapper.appendChild(table);
-      section.appendChild(tableWrapper);
+      section.appendChild(list);
       elements.systemEventsGroups.appendChild(section);
       rendered += 1;
     });
