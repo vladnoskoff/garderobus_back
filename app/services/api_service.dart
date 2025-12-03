@@ -187,7 +187,8 @@ class ApiService {
 
   // Получение информации о пользователе
   static Future<Map<String, dynamic>> getUser(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/users/$userId'));
+    final headers = await _authHeaders();
+    final response = await http.get(Uri.parse('$baseUrl/users/$userId'), headers: headers);
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body) as Map<String, dynamic>;
@@ -201,13 +202,11 @@ class ApiService {
 
   // Удаление пользователя
   static Future<void> deleteUser(int userId) async {
-    final token = await storage.read(key: "token");
     final response = await http.delete(
       Uri.parse("$baseUrl/users/$userId"),
-      headers: {
+      headers: await _authHeaders(base: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
+      }),
     );
     if (response.statusCode != 200) {
       throw Exception("Ошибка при удалении пользователя");
@@ -216,17 +215,15 @@ class ApiService {
 
   // Обновление данных пользователя
   static Future<void> updateUser(int userId, String field, String value) async {
-    final token = await storage.read(key: "token");
     final url = Uri.parse('$baseUrl/users/$userId');
 
     final body = jsonEncode({field: value});
 
     final response = await http.put(
       url,
-      headers: {
+      headers: await _authHeaders(base: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
+      }),
       body: body,
     );
 
@@ -311,13 +308,11 @@ class ApiService {
 
   // Обновление стиля
   static Future<void> updateStyle(int userId, String style) async {
-    final token = await storage.read(key: "token");
     final response = await http.put(
       Uri.parse("$baseUrl/users/$userId/style?style=$style"),
-      headers: {
+      headers: await _authHeaders(base: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer $token",
-      },
+      }),
     );
     if (response.statusCode != 200) {
       throw Exception("Ошибка обновления стиля");
@@ -328,7 +323,7 @@ class ApiService {
   static Future<void> updateLocation(int userId, String location) async {
     final response = await http.put(
       Uri.parse('$baseUrl/users/$userId'),
-      headers: {'Content-Type': 'application/json'},
+      headers: await _authHeaders(base: {'Content-Type': 'application/json'}),
       body: jsonEncode({'location': location}),
     );
 
@@ -345,6 +340,20 @@ class ApiService {
     final token = await storage.read(key: "token");
     rememberAccessToken(token);
     return _sessionToken;
+  }
+
+  static Future<Map<String, String>> _authHeaders({Map<String, String>? base}) async {
+    final token = await getToken();
+    if (token == null || token.isEmpty) {
+      throw Exception('Требуется авторизация');
+    }
+
+    final headers = <String, String>{};
+    if (base != null && base.isNotEmpty) {
+      headers.addAll(base);
+    }
+    headers['Authorization'] = 'Bearer $token';
+    return headers;
   }
 
   static String _detectPlatform() {
@@ -383,7 +392,10 @@ class ApiService {
 //--------------------------------------------------------------------------------------------------------------
   // Получить список одежды
   static Future<List<dynamic>> getClothes() async {
-    final response = await http.get(Uri.parse("$baseUrl/clothes/"));
+    final response = await http.get(
+      Uri.parse("$baseUrl/clothes/"),
+      headers: await _authHeaders(),
+    );
     
     if (response.statusCode == 200) {
       final utf8Response = utf8.decode(response.bodyBytes); // Декодируем в utf8
@@ -407,7 +419,7 @@ class ApiService {
         : Uri.parse('$baseUrl/clothes/user/$userId');
 
     try {
-      final response = await http.get(uri);
+      final response = await http.get(uri, headers: await _authHeaders());
 
       if (response.statusCode == 200) {
         final utf8Response = utf8.decode(response.bodyBytes); // Для корректной обработки русских символов
@@ -430,7 +442,10 @@ class ApiService {
   }
 
   static Future<Clothes> getClothesById(int clothesId) async {
-    final response = await http.get(Uri.parse('$baseUrl/clothes/$clothesId'));
+    final response = await http.get(
+      Uri.parse('$baseUrl/clothes/$clothesId'),
+      headers: await _authHeaders(),
+    );
 
     if (response.statusCode != 200) {
       throw Exception('Вещь не найдена (код ${response.statusCode})');
@@ -540,6 +555,8 @@ class ApiService {
       request.files.add(await http.MultipartFile.fromPath('files', image.path));
     }
 
+    request.headers.addAll(await _authHeaders());
+
     final response = await request.send();
     final responseBody = await response.stream.bytesToString();
     final isSuccess = response.statusCode >= 200 && response.statusCode < 300;
@@ -565,6 +582,8 @@ class ApiService {
     request.files.add(
       await http.MultipartFile.fromPath('file', image.path),
     );
+
+    request.headers.addAll(await _authHeaders());
 
     var response = await request.send();
     var responseData = await response.stream.bytesToString();
@@ -659,7 +678,7 @@ class ApiService {
 
   final response = await http.patch(
     uri,
-    headers: {'Content-Type': 'application/json'},
+    headers: await _authHeaders(base: {'Content-Type': 'application/json'}),
     body: jsonEncode(body),
   );
 
@@ -682,7 +701,10 @@ class ApiService {
 
 // Удалить вещь
   static Future<void> deleteClothes(int clothesId) async {
-    final response = await http.delete(Uri.parse("$baseUrl/clothes/$clothesId"));
+    final response = await http.delete(
+      Uri.parse("$baseUrl/clothes/$clothesId"),
+      headers: await _authHeaders(),
+    );
     if (response.statusCode != 200) {
       throw Exception('Ошибка при удалении одежды');
     }
@@ -692,7 +714,10 @@ class ApiService {
 
   // Получить погоды
   static Future<Map<String, dynamic>> getWeather(String city) async {
-    final response = await http.get(Uri.parse('$baseUrl/weather/$city'));
+    final response = await http.get(
+      Uri.parse('$baseUrl/weather/$city'),
+      headers: await _authHeaders(),
+    );
     if (response.statusCode == 200) {
       return jsonDecode(utf8.decode(response.bodyBytes)); // <- поддержка кириллицы
     } else {
@@ -705,7 +730,7 @@ class ApiService {
     final uri = locationId != null
         ? Uri.parse('$baseUrl/weather/user/$userId?location_id=$locationId')
         : Uri.parse('$baseUrl/weather/user/$userId');
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode == 200) {
       return json.decode(utf8.decode(response.bodyBytes));
     } else {
@@ -730,7 +755,7 @@ class ApiService {
     final uri = locationId != null
         ? Uri.parse('$baseUrl/outfits/$userId?location_id=$locationId')
         : Uri.parse('$baseUrl/outfits/$userId');
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode == 200) {
       return jsonDecode(response.body);
     } else {
@@ -745,7 +770,7 @@ class ApiService {
     final uri = locationId != null
         ? Uri.parse("$baseUrl/outfits/history/$userId?location_id=$locationId")
         : Uri.parse("$baseUrl/outfits/history/$userId");
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode != 200) {
       throw Exception('Ошибка при получении истории нарядов');
     }
@@ -773,6 +798,7 @@ class ApiService {
   static Future<void> rateOutfit(int outfitId, int rating) async {
     final response = await http.put(
       Uri.parse("$baseUrl/outfits/rate/$outfitId?rating=$rating"),
+      headers: await _authHeaders(),
     );
     if (response.statusCode != 200) {
       throw Exception("Ошибка при обновлении рейтинга");
@@ -785,7 +811,7 @@ class ApiService {
     final uri = Uri.parse("$baseUrl/ai/recommendation/$userId").replace(
       queryParameters: {"lang": lang},
     );
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     return jsonDecode(utf8.decode(response.bodyBytes))["recommendation"];
   }
 
@@ -807,7 +833,7 @@ class ApiService {
         ? baseUri
         : baseUri.replace(queryParameters: query);
 
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode != 200) {
       throw Exception('Ошибка при получении истории манекенов');
     }
@@ -838,7 +864,7 @@ class ApiService {
         ? baseUri
         : baseUri.replace(queryParameters: params);
 
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     if (response.statusCode != 200) {
       throw Exception('Ошибка при генерации манекена');
     }
@@ -860,7 +886,10 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> getTaskStatus(String taskId) async {
-    final response = await http.get(Uri.parse("$baseUrl/ai/tasks/$taskId"));
+    final response = await http.get(
+      Uri.parse("$baseUrl/ai/tasks/$taskId"),
+      headers: await _authHeaders(),
+    );
     if (response.statusCode != 200) {
       throw Exception('Ошибка при получении статуса задачи');
     }
@@ -920,24 +949,33 @@ class ApiService {
     final uri = Uri.parse("$baseUrl/ai/visual-recommendation/$userId").replace(
       queryParameters: {"lang": lang},
     );
-    final response = await http.get(uri);
+    final response = await http.get(uri, headers: await _authHeaders());
     return jsonDecode(utf8.decode(response.bodyBytes))["image_url"];
   }
 
   // Получить часто используемые вещи
   static Future<List<dynamic>> getMostWornClothes(int userId) async {
-    final response = await http.get(Uri.parse("$baseUrl/analytics/most_worn/$userId"));
+    final response = await http.get(
+      Uri.parse("$baseUrl/analytics/most_worn/$userId"),
+      headers: await _authHeaders(),
+    );
     return jsonDecode(response.body);
   }
 
   // Получить забытые вещи
   static Future<List<dynamic>> getLeastWornClothes(int userId) async {
-    final response = await http.get(Uri.parse("$baseUrl/analytics/least_worn/$userId"));
+    final response = await http.get(
+      Uri.parse("$baseUrl/analytics/least_worn/$userId"),
+      headers: await _authHeaders(),
+    );
     return jsonDecode(response.body);
   }
 
   static Future<List<dynamic>> getWardrobeLocations(int userId) async {
-    final response = await http.get(Uri.parse('$baseUrl/locations/$userId'));
+    final response = await http.get(
+      Uri.parse('$baseUrl/locations/$userId'),
+      headers: await _authHeaders(),
+    );
     if (response.statusCode == 200) {
       return jsonDecode(utf8.decode(response.bodyBytes));
     } else {
@@ -953,7 +991,7 @@ class ApiService {
   }) async {
     final response = await http.post(
       Uri.parse('$baseUrl/locations/$userId'),
-      headers: {"Content-Type": "application/json"},
+      headers: await _authHeaders(base: {"Content-Type": "application/json"}),
       body: jsonEncode({
         "name": name,
         "latitude": latitude,
@@ -988,7 +1026,7 @@ class ApiService {
 
     final response = await http.put(
       Uri.parse('$baseUrl/locations/$userId/$locationId'),
-      headers: {"Content-Type": "application/json"},
+      headers: await _authHeaders(base: {"Content-Type": "application/json"}),
       body: jsonEncode(payload),
     );
 
@@ -1005,6 +1043,7 @@ class ApiService {
   }) async {
     final response = await http.delete(
       Uri.parse('$baseUrl/locations/$userId/$locationId'),
+      headers: await _authHeaders(),
     );
 
     if (response.statusCode != 200) {
