@@ -12,7 +12,7 @@ import uuid
 from ipaddress import ip_address
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError
@@ -1121,11 +1121,28 @@ def _is_event_excluded(
     return False
 
 
+def _has_auth_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() not in {"", "-"}
+    return True
+
+
+def _is_authorized_event(event: schemas.AdminSystemEvent) -> bool:
+    context = event.context or {}
+    token = context.get("token")
+    user_id = context.get("user_id")
+    user_email = context.get("user_email")
+    return any(_has_auth_value(val) for val in (user_id, user_email, token))
+
+
 def get_system_events(
     *,
     level: Optional[str] = None,
     hours: Optional[int] = None,
-    limit: int = 50,
+    auth: Optional[str] = None,
+    limit: int = 10,
     page: int = 1,
 ) -> schemas.AdminSystemEventList:
     exclusions = _load_event_exclusions()
@@ -1138,6 +1155,7 @@ def get_system_events(
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     desired_level = level.lower() if level else None
+    desired_auth = auth.lower() if auth else None
     events: list[schemas.AdminSystemEvent] = []
 
     for log_path in log_files:
@@ -1155,6 +1173,12 @@ def get_system_events(
                         continue
                     if desired_level and event.level != desired_level:
                         continue
+                    if desired_auth:
+                        is_authorized = _is_authorized_event(event)
+                        if desired_auth == "authorized" and not is_authorized:
+                            continue
+                        if desired_auth == "unauthorized" and is_authorized:
+                            continue
                     if cutoff and event.timestamp < cutoff:
                         continue
                     events.append(event)
@@ -1169,6 +1193,13 @@ def get_system_events(
 
                 if desired_level and event.level != desired_level:
                     continue
+
+                if desired_auth:
+                    is_authorized = _is_authorized_event(event)
+                    if desired_auth == "authorized" and not is_authorized:
+                        continue
+                    if desired_auth == "unauthorized" and is_authorized:
+                        continue
 
                 if cutoff and event.timestamp < cutoff:
                     continue

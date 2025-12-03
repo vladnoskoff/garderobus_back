@@ -388,11 +388,18 @@ def get_queue_snapshot(
 def get_system_events(
     level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),
     hours: Optional[int] = Query(None, ge=1, le=24 * 30),
-    limit: int = Query(50, ge=1, le=200),
+    auth: Optional[str] = Query(None, pattern=r"^(authorized|unauthorized)$"),
+    limit: int = Query(10, ge=1, le=200),
     page: int = Query(1, ge=1),
     _: models.User = Depends(_get_current_user),
 ) -> admin_schemas.AdminSystemEventList:
-    return system_tools.get_system_events(level=level, hours=hours, limit=limit, page=page)
+    return system_tools.get_system_events(
+        level=level,
+        hours=hours,
+        auth=auth,
+        limit=limit,
+        page=page,
+    )
 
 
 @router.get(

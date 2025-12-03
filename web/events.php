@@ -71,10 +71,18 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                   </select>
                 </label>
                 <label class="filter-control">
+                  <span class="text-muted">Авторизация</span>
+                  <select id="system-events-auth">
+                    <option value="">Всё</option>
+                    <option value="authorized">Авторизованные</option>
+                    <option value="unauthorized">Неавторизованные</option>
+                  </select>
+                </label>
+                <label class="filter-control">
                   <span class="text-muted">На странице</span>
                   <select id="system-events-limit">
-                    <option value="10">10</option>
-                    <option value="20" selected>20</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
                     <option value="50">50</option>
                     <option value="100">100</option>
                   </select>

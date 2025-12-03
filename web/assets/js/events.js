@@ -17,6 +17,7 @@
     systemEventsError: document.getElementById("system-events-error"),
     systemEventsLevel: document.getElementById("system-events-level"),
     systemEventsPeriod: document.getElementById("system-events-period"),
+    systemEventsAuth: document.getElementById("system-events-auth"),
     systemEventsLimit: document.getElementById("system-events-limit"),
     systemEventsRefresh: document.getElementById("system-events-refresh"),
     systemIpBlocks: document.getElementById("system-ip-blocks"),
@@ -51,15 +52,17 @@
     drawerMode: null,
     systemEvents: {
       page: 1,
-      limit: 20,
+      limit: 10,
       level: "",
       hours: "",
+      auth: "",
       total: 0,
       loadedOnce: false,
       loading: false,
       lastSignature: "",
       refreshInterval: null,
       latestEvents: [],
+      history: [],
       showEmpty: false,
       exclusions: [],
       exclusionsLoaded: false,
@@ -459,6 +462,38 @@
       .join(";");
   }
 
+  function buildEventKey(event) {
+    if (!event) return "";
+    const requestId = event.context?.request_id || event.request_id || "";
+    const token = event.context?.token || "";
+    return [event.timestamp || "", event.category || "", event.level || "", event.message || "", requestId, token].join(
+      "|",
+    );
+  }
+
+  function mergeEvents(existing, incoming) {
+    const merged = [];
+    const seen = new Set();
+    const pushUnique = (event) => {
+      const key = buildEventKey(event);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      merged.push(event);
+    };
+
+    (incoming || []).forEach(pushUnique);
+    (existing || []).forEach(pushUnique);
+
+    merged.sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
+    return merged.slice(0, 500);
+  }
+
+  function getEventsForCurrentPage() {
+    const start = Math.max(0, (state.systemEvents.page - 1) * state.systemEvents.limit);
+    const end = start + state.systemEvents.limit;
+    return (state.systemEvents.history || []).slice(start, end);
+  }
+
   function updateSystemEventsPagination() {
     if (!elements.systemEventsPageInfo) return;
     const totalPages = Math.max(1, Math.ceil(state.systemEvents.total / state.systemEvents.limit));
@@ -717,8 +752,12 @@
   }
 
   async function loadSystemEvents(options = {}) {
-    const { resetPage = false, silent = false } = options;
+    const { resetPage = false, silent = false, resetHistory = false } = options;
     if (resetPage) state.systemEvents.page = 1;
+    if (resetHistory) {
+      state.systemEvents.history = [];
+      state.systemEvents.lastSignature = "";
+    }
     if (state.systemEvents.loading) return;
     state.systemEvents.loading = true;
     toggleHidden(elements.systemEventsError, true);
@@ -733,6 +772,7 @@
     params.set("page", state.systemEvents.page);
     if (state.systemEvents.level) params.set("level", state.systemEvents.level);
     if (state.systemEvents.hours) params.set("hours", state.systemEvents.hours);
+    if (state.systemEvents.auth) params.set("auth", state.systemEvents.auth);
     try {
       const response = await fetch(`${apiBaseUrl}/admin/system/events?${params.toString()}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
@@ -741,15 +781,17 @@
       if (!response.ok) throw new Error("Request failed");
       const payload = await response.json();
       const events = payload.events || [];
-      const signature = computeEventsSignature(events);
       const isFirstLoad = !state.systemEvents.loadedOnce;
+      const merged = mergeEvents(resetHistory ? [] : state.systemEvents.history, events);
+      state.systemEvents.history = merged;
+      const signature = computeEventsSignature(getEventsForCurrentPage());
       const hasChanges = signature !== state.systemEvents.lastSignature;
-      state.systemEvents.total = payload.total || 0;
+      state.systemEvents.total = Math.max(payload.total || 0, merged.length);
       state.systemEvents.loadedOnce = true;
       state.systemEvents.lastSignature = signature;
-      state.systemEvents.latestEvents = events;
+      state.systemEvents.latestEvents = merged;
       if (isFirstLoad || hasChanges || !silent) {
-        renderSystemEvents(events);
+        renderSystemEvents(getEventsForCurrentPage());
       }
       updateSystemEventsPagination();
       updateEventsTimestamp(isFirstLoad || hasChanges);
@@ -790,18 +832,27 @@
   if (elements.systemEventsLevel) {
     elements.systemEventsLevel.addEventListener("change", () => {
       state.systemEvents.level = elements.systemEventsLevel.value;
-      void loadSystemEvents({ resetPage: true });
+      void loadSystemEvents({ resetPage: true, resetHistory: true });
     });
   }
 
   if (elements.systemEventsPeriod) {
     elements.systemEventsPeriod.addEventListener("change", () => {
       state.systemEvents.hours = elements.systemEventsPeriod.value;
-      void loadSystemEvents({ resetPage: true });
+      void loadSystemEvents({ resetPage: true, resetHistory: true });
     });
   }
 
+  if (elements.systemEventsAuth) {
+    elements.systemEventsAuth.addEventListener("change", () => {
+      state.systemEvents.auth = elements.systemEventsAuth.value;
+      void loadSystemEvents({ resetPage: true, resetHistory: true });
+    });
+    state.systemEvents.auth = elements.systemEventsAuth.value || "";
+  }
+
   if (elements.systemEventsLimit) {
+    state.systemEvents.limit = Number(elements.systemEventsLimit.value) || state.systemEvents.limit;
     elements.systemEventsLimit.addEventListener("change", () => {
       const value = Number(elements.systemEventsLimit.value) || 20;
       state.systemEvents.limit = value;
@@ -813,7 +864,7 @@
     state.systemEvents.showEmpty = Boolean(elements.systemEventsShowEmpty.checked);
     elements.systemEventsShowEmpty.addEventListener("change", () => {
       state.systemEvents.showEmpty = Boolean(elements.systemEventsShowEmpty.checked);
-      renderSystemEvents(state.systemEvents.latestEvents || []);
+      renderSystemEvents(getEventsForCurrentPage());
     });
   }
 
@@ -909,5 +960,5 @@
 
   populateExclusionCategoriesSelect();
   startSystemEventsAutoRefresh();
-  void loadSystemEvents({ resetPage: true });
+  void loadSystemEvents({ resetPage: true, resetHistory: true });
 })();
