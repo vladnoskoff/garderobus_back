@@ -133,7 +133,7 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://garderobus.tech,https://garderobus.tech",
+        "*",
     ).split(",")
     if origin.strip()
 ]
