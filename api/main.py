@@ -77,6 +77,27 @@ def _custom_openapi():
     security_schemes = components.setdefault("securitySchemes", {})
     security_schemes.setdefault("HTTPBearer", {"type": "http", "scheme": "bearer"})
 
+    default_security = [{"HTTPBearer": []}]
+    schema.setdefault("security", default_security)
+
+    for path, operations in schema.get("paths", {}).items():
+        requires_auth = not is_public_path(path)
+        for operation in operations.values():
+            if not isinstance(operation, dict):
+                continue
+
+            if not requires_auth:
+                operation.setdefault("security", [])
+                continue
+
+            existing_security = operation.get("security")
+            if existing_security is None:
+                operation["security"] = list(default_security)
+            else:
+                has_bearer = any("HTTPBearer" in entry for entry in existing_security if isinstance(entry, dict))
+                if not has_bearer:
+                    operation["security"] = existing_security + list(default_security)
+
     app.openapi_schema = schema
     return app.openapi_schema
 
