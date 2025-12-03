@@ -19,7 +19,14 @@ from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
 from api_admin.routes import admin, notifications
-from security import authenticate, auth_scheme, detect_client_origin, is_ip_blocked, is_public_path
+from security import (
+    authenticate,
+    auth_scheme,
+    detect_client_origin,
+    extract_bearer_token,
+    is_ip_blocked,
+    is_public_path,
+)
 
 
 configure_logging()
@@ -71,6 +78,9 @@ async def log_requests(request: Request, call_next):
     user_agent = request.headers.get("user-agent")
     client_origin, origin_hint = detect_client_origin(user_agent, headers=request.headers)
     start_time = time.perf_counter()
+    token = extract_bearer_token(
+        headers=request.headers, query_params=request.query_params, cookies=request.cookies
+    )
 
     if is_ip_blocked(client_host):
         logger.warning(
@@ -83,6 +93,7 @@ async def log_requests(request: Request, call_next):
                 "client_origin": client_origin,
                 "client_origin_hint": origin_hint,
                 "request_id": request_id,
+                "token": token or "-",
             },
         )
         reset_request_context(*tokens)
@@ -104,6 +115,7 @@ async def log_requests(request: Request, call_next):
             "user_agent": user_agent,
             "duration_ms": duration_ms,
             "request_id": request_id,
+            "token": token or "-",
         }
 
         if request.url.path.rstrip("/") == "/healthz":
@@ -131,6 +143,8 @@ async def log_requests(request: Request, call_next):
         level = logging.ERROR
     elif response.status_code >= 400:
         level = logging.WARNING
+    elif not token:
+        level = logging.WARNING
 
     logger.log(
         level,
@@ -145,6 +159,7 @@ async def log_requests(request: Request, call_next):
             "client_origin": client_origin,
             "client_origin_hint": origin_hint,
             "request_id": request_id,
+            "token": token or "-",
         },
     )
 
@@ -165,24 +180,9 @@ async def enforce_authentication(request: Request, call_next):
         return await call_next(request)
 
     credentials = await auth_scheme(request)
-    token = credentials.credentials if credentials else None
-
-    # Accept tokens from alternate locations for clients that cannot send a
-    # standard "Authorization: Bearer" header.
-    if not token:
-        auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
-        if auth_header:
-            parts = auth_header.split()
-            if len(parts) == 2:
-                token = parts[1]
-            elif len(parts) == 1:
-                token = parts[0]
-
-    if not token:
-        token = request.query_params.get("access_token") or request.query_params.get("token")
-
-    if not token:
-        token = request.cookies.get("access_token") if request.cookies else None
+    token = extract_bearer_token(
+        headers=request.headers, query_params=request.query_params, cookies=request.cookies
+    ) or (credentials.credentials if credentials else None)
 
     if token and credentials is None:
         credentials = HTTPAuthorizationCredentials(scheme="bearer", credentials=token)

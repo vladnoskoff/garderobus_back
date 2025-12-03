@@ -153,6 +153,34 @@ def is_public_path(path: str, extra_public: Optional[Iterable[str]] = None) -> b
     return any(normalized.startswith(prefix) for prefix in _PUBLIC_ROUTE_PREFIXES)
 
 
+def extract_bearer_token(
+    *, headers: Mapping[str, str], query_params: Mapping[str, str], cookies: Optional[Mapping[str, str]]
+) -> Optional[str]:
+    """Return a bearer token from common locations without enforcing scheme casing."""
+
+    # Standard Authorization header first
+    auth_header = headers.get("Authorization") or headers.get("authorization")
+    if auth_header:
+        parts = auth_header.split()
+        if len(parts) == 2:
+            return parts[1]
+        if len(parts) == 1:
+            return parts[0]
+
+    # Alternate query parameters used by some clients
+    token = query_params.get("access_token") or query_params.get("token")
+    if token:
+        return token
+
+    # Cookie-based fallbacks
+    if cookies:
+        cookie_token = cookies.get("access_token")
+        if cookie_token:
+            return cookie_token
+
+    return None
+
+
 def authenticate(credentials: Optional[HTTPAuthorizationCredentials]) -> models.User:
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Требуется авторизация")
