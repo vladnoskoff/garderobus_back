@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPAuthorizationCredentials
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from slowapi.errors import RateLimitExceeded
 
@@ -164,6 +165,27 @@ async def enforce_authentication(request: Request, call_next):
         return await call_next(request)
 
     credentials = await auth_scheme(request)
+    token = credentials.credentials if credentials else None
+
+    # Accept tokens from alternate locations for clients that cannot send a
+    # standard "Authorization: Bearer" header.
+    if not token:
+        auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2:
+                token = parts[1]
+            elif len(parts) == 1:
+                token = parts[0]
+
+    if not token:
+        token = request.query_params.get("access_token") or request.query_params.get("token")
+
+    if not token:
+        token = request.cookies.get("access_token") if request.cookies else None
+
+    if token and credentials is None:
+        credentials = HTTPAuthorizationCredentials(scheme="bearer", credentials=token)
     try:
         authenticate(credentials)
     except Exception as exc:
