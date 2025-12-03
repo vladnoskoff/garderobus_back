@@ -4,7 +4,7 @@ import json
 import os
 from ipaddress import ip_address
 from pathlib import Path
-from typing import Iterable, Mapping, Optional
+from typing import Iterable, Mapping, Optional, Tuple
 
 import jwt
 from fastapi import HTTPException, status
@@ -179,6 +179,42 @@ def extract_bearer_token(
             return cookie_token
 
     return None
+
+
+def resolve_token_identity(token: Optional[str]) -> Tuple[Optional[str], Optional[int]]:
+    """Return user identity (email, id) from a bearer token when possible.
+
+    The lookup is best-effort: malformed tokens or missing users simply return
+    ``(None, None)`` so callers can safely log the absence without raising.
+    """
+
+    if not token:
+        return (None, None)
+
+    try:
+        payload = jwt.decode(token, user_routes.SECRET_KEY, algorithms=[user_routes.ALGORITHM])
+    except jwt.PyJWTError:
+        return (None, None)
+
+    email = payload.get("sub") or payload.get("email")
+    user_id = payload.get("user_id")
+
+    if user_id is not None:
+        try:
+            return (email, int(user_id))
+        except (TypeError, ValueError):
+            return (email, None)
+
+    if not email:
+        return (None, None)
+
+    try:
+        with db_session(read_only=True) as db:
+            user = db.query(models.User.id).filter(models.User.email == email).first()
+            return (email, user.id if user else None)
+    except Exception:
+        # Avoid breaking request logging when the database is unavailable.
+        return (email, None)
 
 
 def authenticate(credentials: Optional[HTTPAuthorizationCredentials]) -> models.User:

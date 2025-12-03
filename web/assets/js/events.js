@@ -344,6 +344,16 @@
     if (context.client_origin || context.client_origin_hint) {
       details.push({ label: "Источник клиента", value: formatClientOrigin(context.client_origin, context.client_origin_hint) });
     }
+    if (context.user_email || context.user_id) {
+      const parts = [];
+      if (context.user_email) parts.push(context.user_email);
+      if (context.user_id) parts.push(`#${context.user_id}`);
+      const label = parts.length ? parts.join(" · ") : "-";
+      details.push({ label: "Пользователь", value: label });
+    }
+    if (context.token !== undefined) {
+      details.push({ label: "Токен", value: context.token || "-" });
+    }
     if (context.request_id) {
       details.push({ label: "Request ID", value: context.request_id });
     }

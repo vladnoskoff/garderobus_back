@@ -36,6 +36,7 @@ from security import (
     auth_scheme,
     detect_client_origin,
     extract_bearer_token,
+    resolve_token_identity,
     is_ip_blocked,
     is_public_path,
 )
@@ -131,6 +132,7 @@ async def log_requests(request: Request, call_next):
     token = extract_bearer_token(
         headers=request.headers, query_params=request.query_params, cookies=request.cookies
     )
+    user_email, user_id = resolve_token_identity(token)
 
     if is_ip_blocked(client_host):
         logger.warning(
@@ -144,6 +146,8 @@ async def log_requests(request: Request, call_next):
                 "client_origin_hint": origin_hint,
                 "request_id": request_id,
                 "token": token or "-",
+                "user_email": user_email or "-",
+                "user_id": user_id or "-",
             },
         )
         reset_request_context(*tokens)
@@ -166,6 +170,8 @@ async def log_requests(request: Request, call_next):
             "duration_ms": duration_ms,
             "request_id": request_id,
             "token": token or "-",
+            "user_email": user_email or "-",
+            "user_id": user_id or "-",
         }
 
         if request.url.path.rstrip("/") == "/healthz":
@@ -210,6 +216,8 @@ async def log_requests(request: Request, call_next):
             "client_origin_hint": origin_hint,
             "request_id": request_id,
             "token": token or "-",
+            "user_email": user_email or "-",
+            "user_id": user_id or "-",
         },
     )
 
