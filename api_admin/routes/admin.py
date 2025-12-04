@@ -5,6 +5,7 @@ import base64
 import decimal
 import io
 import json
+import logging
 from typing import List, Optional, Sequence
 
 import jwt
@@ -21,11 +22,27 @@ from database import get_db, get_read_db
 from routes import users as user_routes
 from api_admin import schemas as admin_schemas
 from api_admin.services import system_tools
-from tasks.ai import generate_mannequin_task
 
 security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/admin", tags=["Admin Panel"])
+
+logger = logging.getLogger(__name__)
+
+
+def _get_mannequin_task():
+    """Lazy-load mannequin task to tolerate missing PYTHONPATH on startup."""
+
+    try:
+        from tasks.ai import generate_mannequin_task
+    except ImportError as exc:  # pragma: no cover - runtime guard
+        logger.exception("Failed to import generate_mannequin_task")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AI задачи недоступны (проверьте PYTHONPATH и установку api)",
+        ) from exc
+
+    return generate_mannequin_task
 
 
 def _get_current_user(
@@ -214,6 +231,8 @@ def refresh_all_mannequins(
     _: models.User = Depends(_get_current_user),
     db: Session = Depends(get_db),
 ) -> admin_schemas.AdminActionResponse:
+    mannequin_task = _get_mannequin_task()
+
     users = db.query(models.User.id).order_by(models.User.id).all()
     if not users:
         return admin_schemas.AdminActionResponse(
@@ -224,7 +243,7 @@ def refresh_all_mannequins(
     scheduled = 0
     for idx, row in enumerate(users):
         try:
-            generate_mannequin_task.apply_async(
+            mannequin_task.apply_async(
                 args=[],
                 kwargs={"user_id": row.id},
                 countdown=scheduled,
