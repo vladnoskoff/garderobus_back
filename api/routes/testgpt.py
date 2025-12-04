@@ -1,14 +1,32 @@
 import base64
 from typing import Optional
 
+import logging
+
 from fastapi import APIRouter, File, Form, HTTPException, Request
 import schemas
 import settings
 from openai_client import is_proxy_active
-from tasks.ai import analyze_clothes_image_task
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/ai", tags=["AI Test"])
+
+
+def _get_analyze_task():
+    """Lazy-load the analyze task to tolerate missing PYTHONPATH at startup."""
+
+    try:
+        from tasks.ai import analyze_clothes_image_task
+    except ImportError as exc:  # pragma: no cover - defensive guard
+        logger.exception("Failed to import analyze_clothes_image_task")
+        raise HTTPException(
+            status_code=500,
+            detail="AI анализ недоступен (проверьте PYTHONPATH и установку api)",
+        ) from exc
+
+    return analyze_clothes_image_task
 
 
 def _encode_payload(image_url: Optional[str], file: Optional[bytes]) -> dict:
@@ -42,7 +60,8 @@ async def analyze_image(
     file: Optional[bytes] = File(None),
 ) -> schemas.TaskSubmissionResponse:
     payload = _encode_payload(image_url, file)
-    task = analyze_clothes_image_task.delay(payload=payload, mode="validated")
+    analyze_task = _get_analyze_task()
+    task = analyze_task.delay(payload=payload, mode="validated")
     return schemas.TaskSubmissionResponse(
         task_id=task.id,
         status_url=request.url_for("get_ai_task_status", task_id=task.id),
@@ -63,7 +82,8 @@ async def analyze_image_raw(
     file: Optional[bytes] = File(None),
 ) -> schemas.TaskSubmissionResponse:
     payload = _encode_payload(image_url, file)
-    task = analyze_clothes_image_task.delay(payload=payload, mode="raw")
+    analyze_task = _get_analyze_task()
+    task = analyze_task.delay(payload=payload, mode="raw")
     return schemas.TaskSubmissionResponse(
         task_id=task.id,
         status_url=request.url_for("get_ai_task_status", task_id=task.id),
