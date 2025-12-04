@@ -33,6 +33,22 @@ INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
+def _has_active_celery_workers() -> bool:
+    """Check whether Celery has any active workers registered."""
+
+    try:
+        inspector = celery_app.control.inspect()
+        active_workers = inspector.active() if inspector else None
+    except Exception:
+        logger.warning("Failed to inspect Celery workers", exc_info=True)
+        return False
+
+    if not active_workers:
+        return False
+
+    return any(active_workers.values())
+
+
 def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissionResponse:
     return schemas.TaskSubmissionResponse(
         task_id=task_id,
@@ -144,6 +160,21 @@ async def _enqueue_task(
     request: Request,
     task_kwargs: dict[str, Any],
 ) -> schemas.TaskSubmissionResponse:
+    if not _has_active_celery_workers():
+        task_name = getattr(task, "name", repr(task))
+        logger.warning(
+            "No active Celery workers detected; executing %s inline",
+            task_name,
+        )
+        task_id = f"inline-{uuid4()}"
+        INLINE_TASK_RESULTS[task_id] = schemas.TaskStatusResponse(
+            task_id=task_id,
+            status="pending",
+            retries=0,
+        )
+        asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
+        return _submission_response(task_id, request)
+
     try:
         async_result = task.delay(**task_kwargs)
     except (KombuOperationalError, CeleryError):
