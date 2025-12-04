@@ -7,13 +7,26 @@ import json
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from uuid import uuid4
 from typing import Iterable, List, Optional, Tuple, Union
+from uuid import uuid4
 
+from celery import shared_task
+from celery.utils.log import get_task_logger
+from sqlalchemy.orm import Session
+
+import models
+import schemas
 import settings
+from cache import invalidate_outfit_history_for_user
+from database import SessionLocal
+from openai_client import get_openai_client
+from routes.location_utils import resolve_location_and_coordinates
+from routes.weather import get_weather_by_coordinates
 
 MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
+
+logger = get_task_logger(__name__)
 
 
 def coerce_int(value: Optional[Union[int, float, Decimal]]) -> Optional[int]:
@@ -201,11 +214,225 @@ def save_mannequin_image(image_b64: str, user_id: int, location_segment: str) ->
     return f"/mannequins/{relative_path}"
 
 
+def _serialize_mannequin_item(item: models.Clothes) -> schemas.MannequinItem:
+    return schemas.MannequinItem(
+        id=item.id,
+        name=item.name,
+        category=item.category,
+        color=item.color,
+        material=item.material,
+        season=item.season,
+        prompt_description=item.prompt_description,
+    )
+
+
+def _prepare_weather_snapshot(payload: dict) -> schemas.WeatherSnapshot:
+    return schemas.WeatherSnapshot(
+        temperature=coerce_int(payload.get("temperature")),
+        humidity=coerce_int(payload.get("humidity")),
+        condition=str(payload.get("condition", "")),
+        wind_speed=coerce_int(payload.get("wind_speed")),
+    )
+
+
+def _mannequin_location_segment(location_id: Optional[int]) -> str:
+    return f"location:{location_id}" if location_id is not None else "location:all"
+
+
+def _build_inline_error(detail: str, status_code: int = 500) -> dict:
+    return {"status": "error", "status_code": status_code, "detail": detail}
+
+
+@shared_task(bind=True, name="generate_mannequin_task")
+def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = None) -> dict:
+    """Generate a mannequin image strictly from the user's wardrobe items."""
+
+    with SessionLocal() as db:  # type: Session
+        user: Optional[models.User] = db.query(models.User).get(user_id)
+        if not user:
+            return _build_inline_error("Пользователь не найден", status_code=404)
+
+        try:
+            location, lat, lon = resolve_location_and_coordinates(db, user, location_id)
+        except Exception as exc:  # pragma: no cover - defensive for runtime errors
+            logger.exception("Failed to resolve location for mannequin task")
+            return _build_inline_error(str(exc), status_code=400)
+
+        try:
+            weather_payload = get_weather_by_coordinates(lat=lat, lon=lon, db=db)
+        except Exception as exc:  # pragma: no cover - external API may fail
+            logger.exception("Failed to fetch weather for mannequin task")
+            return _build_inline_error(str(exc), status_code=502)
+
+        clothes_query = db.query(models.Clothes).filter(models.Clothes.user_id == user_id)
+        if location is not None:
+            clothes_query = clothes_query.filter(models.Clothes.location_id == location.id)
+
+        clothes = clothes_query.all()
+        if not clothes:
+            return _build_inline_error("У пользователя нет одежды для генерации")
+
+        weather = _prepare_weather_snapshot(weather_payload)
+        selected_items = select_outfit(clothes, weather)
+        if not selected_items:
+            return _build_inline_error("Не удалось подобрать вещи для манекена")
+
+        prompt = build_mannequin_prompt(selected_items, weather, user.gender)
+
+        try:
+            client = get_openai_client()
+            response = client.images.generate(
+                model="gpt-image-1",
+                prompt=prompt,
+                size="1024x1536",
+                quality="hd",
+                n=1,
+                response_format="b64_json",
+            )
+            image_b64 = response.data[0].b64_json  # type: ignore[assignment]
+        except Exception as exc:  # pragma: no cover - depends on external API
+            logger.exception("Image generation failed for mannequin task")
+            return _build_inline_error(str(exc))
+
+        location_segment = _mannequin_location_segment(location_id)
+        image_url = save_mannequin_image(image_b64, user_id, location_segment)
+
+        mannequin_items = [_serialize_mannequin_item(item) for item in selected_items]
+        mannequin_record = models.MannequinImage(
+            user_id=user_id,
+            location_id=location.id if location else None,
+            image_url=image_url,
+            items=[item.model_dump() for item in mannequin_items],
+            weather=weather.model_dump(),
+        )
+        db.add(mannequin_record)
+        db.commit()
+
+        invalidate_outfit_history_for_user(user_id)
+
+        return {
+            "status": "success",
+            "result": schemas.MannequinResponse(
+                image_url=image_url,
+                weather=weather,
+                items=mannequin_items,
+            ).model_dump(),
+        }
+
+
+@shared_task(bind=True, name="generate_recommendation_task")
+def generate_recommendation_task(self, *, user_id: int) -> dict:
+    """Produce stylist recommendations based on recent outfits and wardrobe."""
+
+    with SessionLocal() as db:  # type: Session
+        user: Optional[models.User] = db.query(models.User).get(user_id)
+        if not user:
+            return _build_inline_error("Пользователь не найден", status_code=404)
+
+        outfits = (
+            db.query(models.Outfit)
+            .filter(models.Outfit.user_id == user_id)
+            .order_by(models.Outfit.created_at.desc())
+            .limit(10)
+            .all()
+        )
+
+        clothing_ids: list[int] = []
+        weather_ids: list[int] = []
+        for outfit in outfits:
+            if isinstance(outfit.clothing_ids, list):
+                clothing_ids.extend(
+                    cid for cid in outfit.clothing_ids if isinstance(cid, int)
+                )
+            if outfit.weather_id:
+                weather_ids.append(outfit.weather_id)
+
+        clothes_map: dict[int, models.Clothes] = {}
+        if clothing_ids:
+            clothes = (
+                db.query(models.Clothes)
+                .filter(models.Clothes.id.in_(set(clothing_ids)))
+                .all()
+            )
+            clothes_map = {item.id: item for item in clothes}
+
+        weather_map: dict[int, models.Weather] = {}
+        if weather_ids:
+            weathers = (
+                db.query(models.Weather)
+                .filter(models.Weather.id.in_(set(weather_ids)))
+                .all()
+            )
+            weather_map = {item.id: item for item in weathers}
+
+        history_snapshot: list[dict] = []
+        for outfit in outfits:
+            clothing_details = []
+            for cid in outfit.clothing_ids or []:
+                item = clothes_map.get(cid)
+                if not item:
+                    continue
+                clothing_details.append(_serialize_mannequin_item(item).model_dump())
+
+            weather_obj = weather_map.get(outfit.weather_id)
+            weather_payload = None
+            if weather_obj:
+                weather_payload = {
+                    "temperature": coerce_int(weather_obj.temperature),
+                    "humidity": coerce_int(weather_obj.humidity),
+                    "condition": getattr(weather_obj, "condition", ""),
+                    "wind_speed": coerce_int(getattr(weather_obj, "wind_speed", None)),
+                }
+
+            history_snapshot.append(
+                {
+                    "created_at": outfit.created_at.isoformat() if outfit.created_at else None,
+                    "items": clothing_details,
+                    "weather": weather_payload,
+                }
+            )
+
+        prompt_lines = [
+            "Act as a personal stylist. Provide concise outfit recommendations based on the user's recent looks and wardrobe.",
+            "Avoid suggesting items the user does not own; keep recommendations within the listed wardrobe pieces.",
+            "Recent outfits (newest first):",
+        ]
+        for entry in history_snapshot:
+            prompt_lines.append(json.dumps(entry, ensure_ascii=False))
+
+        wardrobe_items = db.query(models.Clothes).filter(models.Clothes.user_id == user_id).all()
+        prompt_lines.append("Wardrobe items:")
+        for item in wardrobe_items:
+            prompt_lines.append(json.dumps(_serialize_mannequin_item(item).model_dump(), ensure_ascii=False))
+
+        try:
+            client = get_openai_client()
+            completion = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a concise, practical fashion stylist."},
+                    {"role": "user", "content": "\n".join(prompt_lines)},
+                ],
+                max_tokens=500,
+            )
+            advice = completion.choices[0].message.content if completion.choices else ""
+        except Exception as exc:  # pragma: no cover - external API may fail
+            logger.exception("Recommendation generation failed")
+            return _build_inline_error(str(exc))
+
+        return {
+            "status": "success",
+            "result": {"recommendation": advice},
+        }
+
+
 __all__ = [
     "build_mannequin_prompt",
     "coerce_int",
     "extract_temp_range",
     "filter_by_season",
+    "generate_mannequin_task",
+    "generate_recommendation_task",
     "mannequin_gender_instruction",
     "save_mannequin_image",
     "select_outfit",
