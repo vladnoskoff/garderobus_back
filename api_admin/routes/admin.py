@@ -33,16 +33,26 @@ logger = logging.getLogger(__name__)
 def _get_mannequin_task():
     """Lazy-load mannequin task to tolerate missing PYTHONPATH on startup."""
 
-    try:
-        from tasks.ai import generate_mannequin_task
-    except ImportError as exc:  # pragma: no cover - runtime guard
-        logger.exception("Failed to import generate_mannequin_task")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI задачи недоступны (проверьте PYTHONPATH и установку api)",
-        ) from exc
+    import importlib
 
-    return generate_mannequin_task
+    module_paths = ("tasks.ai", "api.tasks.ai")
+    last_exc: ImportError | None = None
+
+    for module_path in module_paths:
+        try:
+            module = importlib.import_module(module_path)
+            task = getattr(module, "generate_mannequin_task", None)
+            if task:
+                return task
+        except ImportError as exc:
+            last_exc = exc
+            continue
+
+    logger.exception("Failed to import generate_mannequin_task", exc_info=last_exc)
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="AI задачи недоступны (проверьте PYTHONPATH и установку api)",
+    ) from last_exc
 
 
 def _get_current_user(

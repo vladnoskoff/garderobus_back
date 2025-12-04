@@ -17,16 +17,26 @@ router = APIRouter(prefix="/ai", tags=["AI Test"])
 def _get_analyze_task():
     """Lazy-load the analyze task to tolerate missing PYTHONPATH at startup."""
 
-    try:
-        from tasks.ai import analyze_clothes_image_task
-    except ImportError as exc:  # pragma: no cover - defensive guard
-        logger.exception("Failed to import analyze_clothes_image_task")
-        raise HTTPException(
-            status_code=500,
-            detail="AI анализ недоступен (проверьте PYTHONPATH и установку api)",
-        ) from exc
+    import importlib
 
-    return analyze_clothes_image_task
+    module_paths = ("tasks.ai", "api.tasks.ai")
+    last_exc: ImportError | None = None
+
+    for module_path in module_paths:
+        try:
+            module = importlib.import_module(module_path)
+            task = getattr(module, "analyze_clothes_image_task", None)
+            if task:
+                return task
+        except ImportError as exc:
+            last_exc = exc
+            continue
+
+    logger.exception("Failed to import analyze_clothes_image_task", exc_info=last_exc)
+    raise HTTPException(
+        status_code=500,
+        detail="AI анализ недоступен (проверьте PYTHONPATH и установку api)",
+    ) from last_exc
 
 
 def _encode_payload(image_url: Optional[str], file: Optional[bytes]) -> dict:

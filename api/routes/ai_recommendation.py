@@ -33,17 +33,42 @@ INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
+def _import_tasks_module():
+    """Import the Celery tasks module with fallbacks for missing PYTHONPATH."""
+
+    import importlib
+
+    module_paths = ("tasks.ai", "api.tasks.ai")
+    last_exc: ImportError | None = None
+
+    for module_path in module_paths:
+        try:
+            return importlib.import_module(module_path)
+        except ImportError as exc:
+            last_exc = exc
+            continue
+
+    logger.exception("Failed to import AI tasks", exc_info=last_exc)
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="AI задачи недоступны (проверьте PYTHONPATH и установку api пакета)",
+    ) from last_exc
+
+
 def _get_ai_tasks() -> tuple[Callable[..., Any], Callable[..., Any]]:
     """Lazy-load Celery tasks to avoid startup crashes when PYTHONPATH drifts."""
 
-    try:
-        from tasks.ai import generate_mannequin_task, generate_recommendation_task
-    except ImportError as exc:  # pragma: no cover - runtime guard for misaligned PYTHONPATH
-        logger.exception("Failed to import AI tasks")
+    module = _import_tasks_module()
+
+    generate_mannequin_task = getattr(module, "generate_mannequin_task", None)
+    generate_recommendation_task = getattr(module, "generate_recommendation_task", None)
+
+    if not generate_mannequin_task or not generate_recommendation_task:  # pragma: no cover - runtime guard
+        logger.error("AI tasks module missing required callables")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI задачи недоступны (проверьте PYTHONPATH и установку api пакета)",
-        ) from exc
+            detail="AI задачи недоступны (отсутствуют Celery-функции)",
+        )
 
     return generate_mannequin_task, generate_recommendation_task
 
