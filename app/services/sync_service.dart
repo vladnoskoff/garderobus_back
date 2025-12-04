@@ -74,6 +74,9 @@ class SyncService {
         locationId: payload['location_id'] as int?,
         promptDescription: payload['prompt_description'],
         careInstructions: payload['care_instructions'],
+        splitIntoItems: payload['split_into_items'] == true,
+        imagesPerItem: payload['images_per_item'] as int?,
+        labelImageIndex: payload['label_image_index'] as int?,
       );
       final userId = int.tryParse('${payload['user_id']}');
       if (userId != null) {
@@ -116,6 +119,9 @@ class SyncService {
     int? locationId,
     String? promptDescription,
     String? careInstructions,
+    bool splitIntoItems = false,
+    int? imagesPerItem,
+    int? labelImageIndex,
   }) async {
     final action = PendingAction(
       id: PendingActionQueue.buildActionId(),
@@ -133,6 +139,9 @@ class SyncService {
         'prompt_description': promptDescription,
         'care_instructions': careInstructions,
         'images': images.map((e) => e.path).toList(),
+        'split_into_items': splitIntoItems,
+        'images_per_item': imagesPerItem,
+        'label_image_index': labelImageIndex,
       },
       createdAt: DateTime.now(),
     );

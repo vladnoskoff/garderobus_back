@@ -32,9 +32,8 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
   final TextEditingController _colorController = TextEditingController();
   final TextEditingController _materialController = TextEditingController();
   String season = '';
-  final List<File> _images = [];
-  late final PageController _imagePageController;
-  int _currentImageIndex = 0;
+  final List<File> _itemImages = [];
+  final List<File> _labelImages = [];
   bool _isLoading = false;
   bool _useAiAutoFill = true;
   int? _selectedLocationId;
@@ -47,7 +46,6 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
   @override
   void initState() {
     super.initState();
-    _imagePageController = PageController();
     _loadUserIdAndLocations();
   }
 
@@ -221,208 +219,311 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
     }
   }
 
-Future<void> _addImageFromCamera() async {
-  final granted = await _requestPermission(Permission.camera);
-  if (!granted) return;
-  try {
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.rear,
-    );
-    if (pickedFile != null) {
-      final file = File(pickedFile.path);
-      setState(() {
-        _images.insert(0, file);
-        _currentImageIndex = 0;
-      });
-      if (_imagePageController.hasClients) {
-        _imagePageController.jumpToPage(0);
+  Future<void> _addImageFromCamera({required bool forLabels}) async {
+    final granted = await _requestPermission(Permission.camera);
+    if (!granted) return;
+    try {
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        setState(() {
+          final target = forLabels ? _labelImages : _itemImages;
+          target.insert(0, file);
+        });
       }
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть камеру: ${e.message ?? e.code}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при создании фото: $e')),
+      );
     }
-  } on PlatformException catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Не удалось открыть камеру: ${e.message ?? e.code}')),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Ошибка при создании фото: $e')),
-    );
   }
-}
 
-Future<bool> _ensureGalleryPermission() async {
-  if (Platform.isIOS) {
+  Future<bool> _ensureGalleryPermission() async {
+    if (Platform.isIOS) {
+      return await _requestPermission(Permission.photos);
+    }
+    final storageGranted = await _requestPermission(Permission.storage);
+    if (storageGranted) return true;
     return await _requestPermission(Permission.photos);
   }
-  final storageGranted = await _requestPermission(Permission.storage);
-  if (storageGranted) return true;
-  return await _requestPermission(Permission.photos);
-}
 
-Future<void> _addImagesFromGallery() async {
-  final granted = await _ensureGalleryPermission();
-  if (!granted) return;
-  try {
-    final pickedFiles = await picker.pickMultiImage();
-    if (pickedFiles == null || pickedFiles.isEmpty) {
-      return;
+  Future<void> _addImagesFromGallery({required bool forLabels}) async {
+    final granted = await _ensureGalleryPermission();
+    if (!granted) return;
+    try {
+      final pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles == null || pickedFiles.isEmpty) {
+        return;
+      }
+      final target = forLabels ? _labelImages : _itemImages;
+      final existingPaths = target.map((file) => file.path).toSet();
+      final newFiles = pickedFiles
+          .map((picked) => File(picked.path))
+          .where((file) => !existingPaths.contains(file.path))
+          .toList(growable: false);
+      if (newFiles.isEmpty) {
+        return;
+      }
+      setState(() {
+        target.addAll(newFiles);
+      });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть галерею: ${e.message ?? e.code}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при выборе изображений: $e')),
+      );
     }
-    final existingPaths = _images.map((file) => file.path).toSet();
-    final newFiles = pickedFiles
-        .map((picked) => File(picked.path))
-        .where((file) => !existingPaths.contains(file.path))
-        .toList(growable: false);
-    if (newFiles.isEmpty) {
-      return;
-    }
+  }
+
+  void _removeImage({required bool forLabels, required int index}) {
+    final target = forLabels ? _labelImages : _itemImages;
+    if (index < 0 || index >= target.length) return;
     setState(() {
-      _images.addAll(newFiles);
-      _currentImageIndex = _images.length - newFiles.length;
+      target.removeAt(index);
     });
-    if (_imagePageController.hasClients) {
-      _imagePageController.jumpToPage(_currentImageIndex);
-    }
-  } on PlatformException catch (e) {
+  }
+
+  void _setAsPrimary(int index) {
+    if (index <= 0 || index >= _itemImages.length) return;
+    setState(() {
+      final file = _itemImages.removeAt(index);
+      _itemImages.insert(0, file);
+    });
+  }
+
+  Future<void> _showAddImageOptions({required bool forLabels}) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Не удалось открыть галерею: ${e.message ?? e.code}')),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Ошибка при выборе изображений: $e')),
-    );
-  }
-}
-
-void _removeImage(int index) {
-  if (index < 0 || index >= _images.length) return;
-  setState(() {
-    _images.removeAt(index);
-    if (_images.isEmpty) {
-      _currentImageIndex = 0;
-    } else if (_currentImageIndex >= _images.length) {
-      _currentImageIndex = _images.length - 1;
-    }
-  });
-  if (_imagePageController.hasClients && _images.isNotEmpty) {
-    _imagePageController.jumpToPage(_currentImageIndex);
-  }
-}
-
-void _setAsPrimary(int index) {
-  if (index <= 0 || index >= _images.length) return;
-  setState(() {
-    final file = _images.removeAt(index);
-    _images.insert(0, file);
-    _currentImageIndex = 0;
-  });
-  if (_imagePageController.hasClients) {
-    _imagePageController.jumpToPage(0);
-  }
-}
-
-Widget _buildImagesPreview(ColorScheme colorScheme) {
-  if (_images.isEmpty) {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      alignment: Alignment.center,
-      child: const Text('Добавьте хотя бы одно фото одежды'),
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_outlined),
+                  title: const Text('Сделать фото'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (_isLoading) return;
+                    _addImageFromCamera(forLabels: forLabels);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.image_outlined),
+                  title: const Text('Выбрать из галереи'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (_isLoading) return;
+                    _addImagesFromGallery(forLabels: forLabels);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
-  return SizedBox(
-    height: 260,
-    child: Stack(
+  Widget _buildImageCard({
+    required File image,
+    required bool forLabels,
+    required int index,
+    required ColorScheme colorScheme,
+    VoidCallback? onSetPrimary,
+  }) {
+    final isPrimary = onSetPrimary != null && index == 0;
+
+    return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: PageView.builder(
-            controller: _imagePageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentImageIndex = index;
-              });
-            },
-            itemCount: _images.length,
-            itemBuilder: (context, index) {
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant,
-                ),
-                child: Image.file(
-                  _images[index],
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
-              );
-            },
+          borderRadius: BorderRadius.circular(18),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Image.file(
+              image,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
         Positioned(
-          top: 12,
-          right: 12,
-          child: IconButton(
-            style: IconButton.styleFrom(
-              backgroundColor: colorScheme.surface.withOpacity(0.7),
+          top: 8,
+          right: 8,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: colorScheme.surface.withOpacity(0.8),
+            child: IconButton(
+              iconSize: 18,
+              padding: EdgeInsets.zero,
+              onPressed: _isLoading
+                  ? null
+                  : () => _removeImage(forLabels: forLabels, index: index),
+              icon: const Icon(Icons.close_rounded),
             ),
-            onPressed: _isLoading ? null : () => _removeImage(_currentImageIndex),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Удалить фото',
           ),
         ),
-        if (_images.length > 1 && _currentImageIndex != 0)
+        if (onSetPrimary != null)
           Positioned(
-            top: 12,
-            left: 12,
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : () => _setAsPrimary(_currentImageIndex),
-              icon: const Icon(Icons.star),
-              label: const Text('Главное фото'),
-            ),
-          ),
-        if (_images.length > 1)
-          Positioned(
-            bottom: 12,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_images.length, (index) {
-                final bool isActive = index == _currentImageIndex;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: isActive ? 14 : 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              }),
+            bottom: 8,
+            left: 8,
+            child: FilterChip(
+              selected: isPrimary,
+              label: Text(isPrimary ? 'Главное' : 'Сделать главным'),
+              avatar: Icon(
+                isPrimary ? Icons.star : Icons.star_border,
+                color:
+                    isPrimary ? colorScheme.onPrimaryContainer : colorScheme.primary,
+              ),
+              onSelected: _isLoading || isPrimary ? null : (_) => onSetPrimary(),
             ),
           ),
       ],
-    ),
-  );
-}
+    );
+  }
+
+  Widget _buildImageGrid({
+    required String title,
+    required String description,
+    required List<File> images,
+    required bool forLabels,
+    required ColorScheme colorScheme,
+    void Function()? onAdd,
+    VoidCallback? onAddPressed,
+    void Function(int index)? onSetPrimary,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style:
+              Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          description,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: colorScheme.onSurfaceVariant.withOpacity(0.8)),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final itemWidth = (width - 12) / 2;
+            final children = <Widget>[
+              ...List.generate(images.length, (index) {
+                return SizedBox(
+                  width: itemWidth,
+                  child: _buildImageCard(
+                    image: images[index],
+                    forLabels: forLabels,
+                    index: index,
+                    colorScheme: colorScheme,
+                    onSetPrimary:
+                        onSetPrimary == null ? null : () => onSetPrimary(index),
+                  ),
+                );
+              }),
+              SizedBox(
+                width: itemWidth,
+                child: _buildAddTile(colorScheme: colorScheme, onTap: onAdd ?? onAddPressed),
+              ),
+            ];
+
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: children,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddTile({
+    required ColorScheme colorScheme,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 140,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.4)),
+          color: colorScheme.surfaceVariant.withOpacity(0.4),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_a_photo_outlined, color: colorScheme.onSurfaceVariant),
+              const SizedBox(height: 8),
+              const Text('Добавить'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+      validator: validator,
+    );
+  }
 
   Future<void> submit() async {
     if (!_useAiAutoFill && !_formKey.currentState!.validate()) {
       return;
     }
 
-    if (_images.isEmpty) {
+    if (_itemImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Добавьте хотя бы одно изображение')),
       );
@@ -434,6 +535,16 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     });
 
     try {
+      final combinedImages = <File>[..._itemImages, ..._labelImages];
+      final bool hasLabels = _labelImages.isNotEmpty;
+      final int? labelImageIndex = hasLabels ? _itemImages.length + 1 : null;
+
+      final bool shouldSplitIntoPairs =
+          _itemImages.length > 1 && _itemImages.length == _labelImages.length;
+      final bool splitIntoItems = shouldSplitIntoPairs;
+      final int? imagesPerItem = shouldSplitIntoPairs ? 2 : null;
+      final int? groupLabelIndex = shouldSplitIntoPairs ? 2 : labelImageIndex;
+
       final isOnline = await NetworkService.isConnected();
       await ApiService.addClothes(
         name: _useAiAutoFill ? '' : _nameController.text.trim(),
@@ -443,9 +554,12 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
         material: _materialController.text.trim().isEmpty
             ? null
             : _materialController.text.trim(),
-        images: List<File>.from(_images),
+        images: combinedImages,
         autoFill: _useAiAutoFill,
         locationId: _selectedLocationId,
+        splitIntoItems: splitIntoItems,
+        imagesPerItem: imagesPerItem,
+        labelImageIndex: groupLabelIndex,
       );
 
       if (!mounted) return;
@@ -478,7 +592,6 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     _categoryController.dispose();
     _colorController.dispose();
     _materialController.dispose();
-    _imagePageController.dispose();
     super.dispose();
   }
 
@@ -541,23 +654,14 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
                   children: [
                     Container(
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            colorScheme.primaryContainer
-                                .withOpacity(theme.brightness == Brightness.dark ? 0.35 : 0.85),
-                            colorScheme.surfaceVariant
-                                .withOpacity(theme.brightness == Brightness.dark ? 0.3 : 0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
+                        color: colorScheme.surfaceVariant.withOpacity(0.35),
                         borderRadius: BorderRadius.circular(28),
                         border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
+                            color: Colors.black.withOpacity(0.12),
+                            blurRadius: 26,
+                            offset: const Offset(0, 14),
                           ),
                         ],
                       ),
@@ -566,63 +670,80 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(Icons.add_photo_alternate_outlined,
-                                  color: colorScheme.onPrimaryContainer),
-                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: colorScheme.primary.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Icon(Icons.style_outlined, color: colorScheme.primary),
+                              ),
+                              const SizedBox(width: 12),
                               Expanded(
-                                child: Text(
-                                  'Заполните карточку вещи и добавьте фото',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onPrimaryContainer,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Заполните карточку вещи',
+                                      style: theme.textTheme.titleMedium?.copyWith(
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Загрузите фото, и мы попробуем определить название, категорию и цвет автоматически.',
+                                      style: theme.textTheme.bodyMedium?.copyWith(
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
-                          DropdownButtonFormField<bool>(
-                            value: _useAiAutoFill,
-                            decoration: InputDecoration(
-                              labelText: 'Заполнение данных',
-                              border:
-                                  OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
-                              filled: true,
-                              fillColor: colorScheme.surface.withOpacity(
-                                theme.brightness == Brightness.dark ? 0.35 : 0.9,
+                          const SizedBox(height: 16),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
+                            children: [
+                              ChoiceChip(
+                                label: const Text('Заполнить самостоятельно'),
+                                selected: !_useAiAutoFill,
+                                onSelected: _isLoading
+                                    ? null
+                                    : (selected) {
+                                        setState(() {
+                                          _useAiAutoFill = !selected;
+                                        });
+                                      },
                               ),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: false,
-                                child: Text('Заполнить самостоятельно'),
-                              ),
-                              DropdownMenuItem(
-                                value: true,
-                                child: Text('Использовать заполнение ИИ'),
+                              ChoiceChip(
+                                label: const Text('Использовать заполнение ИИ'),
+                                selected: _useAiAutoFill,
+                                onSelected: _isLoading
+                                    ? null
+                                    : (selected) {
+                                        setState(() {
+                                          _useAiAutoFill = selected;
+                                        });
+                                      },
                               ),
                             ],
-                            onChanged: (value) {
-                              setState(() {
-                                _useAiAutoFill = value ?? false;
-                              });
-                            },
                           ),
                           const SizedBox(height: 16),
                           if (_isLocationsLoading)
-                            const LinearProgressIndicator()
+                            const LinearProgressIndicator(minHeight: 4)
                           else if (_locations.isNotEmpty)
                             DropdownButtonFormField<int?>(
                               value: _selectedLocationId,
                               decoration: InputDecoration(
                                 labelText: 'Локация гардероба',
+                                filled: true,
+                                fillColor: colorScheme.surface,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(18),
-                                ),
-                                filled: true,
-                                fillColor: colorScheme.surface.withOpacity(
-                                  theme.brightness == Brightness.dark ? 0.35 : 0.9,
                                 ),
                               ),
                               items: [
@@ -645,8 +766,8 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
                                   );
                                 }
                               },
-                            ),
-                          if (_locations.isEmpty && !_isLocationsLoading)
+                            )
+                          else
                             Container(
                               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                               decoration: BoxDecoration(
@@ -660,60 +781,28 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
                                 style: theme.textTheme.bodyMedium,
                               ),
                             ),
-                          const SizedBox(height: 20),
-                          if (_useAiAutoFill)
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: colorScheme.secondaryContainer.withOpacity(
-                                  theme.brightness == Brightness.dark ? 0.35 : 0.7,
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Text(
-                                'Загрузите фото, а мы попробуем определить название, категорию и цвет автоматически.',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSecondaryContainer,
-                                ),
-                              ),
-                            ),
+                          const SizedBox(height: 18),
                           if (!_useAiAutoFill) ...[
-                            TextFormField(
+                            _buildTextField(
                               controller: _nameController,
-                              decoration: InputDecoration(
-                                labelText: 'Название',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Введите название';
-                                }
-                                return null;
-                              },
+                              label: 'Название',
+                              validator: (value) =>
+                                  value == null || value.trim().isEmpty ? 'Введите название' : null,
                             ),
-                            const SizedBox(height: 14),
-                            TextFormField(
+                            const SizedBox(height: 12),
+                            _buildTextField(
                               controller: _categoryController,
-                              decoration: InputDecoration(
-                                labelText: 'Категория',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Введите категорию';
-                                }
-                                return null;
-                              },
+                              label: 'Категория',
+                              validator: (value) =>
+                                  value == null || value.trim().isEmpty ? 'Введите категорию' : null,
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 12),
                             DropdownButtonFormField<String>(
                               value: season.isNotEmpty ? season : null,
                               decoration: InputDecoration(
                                 labelText: 'Сезон',
+                                filled: true,
+                                fillColor: colorScheme.surface,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(18),
                                 ),
@@ -733,72 +822,59 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
                                 return null;
                               },
                             ),
-                            const SizedBox(height: 14),
-                            TextFormField(
+                            const SizedBox(height: 12),
+                            _buildTextField(
                               controller: _colorController,
-                              decoration: InputDecoration(
-                                labelText: 'Цвет',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Введите цвет';
-                                }
-                                return null;
-                              },
+                              label: 'Цвет',
+                              validator: (value) =>
+                                  value == null || value.trim().isEmpty ? 'Введите цвет' : null,
                             ),
-                            const SizedBox(height: 14),
-                            TextFormField(
+                            const SizedBox(height: 12),
+                            _buildTextField(
                               controller: _materialController,
-                              decoration: InputDecoration(
-                                labelText: 'Материал (необязательно)',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
+                              label: 'Материал (необязательно)',
+                              validator: null,
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 10),
                           ],
-                          Text(
-                            'Фотографии',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
+                          const SizedBox(height: 6),
+                          _buildImageGrid(
+                            title: 'Фотографии вещи',
+                            description: 'Добавьте основной вид, спину или другие ракурсы.',
+                            images: _itemImages,
+                            forLabels: false,
+                            colorScheme: colorScheme,
+                            onAdd: _isLoading
+                                ? null
+                                : () => _showAddImageOptions(forLabels: false),
+                            onSetPrimary: (index) => _setAsPrimary(index),
                           ),
-                          const SizedBox(height: 10),
-                          _buildImagesPreview(colorScheme),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              FilledButton.tonalIcon(
-                                onPressed: _isLoading ? null : _addImageFromCamera,
-                                icon: const Icon(Icons.camera_alt_outlined),
-                                label: const Text('Камера'),
-                              ),
-                              FilledButton.tonalIcon(
-                                onPressed: _isLoading ? null : _addImagesFromGallery,
-                                icon: const Icon(Icons.image_outlined),
-                                label: const Text('Галерея'),
-                              ),
-                            ],
+                          const SizedBox(height: 18),
+                          _buildImageGrid(
+                            title: 'Фотографии бирок',
+                            description: 'Прикрепите бирку или информацию по уходу за вещью.',
+                            images: _labelImages,
+                            forLabels: true,
+                            colorScheme: colorScheme,
+                            onAdd: _isLoading
+                                ? null
+                                : () => _showAddImageOptions(forLabels: true),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 18),
                           Text(
-                            'Первое фото станет главным. При необходимости переставьте порядок.',
+                            'Первое фото станет главным для вещи. При парной загрузке (фото + бирка) одинаковым количеством снимков мы создадим отдельную вещь на каждую пару.',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: colorScheme.onSurfaceVariant,
                             ),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 18),
                           FilledButton(
                             onPressed: _isLoading ? null : submit,
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
                             ),
                             child: _isLoading
                                 ? SizedBox(
