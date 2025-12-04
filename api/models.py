@@ -69,6 +69,7 @@ class Clothes(Base):
     color = Column(String, nullable=False)
     material = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
+    label_image_url = Column(String, nullable=True)
     created_at = Column(TIMESTAMP, default=func.now())
     prompt_description = Column(Text, nullable=True)
     care_instructions = Column(Text, nullable=True)
@@ -188,6 +189,7 @@ class ClothesImage(Base):
     )
     image_url = Column(String, nullable=False)
     is_primary = Column(Boolean, nullable=False, default=False, server_default="false")
+    is_label = Column(Boolean, nullable=False, default=False, server_default="false")
     created_at = Column(TIMESTAMP, server_default=func.now())
 
     clothes = relationship("Clothes", back_populates="images")

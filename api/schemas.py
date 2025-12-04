@@ -95,6 +95,7 @@ class ClothesCreate(BaseModel):
     color: str
     material: Optional[str] = None
     image_url: Optional[str] = None
+    label_image_url: Optional[str] = None
     prompt_description: Optional[str] = None
     care_instructions: Optional[str] = None
     temperature_min: Optional[int] = None

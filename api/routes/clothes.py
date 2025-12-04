@@ -312,6 +312,7 @@ async def add_clothes(
     auto_fill: bool = Form(False),
     split_into_items: bool = Form(False),
     images_per_item: int = Form(1),
+    label_image_index: Optional[int] = Form(None),
     location_id: Optional[int] = Form(None),
     language_code: Optional[str] = Form(None),
     files: list[UploadFile] = File(...),
@@ -479,7 +480,7 @@ async def add_clothes(
         )
 
     async def _create_single_clothes(
-        upload_items: list[tuple[UploadFile, bytes]]
+        upload_items: list[tuple[UploadFile, bytes]], label_position: Optional[int]
     ) -> models.Clothes:
         fields, metadata_payload = await _build_fields_for_upload(
             upload_items[0][1]
@@ -506,6 +507,7 @@ async def add_clothes(
         destination_dir = _gallery_dir(user_id, location_segment, new_clothes.id)
 
         saved_files: list[tuple[str, bool]] = []
+        label_url: Optional[str] = None
         try:
             destination_dir.mkdir(parents=True, exist_ok=True)
             for index, (upload, content) in enumerate(upload_items, start=1):
@@ -520,7 +522,10 @@ async def add_clothes(
                     f"{user_id}/{location_segment}/{new_clothes.id}/{unique_name}"
                 )
                 image_url = _build_image_url(relative_path)
-                saved_files.append((image_url, index == 1))
+                is_label = label_position is not None and index == label_position
+                if is_label:
+                    label_url = image_url
+                saved_files.append((image_url, index == 1, is_label))
         except Exception as exc:
             shutil.rmtree(destination_dir, ignore_errors=True)
             db.rollback()
@@ -536,12 +541,15 @@ async def add_clothes(
             )
 
         new_clothes.image_url = saved_files[0][0]
-        for image_url, is_primary in saved_files:
+        new_clothes.label_image_url = label_url
+
+        for image_url, is_primary, is_label in saved_files:
             db.add(
                 models.ClothesImage(
                     clothes_id=new_clothes.id,
                     image_url=image_url,
                     is_primary=is_primary,
+                    is_label=is_label,
                 )
             )
 
@@ -555,6 +563,20 @@ async def add_clothes(
         db.refresh(new_clothes)
         return new_clothes
 
+    def _label_position_for_group(group_size: int) -> Optional[int]:
+        if label_image_index is None:
+            return None
+        if label_image_index < 1:
+            raise HTTPException(
+                status_code=400, detail="Позиция изображения бирки должна быть больше нуля"
+            )
+        if label_image_index > group_size:
+            raise HTTPException(
+                status_code=400,
+                detail="Позиция бирки превышает количество изображений в группе",
+            )
+        return label_image_index
+
     if images_per_item < 1:
         raise HTTPException(
             status_code=400,
@@ -567,17 +589,27 @@ async def add_clothes(
         for upload, content in uploads:
             chunk.append((upload, content))
             if len(chunk) == images_per_item:
-                created.append(await _create_single_clothes(chunk))
+                created.append(
+                    await _create_single_clothes(
+                        chunk, _label_position_for_group(images_per_item)
+                    )
+                )
                 chunk = []
 
         if chunk:
-            created.append(await _create_single_clothes(chunk))
+            created.append(
+                await _create_single_clothes(
+                    chunk, _label_position_for_group(len(chunk))
+                )
+            )
 
         invalidate_clothes_for_user(user_id)
         invalidate_outfit_history_for_user(user_id)
         return created
 
-    new_clothes = await _create_single_clothes(uploads)
+    new_clothes = await _create_single_clothes(
+        uploads, _label_position_for_group(len(uploads))
+    )
     invalidate_clothes_for_user(new_clothes.user_id)
     invalidate_outfit_history_for_user(new_clothes.user_id)
     return new_clothes
@@ -628,6 +660,12 @@ def update_clothes(
                 if cover_relative:
                     filename = Path(cover_relative).name
                     clothes.image_url = _build_image_url(
+                        f"{clothes.user_id}/{new_segment}/{clothes.id}/{filename}"
+                    )
+                label_relative = _relative_image_path(clothes.label_image_url)
+                if label_relative:
+                    filename = Path(label_relative).name
+                    clothes.label_image_url = _build_image_url(
                         f"{clothes.user_id}/{new_segment}/{clothes.id}/{filename}"
                     )
         clothes.location_id = payload.location_id
