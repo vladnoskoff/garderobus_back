@@ -71,6 +71,10 @@ class AdminSystemStatus(BaseModel):
     maintenance_enabled: bool = False
     maintenance_supported: bool = False
     test_webhook_configured: bool = False
+    api_uptime_seconds: Optional[float] = None
+    api_uptime_human: Optional[str] = None
+    admin_api_uptime_seconds: Optional[float] = None
+    admin_api_uptime_human: Optional[str] = None
 
 
 class AdminQueueTask(BaseModel):
@@ -133,6 +137,38 @@ class AdminSystemEventList(BaseModel):
     total: int = 0
     page: int = 1
     limit: int = 50
+
+
+class AdminIpBlock(BaseModel):
+    ip: str
+    note: Optional[str] = None
+    added_at: datetime
+
+
+class AdminIpBlockRequest(BaseModel):
+    ip: str
+    note: Optional[str] = None
+
+
+class AdminIpBlockList(BaseModel):
+    blocks: List[AdminIpBlock] = Field(default_factory=list)
+
+
+class AdminSystemEventExclusion(BaseModel):
+    id: str
+    category: str
+    path: str
+    method: Optional[str] = None
+
+
+class AdminSystemEventExclusionRequest(BaseModel):
+    category: str
+    path: str
+    method: Optional[str] = None
+
+
+class AdminSystemEventExclusionList(BaseModel):
+    exclusions: List[AdminSystemEventExclusion] = Field(default_factory=list)
 
 
 class AdminActivityMetrics(BaseModel):

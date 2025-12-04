@@ -80,6 +80,11 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_FILE = os.getenv("LOG_FILE", "/var/log/garderobus/api.log")
 LOG_FILE_BACKUP_COUNT = int(os.getenv("LOG_FILE_BACKUP_COUNT", "7"))
+POSTGRES_LOG_DIR = Path(
+    os.getenv("POSTGRES_LOG_DIR", "/var/lib/postgresql/16/main/log")
+)
+# Вторичный путь, если стандартный каталог журналов PostgreSQL отличается.
+POSTGRES_FALLBACK_LOG_DIR = Path("/var/log/postgresql")
 API_RATE_LIMIT = os.getenv("API_RATE_LIMIT", "120/minute")
 
 # Distributed tracing / OpenTelemetry
@@ -128,7 +133,7 @@ CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.getenv(
         "CORS_ALLOWED_ORIGINS",
-        "http://garderobus.tech,https://garderobus.tech",
+        "*",
     ).split(",")
     if origin.strip()
 ]
@@ -154,10 +159,21 @@ ADMIN_ADMIN_RESTART_COMMAND = os.getenv("ADMIN_ADMIN_RESTART_COMMAND", "")
 ADMIN_ALLOW_ADMIN_RESTART = os.getenv("ADMIN_ALLOW_ADMIN_RESTART", "true").lower() == "true"
 ADMIN_WORKER_RESTART_COMMAND = os.getenv("ADMIN_WORKER_RESTART_COMMAND", "")
 ADMIN_ALLOW_WORKER_RESTART = os.getenv("ADMIN_ALLOW_WORKER_RESTART", "true").lower() == "true"
+API_HEALTH_URL = os.getenv("API_HEALTH_URL", "http://localhost:8000/healthz")
+ADMIN_API_HEALTH_URL = os.getenv("ADMIN_API_HEALTH_URL", "http://localhost:8100/healthz")
 ADMIN_MAINTENANCE_ENABLE_COMMAND = os.getenv("ADMIN_MAINTENANCE_ENABLE_COMMAND", "")
 ADMIN_MAINTENANCE_DISABLE_COMMAND = os.getenv("ADMIN_MAINTENANCE_DISABLE_COMMAND", "")
 ADMIN_MAINTENANCE_INITIAL_STATE = os.getenv("ADMIN_MAINTENANCE_INITIAL_STATE", "false").lower() == "true"
 ADMIN_TEST_WEBHOOK_URL = os.getenv("ADMIN_TEST_WEBHOOK_URL", "")
+ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH = Path(
+    os.getenv("ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH", str(BASE_DIR / "system_event_exclusions.json"))
+)
+ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+IP_BLOCKLIST_PATH = Path(
+    os.getenv("IP_BLOCKLIST_PATH", str(BASE_DIR / "ip_blocklist.json"))
+)
+IP_BLOCKLIST_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 ADMIN_MANAGED_CODE_ROOT = Path(
     os.getenv("ADMIN_MANAGED_CODE_ROOT", str(BASE_DIR))

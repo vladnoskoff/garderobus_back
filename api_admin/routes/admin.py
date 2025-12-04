@@ -388,11 +388,78 @@ def get_queue_snapshot(
 def get_system_events(
     level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),
     hours: Optional[int] = Query(None, ge=1, le=24 * 30),
-    limit: int = Query(50, ge=1, le=200),
+    auth: Optional[str] = Query(None, pattern=r"^(authorized|unauthorized)$"),
+    limit: int = Query(10, ge=1, le=200),
     page: int = Query(1, ge=1),
     _: models.User = Depends(_get_current_user),
 ) -> admin_schemas.AdminSystemEventList:
-    return system_tools.get_system_events(level=level, hours=hours, limit=limit, page=page)
+    return system_tools.get_system_events(
+        level=level,
+        hours=hours,
+        auth=auth,
+        limit=limit,
+        page=page,
+    )
+
+
+@router.get(
+    "/system/events/exclusions",
+    response_model=admin_schemas.AdminSystemEventExclusionList,
+)
+def get_event_exclusions(
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminSystemEventExclusionList:
+    return system_tools.list_event_exclusions()
+
+
+@router.post(
+    "/system/events/exclusions",
+    response_model=admin_schemas.AdminSystemEventExclusionList,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_event_exclusion(
+    payload: admin_schemas.AdminSystemEventExclusionRequest,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminSystemEventExclusionList:
+    return system_tools.add_event_exclusion(payload)
+
+
+@router.delete(
+    "/system/events/exclusions/{exclusion_id}",
+    response_model=admin_schemas.AdminSystemEventExclusionList,
+)
+def delete_event_exclusion(
+    exclusion_id: str,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminSystemEventExclusionList:
+    return system_tools.remove_event_exclusion(exclusion_id)
+
+
+@router.get("/system/ip-blocks", response_model=admin_schemas.AdminIpBlockList)
+def get_ip_blocks(
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminIpBlockList:
+    return system_tools.list_ip_blocks()
+
+
+@router.post(
+    "/system/ip-blocks",
+    response_model=admin_schemas.AdminIpBlockList,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_ip_block(
+    payload: admin_schemas.AdminIpBlockRequest,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminIpBlockList:
+    return system_tools.add_ip_block(payload)
+
+
+@router.delete("/system/ip-blocks/{ip}", response_model=admin_schemas.AdminIpBlockList)
+def delete_ip_block(
+    ip: str,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminIpBlockList:
+    return system_tools.remove_ip_block(ip)
 
 
 @router.get("/system/files", response_model=admin_schemas.AdminManagedFileList)

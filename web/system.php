@@ -23,6 +23,7 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <a href="dashboard.php">Пользователи</a>
           <a href="stats.php">Статистика</a>
           <a href="system.php" class="active">Система</a>
+          <a href="events.php">События и логи</a>
           <a href="database.php">База данных</a>
           <a href="notifications.php">Уведомления</a>
         </nav>
@@ -66,29 +67,23 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <p id="system-status-loading" class="text-muted">Загрузка состояния сервиса...</p>
           <div class="system-metrics-grid hidden" id="system-status-grid">
             <div class="stat-card system-card">
-              <h3>Аптайм сервиса</h3>
-              <strong id="system-uptime">—</strong>
-              <span>В секундах: <span id="system-uptime-seconds">0</span></span>
+              <h3>Приложение (api:8000)</h3>
+              <strong id="system-api-uptime">—</strong>
+              <span>В секундах: <span id="system-api-uptime-seconds">0</span></span>
+              <span class="text-muted">Последний запрос на перезапуск: <span id="system-last-restart">—</span></span>
+              <span>Перезапуск: <span id="system-restart-state">Недоступно</span></span>
+            </div>
+            <div class="stat-card system-card">
+              <h3>Админ API (api_admin:8100)</h3>
+              <strong id="system-admin-uptime">—</strong>
+              <span>В секундах: <span id="system-admin-uptime-seconds">0</span></span>
+              <span class="text-muted">Последний запрос на перезапуск: <span id="system-admin-last-restart">—</span></span>
+              <span>Перезапуск: <span id="system-admin-restart-state">Недоступно</span></span>
             </div>
             <div class="stat-card system-card">
               <h3>Версия и окружение</h3>
               <strong id="system-app-name">—</strong>
               <span>Версия: <span id="system-app-version">—</span> · Окружение: <span id="system-environment">—</span></span>
-            </div>
-            <div class="stat-card system-card">
-              <h3>Перезапуск API</h3>
-              <strong id="system-restart-state">Недоступно</strong>
-              <span>Последний запрос: <span id="system-last-restart">—</span></span>
-            </div>
-            <div class="stat-card system-card">
-              <h3>Перезапуск админ API</h3>
-              <strong id="system-admin-restart-state">Недоступно</strong>
-              <span>Последний запрос: <span id="system-admin-last-restart">—</span></span>
-            </div>
-            <div class="stat-card system-card">
-              <h3>Редактируемые файлы</h3>
-              <strong id="system-files-count">0</strong>
-              <div id="system-files-list" class="system-files-list tag-list"></div>
             </div>
             <div class="stat-card system-card">
               <h3>Статусы сервисов</h3>
@@ -97,67 +92,6 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           </div>
         </section>
 
-        <section class="card system-events" style="margin-top: 24px;">
-          <div class="flex-between" style="margin: 16px 0; align-items: flex-start; gap: 12px; flex-wrap: wrap;">
-            <div>
-              <h3 style="margin: 0;">События и логи</h3>
-              <p class="text-muted" style="margin: 4px 0 0;">Отображаются последние системные записи.</p>
-            </div>
-            <div class="flex-column gap-xs" style="flex: 1 1 420px;">
-              <div class="flex gap-sm" style="flex-wrap: wrap;">
-                <label class="filter-control">
-                  <span class="text-muted">Тип события</span>
-                  <select id="system-events-level">
-                    <option value="">Все</option>
-                    <option value="info">Информация</option>
-                    <option value="warning">Предупреждения</option>
-                    <option value="error">Ошибки</option>
-                  </select>
-                </label>
-                <label class="filter-control">
-                  <span class="text-muted">Период</span>
-                  <select id="system-events-period">
-                    <option value="">Весь</option>
-                    <option value="24">24 часа</option>
-                    <option value="72">3 дня</option>
-                    <option value="168">7 дней</option>
-                  </select>
-                </label>
-                <label class="filter-control">
-                  <span class="text-muted">На странице</span>
-                  <select id="system-events-limit">
-                    <option value="10">10</option>
-                    <option value="20" selected>20</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                  </select>
-                </label>
-              </div>
-              <div class="flex gap-sm system-events-meta" style="flex-wrap: wrap; align-items: center;">
-                <span class="text-muted" id="system-events-updated-at">Автообновление каждые 5 секунд</span>
-                <button class="secondary" type="button" id="system-events-refresh">Обновить сейчас</button>
-                <label class="toggle" style="margin-left: auto;">
-                  <input type="checkbox" id="system-events-show-empty" />
-                  <span>Показывать пустые категории</span>
-                </label>
-              </div>
-            </div>
-          </div>
-
-          <div id="system-events-error" class="alert hidden" style="margin-bottom: 12px;"></div>
-          <p id="system-events-loading" class="text-muted">Загрузка событий...</p>
-          <p id="system-events-empty" class="text-muted hidden">Событий не найдено за выбранный период.</p>
-
-          <div class="events-group-container hidden" id="system-events-wrapper">
-            <div id="system-events-groups" class="events-groups"></div>
-          </div>
-
-          <div class="pagination" id="system-events-pagination">
-            <button class="secondary" type="button" id="system-events-prev">Назад</button>
-            <span class="text-muted" id="system-events-page-info">Страница 1</span>
-            <button class="secondary" type="button" id="system-events-next">Вперед</button>
-          </div>
-        </section>
       </main>
     </div>
 
@@ -193,10 +127,10 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
             <div id="queue-list" class="queue-list"></div>
           </section>
 
-          <section id="drawer-code-editor" class="drawer-section hidden">
-            <p class="text-muted" style="margin-top: 0;">
-              Управляйте сервисными сценариями прямо из браузера. Все изменения сразу сохраняются в файловой системе API.
-            </p>
+            <section id="drawer-code-editor" class="drawer-section hidden">
+              <p class="text-muted" style="margin-top: 0;">
+                Управляйте сервисными сценариями прямо из браузера. Все изменения сразу сохраняются в файловой системе API.
+              </p>
             <div class="flex-column gap-md">
               <label class="flex-column gap-sm">
                 <span>Файл</span>
@@ -219,12 +153,13 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
                 <button class="primary" type="button" id="code-editor-save">Сохранить изменения</button>
               </div>
             </div>
-            <p id="code-editor-loading" class="text-muted hidden">Загрузка файла...</p>
-            <div id="code-editor-status" class="alert hidden" style="margin-top: 16px;"></div>
-          </section>
+              <p id="code-editor-loading" class="text-muted hidden">Загрузка файла...</p>
+              <div id="code-editor-status" class="alert hidden" style="margin-top: 16px;"></div>
+            </section>
+
+          </div>
         </div>
       </div>
-    </div>
 
     <script>
       window.APP_CONFIG = {

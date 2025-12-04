@@ -937,7 +937,7 @@ body[data-page="database"] .table td {
 
 .events-groups {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(520px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 16px;
 }
 
@@ -993,6 +993,94 @@ body[data-page="database"] .table td {
 .event-message-secondary {
   margin-top: 2px;
   font-size: 13px;
+  color: #4b5563;
+  font-family: "SFMono-Regular", "Menlo", "Monaco", Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.event-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.event-card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 6px 14px rgba(15, 23, 42, 0.05);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.event-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 18px rgba(15, 23, 42, 0.08);
+}
+
+.event-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.event-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.event-card-header-right {
+  display: flex;
+  align-items: center;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.pill-soft {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.pill-ghost {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.pill-info {
+  background: #ecfeff;
+  color: #0ea5e9;
+}
+
+.pill-warning {
+  background: #fff7ed;
+  color: #f97316;
+}
+
+.pill-error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.event-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .event-meta-list {
@@ -1019,6 +1107,8 @@ body[data-page="database"] .table td {
 .event-meta-value {
   color: #374151;
   font-size: 13px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .events-subtable td:nth-child(3) {

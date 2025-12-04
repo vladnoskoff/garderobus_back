@@ -23,6 +23,7 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
           <a href="dashboard.php">Пользователи</a>
           <a href="stats.php">Статистика</a>
           <a href="system.php">Система</a>
+          <a href="events.php">События и логи</a>
           <a href="database.php">База данных</a>
           <a href="notifications.php" class="active">Уведомления</a>
         </nav>

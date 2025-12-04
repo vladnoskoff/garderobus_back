@@ -69,8 +69,10 @@
     systemStatusLoading: document.getElementById("system-status-loading"),
     systemStatusError: document.getElementById("system-status-error"),
     systemStatusFeedback: document.getElementById("system-status-feedback"),
-    systemUptime: document.getElementById("system-uptime"),
-    systemUptimeSeconds: document.getElementById("system-uptime-seconds"),
+    systemApiUptime: document.getElementById("system-api-uptime"),
+    systemApiUptimeSeconds: document.getElementById("system-api-uptime-seconds"),
+    systemAdminUptime: document.getElementById("system-admin-uptime"),
+    systemAdminUptimeSeconds: document.getElementById("system-admin-uptime-seconds"),
     systemAppName: document.getElementById("system-app-name"),
     systemAppVersion: document.getElementById("system-app-version"),
     systemEnvironment: document.getElementById("system-environment"),
@@ -95,6 +97,8 @@
     systemEventsPeriod: document.getElementById("system-events-period"),
     systemEventsLimit: document.getElementById("system-events-limit"),
     systemEventsRefresh: document.getElementById("system-events-refresh"),
+    systemIpBlocks: document.getElementById("system-ip-blocks"),
+    systemEventsExclusions: document.getElementById("system-events-exclusions"),
     systemEventsUpdatedAt: document.getElementById("system-events-updated-at"),
     systemEventsShowEmpty: document.getElementById("system-events-show-empty"),
     systemEventsPrev: document.getElementById("system-events-prev"),
@@ -110,6 +114,21 @@
     codeEditorSave: document.getElementById("code-editor-save"),
     codeEditorStatus: document.getElementById("code-editor-status"),
     codeEditorLoading: document.getElementById("code-editor-loading"),
+    drawerEventExclusionsSection: document.getElementById("drawer-event-exclusions"),
+    drawerIpBlocksSection: document.getElementById("drawer-ip-blocks"),
+    eventExclusionsForm: document.getElementById("event-exclusions-form"),
+    eventExclusionsCategory: document.getElementById("event-exclusions-category"),
+    eventExclusionsMethod: document.getElementById("event-exclusions-method"),
+    eventExclusionsPath: document.getElementById("event-exclusions-path"),
+    eventExclusionsBody: document.getElementById("event-exclusions-body"),
+    eventExclusionsEmpty: document.getElementById("event-exclusions-empty"),
+    eventExclusionsStatus: document.getElementById("event-exclusions-status"),
+    ipBlocksForm: document.getElementById("ip-blocks-form"),
+    ipBlocksAddress: document.getElementById("ip-blocks-address"),
+    ipBlocksNote: document.getElementById("ip-blocks-note"),
+    ipBlocksStatus: document.getElementById("ip-blocks-status"),
+    ipBlocksBody: document.getElementById("ip-blocks-body"),
+    ipBlocksEmpty: document.getElementById("ip-blocks-empty"),
     queueButton: document.getElementById("queue-button"),
     queueCount: document.getElementById("queue-count"),
     queueDrawerSection: document.getElementById("drawer-queue"),
@@ -167,6 +186,14 @@
       refreshInterval: null,
       latestEvents: [],
       showEmpty: false,
+      exclusions: [],
+      exclusionsLoaded: false,
+      exclusionsLoading: false,
+    },
+    ipBlocks: {
+      items: [],
+      loaded: false,
+      loading: false,
     },
     queueSnapshot: null,
     queueLoadedOnce: false,
@@ -211,6 +238,8 @@
       elements.drawerDetailSection,
       elements.drawerCodeEditorSection,
       elements.queueDrawerSection,
+      elements.drawerEventExclusionsSection,
+      elements.drawerIpBlocksSection,
     ];
     sections.forEach((item) => {
       if (item) {
@@ -229,6 +258,10 @@
         title = "Редактор кода";
       } else if (mode === "queue") {
         title = "Очередь задач";
+      } else if (mode === "event-exclusions") {
+        title = "Исключения событий";
+      } else if (mode === "ip-blocks") {
+        title = "Блокировка IP";
       }
       elements.drawerTitle.textContent = title;
     }
@@ -244,6 +277,10 @@
       }
     } else if (mode === "queue") {
       showDrawerSection(elements.queueDrawerSection);
+    } else if (mode === "event-exclusions") {
+      showDrawerSection(elements.drawerEventExclusionsSection);
+    } else if (mode === "ip-blocks") {
+        showDrawerSection(elements.drawerIpBlocksSection);
     } else {
       showDrawerSection(elements.drawerDetailSection);
     }
@@ -940,9 +977,18 @@
     return event.message || "—";
   }
 
+  function formatClientOrigin(origin, hint) {
+    const normalized = String(origin || "unknown").toLowerCase();
+    const label = CLIENT_ORIGIN_LABELS[normalized] || CLIENT_ORIGIN_LABELS.unknown;
+    if (hint) {
+      return `${label} (${hint})`;
+    }
+    return label;
+  }
+
   const EVENT_CATEGORY_ORDER = [
     "application",
-    "api",
+    "api_admin",
     "database",
     "xray",
     "workers",
@@ -951,7 +997,7 @@
 
   const EVENT_CATEGORY_LABELS = {
     application: "Приложение",
-    api: "API",
+    api_admin: "Api_admin",
     database: "База данных",
     xray: "VPN / Xray",
     workers: "Очереди и воркеры",
@@ -959,16 +1005,28 @@
   };
 
   const EVENT_CATEGORY_HINTS = {
-    application: "Бизнес-логика, фоновые операции и внутренние сервисы.",
-    api: "HTTP-запросы, REST-эндпоинты и ошибки FastAPI/Uvicorn.",
+    application: "Основные сервисы и логи из папки api (main:8000).",
+    api_admin: "HTTP-запросы и ошибки админского API (api_admin:8100).",
     database: "Подключения к БД, запросы и миграции.",
     xray: "VPN/Xray-тоннель и прокси-доступ к внешним API.",
     workers: "Очереди Celery и фоновые задания.",
     other: "Логи без явной категории.",
   };
 
+  const CLIENT_ORIGIN_LABELS = {
+    flutter_app: "Мобильное приложение",
+    browser: "Браузер",
+    api_client: "Инструмент API",
+    unknown: "Неизвестно",
+  };
+
   function normalizeEventCategory(category) {
-    const normalized = String(category || "").toLowerCase();
+    const raw = String(category || "").toLowerCase();
+    const normalized = (() => {
+      if (raw === "api") return "application";
+      if (["vpn", "xray", "proxy", "socks"].includes(raw)) return "xray";
+      return raw;
+    })();
     if (EVENT_CATEGORY_ORDER.includes(normalized)) {
       return normalized;
     }
@@ -994,8 +1052,11 @@
     if (hasAny(["db", "database", "postgres", "psql", "sqlalchemy", "mysql", "sqlite"])) {
       return "database";
     }
-    if (hasAny(["uvicorn", "fastapi", "api", "http", "request", "endpoint"])) {
-      return "api";
+    if (hasAny(["admin", "api_admin", "8100"])) {
+      return "api_admin";
+    }
+    if (hasAny(["uvicorn", "fastapi", "api", "http", "request", "endpoint", "8000", "main"])) {
+      return "application";
     }
     if (hasAny(["celery", "worker", "queue", "task"])) {
       return "workers";
@@ -1127,6 +1188,13 @@
 
     if (context.client) {
       details.push({ label: "Клиент", value: context.client });
+    }
+
+    if (context.client_origin || context.client_origin_hint) {
+      details.push({
+        label: "Источник клиента",
+        value: formatClientOrigin(context.client_origin, context.client_origin_hint),
+      });
     }
 
     if (context.request_id) {
@@ -1279,6 +1347,364 @@
       window.setTimeout(() => {
         elements.systemEventsUpdatedAt?.classList.remove("highlight");
       }, 1500);
+    }
+  }
+
+  function populateExclusionCategoriesSelect() {
+    if (!elements.eventExclusionsCategory) {
+      return;
+    }
+    if (elements.eventExclusionsCategory.childElementCount > 0) {
+      return;
+    }
+    EVENT_CATEGORY_ORDER.forEach((category) => {
+      const option = document.createElement("option");
+      option.value = category;
+      option.textContent = EVENT_CATEGORY_LABELS[category] || category;
+      elements.eventExclusionsCategory.appendChild(option);
+    });
+  }
+
+  function renderEventExclusions() {
+    if (!elements.eventExclusionsBody || !elements.eventExclusionsEmpty) {
+      return;
+    }
+
+    const list = state.systemEvents.exclusions || [];
+    elements.eventExclusionsBody.innerHTML = "";
+
+    if (!list.length) {
+      toggleHidden(elements.eventExclusionsEmpty, false);
+      return;
+    }
+
+    toggleHidden(elements.eventExclusionsEmpty, true);
+
+    list.forEach((item) => {
+      const row = document.createElement("tr");
+
+      const categoryCell = document.createElement("td");
+      categoryCell.textContent = EVENT_CATEGORY_LABELS[item.category] || item.category;
+      row.appendChild(categoryCell);
+
+      const methodCell = document.createElement("td");
+      methodCell.textContent = item.method || "Любой";
+      row.appendChild(methodCell);
+
+      const pathCell = document.createElement("td");
+      pathCell.textContent = item.path;
+      row.appendChild(pathCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.style.textAlign = "right";
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link";
+      remove.dataset.action = "delete-exclusion";
+      remove.dataset.id = item.id;
+      remove.textContent = "Удалить";
+      actionsCell.appendChild(remove);
+      row.appendChild(actionsCell);
+
+      elements.eventExclusionsBody.appendChild(row);
+    });
+  }
+
+  function setEventExclusionsStatus(message, type = "error") {
+    showAlert(elements.eventExclusionsStatus, message, type);
+  }
+
+  async function loadEventExclusions(options = {}) {
+    const { silent = false } = options;
+    if (state.systemEvents.exclusionsLoading) {
+      return;
+    }
+
+    state.systemEvents.exclusionsLoading = true;
+    if (!silent) {
+      setEventExclusionsStatus("Загружаем правила...", "success");
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/events/exclusions`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const payload = await response.json();
+      state.systemEvents.exclusions = payload.exclusions || [];
+      state.systemEvents.exclusionsLoaded = true;
+      renderEventExclusions();
+      if (!silent) {
+        setEventExclusionsStatus("Правила обновлены", "success");
+      } else {
+        setEventExclusionsStatus("");
+      }
+    } catch (error) {
+      console.error(error);
+      setEventExclusionsStatus(
+        "Не удалось загрузить правила исключений. Попробуйте позже.",
+        "error",
+      );
+    } finally {
+      state.systemEvents.exclusionsLoading = false;
+    }
+  }
+
+  async function submitEventExclusion(event) {
+    event.preventDefault();
+    if (!elements.eventExclusionsForm) {
+      return;
+    }
+
+    const category = elements.eventExclusionsCategory?.value || "application";
+    const method = elements.eventExclusionsMethod?.value || "";
+    const path = (elements.eventExclusionsPath?.value || "").trim();
+
+    if (!path) {
+      setEventExclusionsStatus("Укажите путь запроса", "error");
+      return;
+    }
+
+    setEventExclusionsStatus("Добавляем правило...", "success");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/events/exclusions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ category, path, method }),
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось добавить правило");
+      }
+      const payload = await response.json();
+      state.systemEvents.exclusions = payload.exclusions || [];
+      state.systemEvents.exclusionsLoaded = true;
+      renderEventExclusions();
+      elements.eventExclusionsForm.reset();
+      setEventExclusionsStatus("Правило добавлено", "success");
+      void loadSystemEvents({ resetPage: true, silent: true });
+    } catch (error) {
+      console.error(error);
+      setEventExclusionsStatus(
+        error?.message || "Не удалось добавить правило исключения",
+        "error",
+      );
+    }
+  }
+
+  async function deleteEventExclusion(exclusionId) {
+    if (!exclusionId) {
+      return;
+    }
+    setEventExclusionsStatus("Удаляем правило...", "success");
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/admin/system/events/exclusions/${encodeURIComponent(exclusionId)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+        },
+      );
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось удалить правило");
+      }
+      const payload = await response.json();
+      state.systemEvents.exclusions = payload.exclusions || [];
+      state.systemEvents.exclusionsLoaded = true;
+      renderEventExclusions();
+      setEventExclusionsStatus("Правило удалено", "success");
+      void loadSystemEvents({ resetPage: true, silent: true });
+    } catch (error) {
+      console.error(error);
+      setEventExclusionsStatus(
+        error?.message || "Не удалось удалить правило исключения",
+        "error",
+      );
+    }
+  }
+
+  function setIpBlocksStatus(message, type = "error") {
+    showAlert(elements.ipBlocksStatus, message, type);
+  }
+
+  function renderIpBlocks() {
+    if (!elements.ipBlocksBody || !elements.ipBlocksEmpty) {
+      return;
+    }
+
+    const list = state.ipBlocks.items || [];
+    elements.ipBlocksBody.innerHTML = "";
+
+    if (!list.length) {
+      toggleHidden(elements.ipBlocksEmpty, false);
+      return;
+    }
+
+    toggleHidden(elements.ipBlocksEmpty, true);
+
+    list.forEach((item) => {
+      const row = document.createElement("tr");
+
+      const ipCell = document.createElement("td");
+      ipCell.textContent = item.ip;
+      row.appendChild(ipCell);
+
+      const noteCell = document.createElement("td");
+      noteCell.textContent = item.note || "—";
+      row.appendChild(noteCell);
+
+      const addedCell = document.createElement("td");
+      addedCell.textContent = formatDate(item.added_at, true);
+      row.appendChild(addedCell);
+
+      const actionsCell = document.createElement("td");
+      actionsCell.style.textAlign = "right";
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "link";
+      remove.dataset.action = "delete-ip-block";
+      remove.dataset.ip = item.ip;
+      remove.textContent = "Удалить";
+      actionsCell.appendChild(remove);
+      row.appendChild(actionsCell);
+
+      elements.ipBlocksBody.appendChild(row);
+    });
+  }
+
+  async function loadIpBlocks(options = {}) {
+    const { silent = false } = options;
+    if (state.ipBlocks.loading) {
+      return;
+    }
+
+    state.ipBlocks.loading = true;
+    if (!silent) {
+      setIpBlocksStatus("Обновляем список...", "success");
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/ip-blocks`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        throw new Error("Request failed");
+      }
+      const payload = await response.json();
+      state.ipBlocks.items = payload.blocks || [];
+      state.ipBlocks.loaded = true;
+      renderIpBlocks();
+      if (!silent) {
+        setIpBlocksStatus("Список обновлён", "success");
+      } else {
+        setIpBlocksStatus("");
+      }
+    } catch (error) {
+      console.error(error);
+      setIpBlocksStatus("Не удалось загрузить список блокировок", "error");
+    } finally {
+      state.ipBlocks.loading = false;
+    }
+  }
+
+  async function createIpBlock(event) {
+    event.preventDefault();
+    const ip = (elements.ipBlocksAddress?.value || "").trim();
+    const note = (elements.ipBlocksNote?.value || "").trim();
+
+    if (!ip) {
+      setIpBlocksStatus("Введите IP-адрес", "error");
+      return;
+    }
+
+    setIpBlocksStatus("Добавляем блокировку...", "success");
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/ip-blocks`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("authToken")}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ip, note }),
+      });
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось добавить IP");
+      }
+
+      const payload = await response.json();
+      state.ipBlocks.items = payload.blocks || [];
+      state.ipBlocks.loaded = true;
+      renderIpBlocks();
+      elements.ipBlocksForm?.reset();
+      setIpBlocksStatus("IP добавлен в блокировку", "success");
+    } catch (error) {
+      console.error(error);
+      setIpBlocksStatus(error?.message || "Не удалось добавить IP", "error");
+    }
+  }
+
+  async function deleteIpBlock(ip) {
+    if (!ip) {
+      return;
+    }
+
+    setIpBlocksStatus("Удаляем блокировку...", "success");
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/admin/system/ip-blocks/${encodeURIComponent(ip)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+        },
+      );
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!response.ok) {
+        const errorText = await safeReadError(response);
+        throw new Error(errorText || "Не удалось удалить IP");
+      }
+
+      const payload = await response.json();
+      state.ipBlocks.items = payload.blocks || [];
+      state.ipBlocks.loaded = true;
+      renderIpBlocks();
+      setIpBlocksStatus("IP удалён из блокировки", "success");
+    } catch (error) {
+      console.error(error);
+      setIpBlocksStatus(error?.message || "Не удалось удалить IP", "error");
     }
   }
 
@@ -1530,11 +1956,19 @@
     if (elements.systemStatusGrid) {
       toggleHidden(elements.systemStatusGrid, false);
     }
-    setText(elements.systemUptime, status.uptime_human || "—");
+    setText(elements.systemApiUptime, status.api_uptime_human || "—");
     setText(
-      elements.systemUptimeSeconds,
-      Math.round(Number(status.uptime_seconds ?? 0))
+      elements.systemApiUptimeSeconds,
+      Math.round(Number(status.api_uptime_seconds ?? 0))
     );
+    const adminUptimeSeconds = Number(
+      status.admin_api_uptime_seconds ?? status.uptime_seconds ?? 0
+    );
+    setText(
+      elements.systemAdminUptime,
+      status.admin_api_uptime_human || status.uptime_human || "—"
+    );
+    setText(elements.systemAdminUptimeSeconds, Math.round(adminUptimeSeconds));
     setText(elements.systemAppName, status.app_name || "—");
     setText(elements.systemAppVersion, status.app_version || "—");
     setText(elements.systemEnvironment, status.environment || "—");
@@ -2600,6 +3034,55 @@
     });
   }
 
+  if (elements.systemIpBlocks) {
+    elements.systemIpBlocks.addEventListener("click", () => {
+      showAlert(elements.ipBlocksStatus, "");
+      openDrawer("ip-blocks");
+      void loadIpBlocks({ silent: state.ipBlocks.loaded });
+    });
+  }
+
+  if (elements.systemEventsExclusions) {
+    elements.systemEventsExclusions.addEventListener("click", () => {
+      populateExclusionCategoriesSelect();
+      showAlert(elements.eventExclusionsStatus, "");
+      openDrawer("event-exclusions");
+      void loadEventExclusions({ silent: state.systemEvents.exclusionsLoaded });
+    });
+  }
+
+  if (elements.ipBlocksForm) {
+    elements.ipBlocksForm.addEventListener("submit", (event) => {
+      void createIpBlock(event);
+    });
+  }
+
+  if (elements.ipBlocksBody) {
+    elements.ipBlocksBody.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action=\"delete-ip-block\"]");
+      if (!target || !target.dataset.ip) {
+        return;
+      }
+      void deleteIpBlock(target.dataset.ip);
+    });
+  }
+
+  if (elements.eventExclusionsForm) {
+    elements.eventExclusionsForm.addEventListener("submit", (event) => {
+      void submitEventExclusion(event);
+    });
+  }
+
+  if (elements.eventExclusionsBody) {
+    elements.eventExclusionsBody.addEventListener("click", (event) => {
+      const target = event.target.closest("[data-action=\"delete-exclusion\"]");
+      if (!target || !target.dataset.id) {
+        return;
+      }
+      void deleteEventExclusion(target.dataset.id);
+    });
+  }
+
   if (elements.systemEventsPrev) {
     elements.systemEventsPrev.addEventListener("click", () => {
       if (state.systemEvents.page > 1) {
@@ -2725,13 +3208,10 @@
 
   if (pageType === "system") {
     startSystemAutoRefresh();
-    startSystemEventsAutoRefresh();
     void refreshSystemMetrics({ showLoader: true, silent: true });
-    void loadSystemEvents({ resetPage: true });
     void loadQueueSnapshot({ showLoader: false, silent: true });
   } else {
     stopSystemAutoRefresh();
-    stopSystemEventsAutoRefresh();
   }
 
   if (pageType === "database") {

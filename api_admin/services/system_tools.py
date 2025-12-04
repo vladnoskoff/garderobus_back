@@ -8,9 +8,11 @@ import signal
 import time
 import pwd
 import grp
+import uuid
+from ipaddress import ip_address
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError
@@ -28,6 +30,10 @@ _LAST_RESTART_REQUEST: Optional[datetime] = None
 _LAST_ADMIN_RESTART_REQUEST: Optional[datetime] = None
 _LAST_MAINTENANCE_CHANGE: Optional[datetime] = None
 _MAINTENANCE_ENABLED: bool = settings.ADMIN_MAINTENANCE_INITIAL_STATE
+_EVENT_EXCLUSIONS_LOCK = threading.Lock()
+_IP_BLOCKLIST_LOCK = threading.Lock()
+_LAST_API_UPTIME: tuple[Optional[float], Optional[str]] = (None, None)
+_LAST_ADMIN_API_UPTIME: tuple[Optional[float], Optional[str]] = (None, None)
 
 LOG_DATE_FORMATS = (
     "%Y-%m-%d %H:%M:%S,%f",
@@ -37,6 +43,108 @@ LOG_DATE_FORMATS = (
     "%Y/%m/%d %H:%M:%S",
     "%b %d %H:%M:%S",
 )
+
+
+def _load_event_exclusions() -> list[schemas.AdminSystemEventExclusion]:
+    path = settings.ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    exclusions: list[schemas.AdminSystemEventExclusion] = []
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            exclusion = schemas.AdminSystemEventExclusion(
+                id=str(item.get("id") or uuid.uuid4()),
+                category=str(item.get("category") or "application").lower(),
+                path=str(item.get("path") or "").strip(),
+                method=(item.get("method") or None)
+                and str(item.get("method")).strip().upper(),
+            )
+            if exclusion.path:
+                exclusions.append(exclusion)
+    return exclusions
+
+
+def _save_event_exclusions(exclusions: list[schemas.AdminSystemEventExclusion]) -> None:
+    path = settings.ADMIN_SYSTEM_EVENT_EXCLUSIONS_PATH
+    payload = [
+        {
+            "id": exclusion.id,
+            "category": exclusion.category,
+            "path": exclusion.path,
+            "method": exclusion.method,
+        }
+        for exclusion in exclusions
+    ]
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to persist system event exclusions", exc_info=True)
+
+
+def _normalize_event_exclusion_request(
+    request: schemas.AdminSystemEventExclusionRequest,
+) -> schemas.AdminSystemEventExclusion:
+    return schemas.AdminSystemEventExclusion(
+        id=str(uuid.uuid4()),
+        category=str(request.category or "application").strip().lower() or "application",
+        path=str(request.path or "").strip(),
+        method=(request.method or None) and str(request.method).upper(),
+    )
+
+
+def _load_ip_blocks() -> list[schemas.AdminIpBlock]:
+    path = settings.IP_BLOCKLIST_PATH
+    if not path.exists() or not path.is_file():
+        return []
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    blocks: list[schemas.AdminIpBlock] = []
+    if isinstance(data, list):
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            raw_ip = str(item.get("ip") or "").strip()
+            try:
+                normalized_ip = str(ip_address(raw_ip))
+            except ValueError:
+                continue
+            note = (item.get("note") or None) and str(item.get("note")).strip()
+            added_at = _parse_datetime(item.get("added_at")) or datetime.now(timezone.utc)
+            blocks.append(
+                schemas.AdminIpBlock(ip=normalized_ip, note=note, added_at=added_at)
+            )
+
+    return blocks
+
+
+def _save_ip_blocks(blocks: list[schemas.AdminIpBlock]) -> None:
+    path = settings.IP_BLOCKLIST_PATH
+    payload = [
+        {
+            "ip": block.ip,
+            "note": block.note,
+            "added_at": block.added_at.isoformat(),
+        }
+        for block in blocks
+    ]
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to persist IP blocklist", exc_info=True)
 
 
 def _log_managed_file_error(relative_path: str, detail: str, **extra: object) -> None:
@@ -144,6 +252,25 @@ def _humanize_duration(seconds: float) -> str:
         parts.append(f"{seconds} с")
 
     return " ".join(parts)
+
+
+def _fetch_service_uptime(url: str) -> tuple[Optional[float], Optional[str]]:
+    if not url:
+        return None, None
+
+    try:
+        response = requests.get(url, timeout=1.5)
+        response.raise_for_status()
+        data = response.json()
+    except (requests.RequestException, ValueError):
+        logger.debug("Failed to fetch service health", exc_info=True, extra={"url": url})
+        return None, None
+
+    uptime_seconds = data.get("uptime_seconds") if isinstance(data, dict) else None
+    if isinstance(uptime_seconds, (int, float)):
+        return float(uptime_seconds), _humanize_duration(float(uptime_seconds))
+
+    return None, None
 
 
 def _allowed_extension(path: Path) -> bool:
@@ -269,6 +396,27 @@ def list_managed_files() -> List[str]:
 
 def get_system_status() -> schemas.AdminSystemStatus:
     uptime_seconds = time.time() - _START_TIME
+    api_uptime_seconds, api_uptime_human = _fetch_service_uptime(settings.API_HEALTH_URL)
+    admin_api_uptime_seconds, admin_api_uptime_human = _fetch_service_uptime(
+        settings.ADMIN_API_HEALTH_URL
+    )
+
+    global _LAST_API_UPTIME, _LAST_ADMIN_API_UPTIME
+    if api_uptime_seconds is not None:
+        _LAST_API_UPTIME = (api_uptime_seconds, api_uptime_human)
+    else:
+        api_uptime_seconds, api_uptime_human = _LAST_API_UPTIME
+    if admin_api_uptime_seconds is not None:
+        _LAST_ADMIN_API_UPTIME = (admin_api_uptime_seconds, admin_api_uptime_human)
+    else:
+        admin_api_uptime_seconds, admin_api_uptime_human = _LAST_ADMIN_API_UPTIME
+
+    if api_uptime_seconds is None:
+        api_uptime_seconds = uptime_seconds
+        api_uptime_human = _humanize_duration(uptime_seconds)
+    if admin_api_uptime_seconds is None:
+        admin_api_uptime_seconds = uptime_seconds
+        admin_api_uptime_human = _humanize_duration(uptime_seconds)
     return schemas.AdminSystemStatus(
         uptime_seconds=uptime_seconds,
         uptime_human=_humanize_duration(uptime_seconds),
@@ -284,6 +432,10 @@ def get_system_status() -> schemas.AdminSystemStatus:
         maintenance_enabled=_MAINTENANCE_ENABLED,
         maintenance_supported=is_maintenance_supported(),
         test_webhook_configured=bool(settings.ADMIN_TEST_WEBHOOK_URL),
+        api_uptime_seconds=api_uptime_seconds,
+        api_uptime_human=api_uptime_human,
+        admin_api_uptime_seconds=admin_api_uptime_seconds,
+        admin_api_uptime_human=admin_api_uptime_human,
     )
 
 
@@ -797,6 +949,9 @@ def _build_event(payload: dict) -> Optional[schemas.AdminSystemEvent]:
         ):
             return "database"
 
+        if has_any(searchable, ("api_admin", "admin", "8100", "api-admin")):
+            return "api_admin"
+
         if has_any(
             searchable,
             ("uvicorn", "fastapi", "http", "api", "request", "endpoint", "gunicorn"),
@@ -879,15 +1034,120 @@ def _build_plain_event(line: str) -> Optional[schemas.AdminSystemEvent]:
     return _build_event(payload)
 
 
+def _iter_log_files() -> list[Path]:
+    seen: set[str] = set()
+    paths: list[Path] = []
+
+    def add_candidate(path: Path) -> None:
+        try:
+            key = str(path.resolve())
+        except OSError:
+            return
+        if key in seen or not path.exists() or not path.is_file():
+            return
+        seen.add(key)
+        paths.append(path)
+
+    for raw in (
+        settings.LOG_FILE,
+        "/var/log/garderobus/api.log",
+        "/var/log/garderobus/api_admin.log",
+    ):
+        if not raw:
+            continue
+        add_candidate(Path(raw))
+
+    for pg_dir in (settings.POSTGRES_LOG_DIR, settings.POSTGRES_FALLBACK_LOG_DIR):
+        try:
+            directory = Path(pg_dir)
+        except TypeError:
+            continue
+
+        if not directory.exists() or not directory.is_dir():
+            continue
+
+        try:
+            log_files = sorted(
+                directory.glob("*.log"),
+                key=lambda item: item.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            continue
+
+        for candidate in log_files[:5]:
+            add_candidate(candidate)
+
+    return paths
+
+
+def _is_event_excluded(
+    event: schemas.AdminSystemEvent, exclusions: list[schemas.AdminSystemEventExclusion]
+) -> bool:
+    if not exclusions:
+        return False
+
+    category = event.category
+    context = event.context or {}
+    event_path = None
+    for key in ("path", "url", "request_path"):
+        value = context.get(key)
+        if isinstance(value, str) and value:
+            event_path = value.strip()
+            break
+    event_method = None
+    for key in ("method", "http_method", "request_method"):
+        value = context.get(key)
+        if isinstance(value, str) and value:
+            event_method = value.strip().upper()
+            break
+
+    for rule in exclusions:
+        if rule.category != category:
+            continue
+        if rule.method and event_method and rule.method.upper() != event_method:
+            continue
+        if rule.method and not event_method:
+            continue
+
+        candidate_paths = [event_path] if event_path else []
+        if event.message:
+            candidate_paths.append(event.message)
+
+        for candidate in candidate_paths:
+            if candidate and rule.path and (candidate == rule.path or candidate.startswith(rule.path)):
+                return True
+
+    return False
+
+
+def _has_auth_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return value.strip() not in {"", "-"}
+    return True
+
+
+def _is_authorized_event(event: schemas.AdminSystemEvent) -> bool:
+    context = event.context or {}
+    token = context.get("token")
+    user_id = context.get("user_id")
+    user_email = context.get("user_email")
+    return any(_has_auth_value(val) for val in (user_id, user_email, token))
+
+
 def get_system_events(
     *,
     level: Optional[str] = None,
     hours: Optional[int] = None,
-    limit: int = 50,
+    auth: Optional[str] = None,
+    limit: int = 10,
     page: int = 1,
 ) -> schemas.AdminSystemEventList:
-    log_path = Path(settings.LOG_FILE)
-    if not log_path.exists() or not log_path.is_file():
+    exclusions = _load_event_exclusions()
+    log_files = _iter_log_files()
+    if not log_files:
         return schemas.AdminSystemEventList(events=[], total=0, page=page, limit=limit)
 
     cutoff = None
@@ -895,36 +1155,56 @@ def get_system_events(
         cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     desired_level = level.lower() if level else None
+    desired_auth = auth.lower() if auth else None
     events: list[schemas.AdminSystemEvent] = []
 
-    with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
-        for line in handle:
-            if not line.strip():
-                continue
-            try:
-                payload = json.loads(line)
-            except json.JSONDecodeError:
-                event = _build_plain_event(line)
+    for log_path in log_files:
+        with log_path.open("r", encoding="utf-8", errors="ignore") as handle:
+            for line in handle:
+                if not line.strip():
+                    continue
+                try:
+                    payload = json.loads(line)
+                except json.JSONDecodeError:
+                    event = _build_plain_event(line)
+                    if event is None:
+                        continue
+                    if _is_event_excluded(event, exclusions):
+                        continue
+                    if desired_level and event.level != desired_level:
+                        continue
+                    if desired_auth:
+                        is_authorized = _is_authorized_event(event)
+                        if desired_auth == "authorized" and not is_authorized:
+                            continue
+                        if desired_auth == "unauthorized" and is_authorized:
+                            continue
+                    if cutoff and event.timestamp < cutoff:
+                        continue
+                    events.append(event)
+                    continue
+
+                event = _build_event(payload)
                 if event is None:
                     continue
+
+                if _is_event_excluded(event, exclusions):
+                    continue
+
                 if desired_level and event.level != desired_level:
                     continue
+
+                if desired_auth:
+                    is_authorized = _is_authorized_event(event)
+                    if desired_auth == "authorized" and not is_authorized:
+                        continue
+                    if desired_auth == "unauthorized" and is_authorized:
+                        continue
+
                 if cutoff and event.timestamp < cutoff:
                     continue
+
                 events.append(event)
-                continue
-
-            event = _build_event(payload)
-            if event is None:
-                continue
-
-            if desired_level and event.level != desired_level:
-                continue
-
-            if cutoff and event.timestamp < cutoff:
-                continue
-
-            events.append(event)
 
     events.sort(key=lambda item: item.timestamp, reverse=True)
 
@@ -938,3 +1218,88 @@ def get_system_events(
         page=page,
         limit=limit,
     )
+
+
+def list_event_exclusions() -> schemas.AdminSystemEventExclusionList:
+    with _EVENT_EXCLUSIONS_LOCK:
+        exclusions = _load_event_exclusions()
+    return schemas.AdminSystemEventExclusionList(exclusions=exclusions)
+
+
+def add_event_exclusion(
+    request: schemas.AdminSystemEventExclusionRequest,
+) -> schemas.AdminSystemEventExclusionList:
+    normalized = _normalize_event_exclusion_request(request)
+    if not normalized.path:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Путь запроса обязателен",
+        )
+
+    with _EVENT_EXCLUSIONS_LOCK:
+        exclusions = _load_event_exclusions()
+        exclusions.append(normalized)
+        _save_event_exclusions(exclusions)
+
+    return schemas.AdminSystemEventExclusionList(exclusions=exclusions)
+
+
+def remove_event_exclusion(exclusion_id: str) -> schemas.AdminSystemEventExclusionList:
+    if not exclusion_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный идентификатор правила",
+        )
+
+    with _EVENT_EXCLUSIONS_LOCK:
+        exclusions = [
+            item for item in _load_event_exclusions() if item.id != exclusion_id
+        ]
+        _save_event_exclusions(exclusions)
+
+    return schemas.AdminSystemEventExclusionList(exclusions=exclusions)
+
+
+def list_ip_blocks() -> schemas.AdminIpBlockList:
+    with _IP_BLOCKLIST_LOCK:
+        blocks = _load_ip_blocks()
+    return schemas.AdminIpBlockList(blocks=blocks)
+
+
+def add_ip_block(request: schemas.AdminIpBlockRequest) -> schemas.AdminIpBlockList:
+    try:
+        normalized_ip = str(ip_address(str(request.ip).strip()))
+    except ValueError as exc:  # pragma: no cover - validated at runtime
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Некорректный IP-адрес",
+        ) from exc
+
+    with _IP_BLOCKLIST_LOCK:
+        blocks = _load_ip_blocks()
+        if any(block.ip == normalized_ip for block in blocks):
+            return schemas.AdminIpBlockList(blocks=blocks)
+
+        blocks.append(
+            schemas.AdminIpBlock(
+                ip=normalized_ip,
+                note=(request.note or None) and str(request.note).strip(),
+                added_at=datetime.now(timezone.utc),
+            )
+        )
+        _save_ip_blocks(blocks)
+
+    return schemas.AdminIpBlockList(blocks=blocks)
+
+
+def remove_ip_block(ip: str) -> schemas.AdminIpBlockList:
+    try:
+        normalized_ip = str(ip_address(ip))
+    except ValueError:
+        normalized_ip = ip
+
+    with _IP_BLOCKLIST_LOCK:
+        blocks = [block for block in _load_ip_blocks() if block.ip != normalized_ip]
+        _save_ip_blocks(blocks)
+
+    return schemas.AdminIpBlockList(blocks=blocks)
