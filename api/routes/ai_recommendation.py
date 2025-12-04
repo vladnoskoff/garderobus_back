@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Optional
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+import importlib.util
 import logging
 from pathlib import Path
 import sys
@@ -31,10 +32,25 @@ for path in (_API_DIR, _PROJECT_ROOT):
     if path_str not in sys.path:
         sys.path.insert(0, path_str)
 
-try:  # Compatible with both "api" package and local module execution
-    from api.utils.task_importer import load_tasks_module
-except ImportError:  # pragma: no cover - fallback for direct script runs
-    from utils.task_importer import load_tasks_module
+
+def _import_task_importer():
+    try:  # Prefer package import when project root is on sys.path
+        from api.utils.task_importer import load_tasks_module
+        return load_tasks_module
+    except ImportError:  # pragma: no cover - fallback for dev runs from api/
+        pass
+
+    module_path = _API_DIR / "utils" / "task_importer.py"
+    spec = importlib.util.spec_from_file_location("utils.task_importer", module_path)
+    if spec and spec.loader:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.load_tasks_module
+
+    raise ImportError("Unable to import load_tasks_module from utils.task_importer")
+
+
+load_tasks_module = _import_task_importer()
 
 
 logger = logging.getLogger(__name__)
