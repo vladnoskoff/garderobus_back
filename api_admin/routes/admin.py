@@ -21,6 +21,7 @@ from database import get_db, get_read_db
 from routes import users as user_routes
 from api_admin import schemas as admin_schemas
 from api_admin.services import system_tools
+from tasks.ai import generate_mannequin_task
 
 security = HTTPBearer(auto_error=False)
 
@@ -202,6 +203,45 @@ def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[adm
         )
 
     return summaries
+
+
+@router.post(
+    "/admin/mannequins/refresh",
+    response_model=admin_schemas.AdminActionResponse,
+    summary="Запустить обновление манекенов для всех пользователей",
+)
+def refresh_all_mannequins(
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_db),
+) -> admin_schemas.AdminActionResponse:
+    users = db.query(models.User.id).order_by(models.User.id).all()
+    if not users:
+        return admin_schemas.AdminActionResponse(
+            success=False,
+            detail="Нет пользователей для обновления",
+        )
+
+    scheduled = 0
+    for idx, row in enumerate(users):
+        try:
+            generate_mannequin_task.apply_async(
+                args=[],
+                kwargs={"user_id": row.id},
+                countdown=scheduled,
+            )
+        except Exception as exc:  # pragma: no cover - broker issues
+            return admin_schemas.AdminActionResponse(
+                success=False,
+                detail=f"Не удалось запланировать задачу: {exc}",
+                error=str(exc),
+            )
+        if idx % 5 == 4:
+            scheduled += 1
+
+    return admin_schemas.AdminActionResponse(
+        success=True,
+        detail=f"Запланировано {len(users)} генераций манекенов",
+    )
 
 
 def _build_location_details(db: Session, user_id: int) -> List[admin_schemas.AdminUserLocationDetail]:

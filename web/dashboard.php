@@ -36,10 +36,13 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
             <p class="text-muted">Управление учетными записями и обзор активности гардероба.</p>
           </div>
           <div class="flex gap-sm">
+            <button class="secondary" type="button" id="refresh-mannequins-button">Обновить образы дня</button>
             <button class="secondary" type="button" id="refresh-button">Обновить</button>
             <button class="primary" type="button" id="create-user-button">Добавить пользователя</button>
           </div>
         </div>
+
+        <div id="mannequin-refresh-feedback" class="alert hidden" role="status"></div>
 
         <section class="card">
           <div class="flex-between" style="margin-bottom: 20px;">

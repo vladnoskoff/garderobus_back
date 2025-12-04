@@ -17,7 +17,12 @@ import models
 import schemas
 from celery_app import celery_app
 from database import get_db
-from tasks.ai import generate_mannequin_task, generate_recommendation_task
+try:
+    from tasks.ai import generate_mannequin_task, generate_recommendation_task
+except ImportError as exc:  # pragma: no cover - fallback for misaligned PYTHONPATH
+    raise ImportError(
+        "Не удалось импортировать Celery-задачи AI. Убедитесь, что PYTHONPATH включает директорию api."
+    ) from exc
 from .location_utils import ensure_location_for_user
 
 from celery.exceptions import CeleryError
