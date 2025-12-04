@@ -157,6 +157,9 @@ def build_mannequin_prompt(items: List, weather, gender: Optional[str]) -> str:
         "Ensure the outfit feels comfortable for the current weather and coordinates colours harmoniously.",
         mannequin_gender_instruction(gender),
         "Only use the clothing items listed below. Do not add extra garments, accessories or props.",
+        "Preserve each garment exactly as described: if the item has no logo, text or print, keep its surfaces plain.",
+        "Never invent new graphics, move logos between garments, or add embellishments that are not explicitly listed for the item.",
+        "If multiple items are listed, do not blend their branding or designs — keep every piece faithful to its own description only.",
         "Clothing items to include:",
     ]
 
