@@ -8,7 +8,9 @@ from time import perf_counter
 from typing import Any, Callable, Dict, List, Optional
 
 from prometheus_client import Counter, Histogram
-from sqlalchemy.orm import joinedload
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload
 
 from celery_app import celery_app
 from database import db_session
@@ -118,6 +120,23 @@ def _run_with_metrics(task_name: str, func: Callable[[], Dict[str, Any]]) -> Dic
         TASK_COMPLETED.labels(task_name, "success").inc()
         TASK_DURATION.labels(task_name).observe(perf_counter() - started)
         return {"status": "success", "result": result}
+
+
+def _ensure_identity_sequence(
+    session: Session, table_name: str, column: str = "id"
+) -> None:
+    """Make sure Postgres sequences aren't lagging behind the table."""
+
+    dialect = session.bind.dialect.name if session.bind else None
+    if dialect != "postgresql":
+        return
+
+    session.execute(
+        text(
+            f"SELECT setval(pg_get_serial_sequence('{table_name}', '{column}'), "
+            f"COALESCE((SELECT MAX({column}) FROM {table_name}) + 1, 1), false)"
+        )
+    )
 
 
 def _load_user(user_id: int) -> models.User:
@@ -335,8 +354,23 @@ def generate_mannequin_task(
                 items=serialized_items,
                 weather=weather_payload,
             )
-            session.add(mannequin_record)
-            session.commit()
+            try:
+                _ensure_identity_sequence(session, "mannequin_images")
+                session.add(mannequin_record)
+                session.commit()
+            except IntegrityError:
+                session.rollback()
+                _ensure_identity_sequence(session, "mannequin_images")
+                session.add(
+                    models.MannequinImage(
+                        user_id=user_id,
+                        location_id=location_id,
+                        image_url=image_url,
+                        items=serialized_items,
+                        weather=weather_payload,
+                    )
+                )
+                session.commit()
 
         return {
             "image_url": image_url,
