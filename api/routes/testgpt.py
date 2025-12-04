@@ -1,6 +1,4 @@
 import base64
-import importlib
-import importlib.util
 import logging
 from pathlib import Path
 import sys
@@ -13,37 +11,10 @@ from openai_client import is_proxy_active
 
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_API_DIR = _PROJECT_ROOT / "api"
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-
-def _import_task_importer() -> Callable[..., Any]:
-    search_paths = (_PROJECT_ROOT, _API_DIR)
-    for path in search_paths:
-        path_str = str(path)
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-
-    module_names = ("api.utils.task_importer", "utils.task_importer")
-    for name in module_names:
-        try:
-            module = importlib.import_module(name)
-            return module.load_tasks_module
-        except ModuleNotFoundError:
-            continue
-
-    for base in search_paths:
-        candidate = base / "api" / "utils" / "task_importer.py" if (base / "api").is_dir() else base / "utils" / "task_importer.py"
-        if candidate.is_file():
-            spec = importlib.util.spec_from_file_location("task_importer_fallback", candidate)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)  # type: ignore[call-arg]
-                return module.load_tasks_module
-
-    raise ImportError("Unable to locate utils.task_importer.load_tasks_module")
-
-
-load_tasks_module = _import_task_importer()
+from api.utils.task_importer import load_tasks_module
 
 
 logger = logging.getLogger(__name__)
