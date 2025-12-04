@@ -311,6 +311,7 @@ async def add_clothes(
     ai_metadata: Optional[str] = Form(None),
     auto_fill: bool = Form(False),
     split_into_items: bool = Form(False),
+    images_per_item: int = Form(1),
     location_id: Optional[int] = Form(None),
     language_code: Optional[str] = Form(None),
     files: list[UploadFile] = File(...),
@@ -554,10 +555,23 @@ async def add_clothes(
         db.refresh(new_clothes)
         return new_clothes
 
+    if images_per_item < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Количество изображений на вещь должно быть положительным",
+        )
+
     if split_into_items and len(uploads) > 1:
         created: list[models.Clothes] = []
+        chunk: list[tuple[UploadFile, bytes]] = []
         for upload, content in uploads:
-            created.append(await _create_single_clothes([(upload, content)]))
+            chunk.append((upload, content))
+            if len(chunk) == images_per_item:
+                created.append(await _create_single_clothes(chunk))
+                chunk = []
+
+        if chunk:
+            created.append(await _create_single_clothes(chunk))
 
         invalidate_clothes_for_user(user_id)
         invalidate_outfit_history_for_user(user_id)
