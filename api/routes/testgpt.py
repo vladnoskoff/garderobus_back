@@ -17,7 +17,10 @@ for _path in (_PROJECT_ROOT, _API_DIR):
     if _path_str not in sys.path:
         sys.path.insert(0, _path_str)
 
-from api.utils.task_importer import load_tasks_module
+try:
+    from api.utils.task_importer import load_tasks_module
+except ImportError:  # Running from inside the api/ directory
+    from utils.task_importer import load_tasks_module
 
 
 logger = logging.getLogger(__name__)
