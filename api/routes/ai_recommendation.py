@@ -47,46 +47,67 @@ def _prepare_sys_path() -> None:
             sys.path.insert(0, path_str)
 
 
-def _import_tasks_module():
-    """Import the Celery tasks module with fallbacks for missing PYTHONPATH."""
+def _load_tasks_module() -> Any:
+    """Load the tasks module, falling back to direct file loading if needed."""
 
     import importlib
+    import importlib.util
 
     _prepare_sys_path()
 
-    module_paths = ("tasks.ai", "api.tasks.ai")
+    attempts: list[dict[str, str]] = []
     last_exc: ImportError | None = None
 
-    for module_path in module_paths:
+    def _has_required(module: Any) -> bool:
+        return hasattr(module, "generate_mannequin_task") and hasattr(
+            module, "generate_recommendation_task"
+        )
+
+    for module_path in ("tasks.ai", "api.tasks.ai"):
         try:
-            return importlib.import_module(module_path)
+            module = importlib.import_module(module_path)
         except ImportError as exc:
+            attempts.append({"module": module_path, "error": str(exc)})
             last_exc = exc
             continue
 
-    logger.exception("Failed to import AI tasks", exc_info=last_exc)
+        if _has_required(module):
+            return module
+
+        attempts.append({
+            "module": module_path,
+            "error": "missing required callables",
+            "file": getattr(module, "__file__", "<unknown>"),
+        })
+
+    # Fallback to loading directly from the repository file to bypass PYTHONPATH
+    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
+    if tasks_file.exists():
+        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            if _has_required(module):
+                return module
+            attempts.append({
+                "module": str(tasks_file),
+                "error": "missing required callables",
+                "file": str(tasks_file),
+            })
+
+    logger.error("AI tasks module missing required callables", extra={"attempts": attempts})
     raise HTTPException(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="AI задачи недоступны (проверьте PYTHONPATH и установку api пакета)",
+        detail="AI задачи недоступны (отсутствуют Celery-функции)",
     ) from last_exc
 
 
 def _get_ai_tasks() -> tuple[Callable[..., Any], Callable[..., Any]]:
     """Lazy-load Celery tasks to avoid startup crashes when PYTHONPATH drifts."""
 
-    module = _import_tasks_module()
+    module = _load_tasks_module()
 
-    generate_mannequin_task = getattr(module, "generate_mannequin_task", None)
-    generate_recommendation_task = getattr(module, "generate_recommendation_task", None)
-
-    if not generate_mannequin_task or not generate_recommendation_task:  # pragma: no cover - runtime guard
-        logger.error("AI tasks module missing required callables")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="AI задачи недоступны (отсутствуют Celery-функции)",
-        )
-
-    return generate_mannequin_task, generate_recommendation_task
+    return module.generate_mannequin_task, module.generate_recommendation_task
 
 
 def _has_active_celery_workers() -> bool:

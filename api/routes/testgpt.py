@@ -29,26 +29,50 @@ def _prepare_sys_path() -> None:
 
 
 def _get_analyze_task():
-    """Lazy-load the analyze task to tolerate missing PYTHONPATH at startup."""
+    """Lazy-load the analyze task with fallbacks to direct file import."""
 
     import importlib
+    import importlib.util
 
     _prepare_sys_path()
 
-    module_paths = ("tasks.ai", "api.tasks.ai")
+    attempts: list[dict[str, str]] = []
     last_exc: ImportError | None = None
 
-    for module_path in module_paths:
+    for module_path in ("tasks.ai", "api.tasks.ai"):
         try:
             module = importlib.import_module(module_path)
-            task = getattr(module, "analyze_clothes_image_task", None)
-            if task:
-                return task
         except ImportError as exc:
+            attempts.append({"module": module_path, "error": str(exc)})
             last_exc = exc
             continue
 
-    logger.exception("Failed to import analyze_clothes_image_task", exc_info=last_exc)
+        task = getattr(module, "analyze_clothes_image_task", None)
+        if task:
+            return task
+
+        attempts.append({
+            "module": module_path,
+            "error": "missing analyze_clothes_image_task",
+            "file": getattr(module, "__file__", "<unknown>"),
+        })
+
+    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
+    if tasks_file.exists():
+        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            task = getattr(module, "analyze_clothes_image_task", None)
+            if task:
+                return task
+            attempts.append({
+                "module": str(tasks_file),
+                "error": "missing analyze_clothes_image_task",
+                "file": str(tasks_file),
+            })
+
+    logger.error("Failed to import analyze_clothes_image_task", extra={"attempts": attempts})
     raise HTTPException(
         status_code=500,
         detail="AI анализ недоступен (проверьте PYTHONPATH и установку api)",
