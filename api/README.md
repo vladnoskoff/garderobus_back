@@ -66,8 +66,12 @@ REST API для «умного» гардероба, построенный на
 6. **Запустить приложение**
    - Основное пользовательское API:
      ```bash
-     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-     ```
+    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ```
+    При запуске с флагом `--reload` Uvicorn выводит служебные сообщения вида
+    `Will watch for changes in ...`, `Started reloader process ...` и `Application
+    startup complete`. Это нормальный лог авто-перезапуска: он следит за
+    изменениями кода и не блокирует работу API.
    - Отдельное API для админ-панели (вынесено в каталог `api_admin`, запускается в отдельном процессе/порте):
      ```bash
      uvicorn api_admin.main:app --host 0.0.0.0 --port 8100 --reload
