@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import logging
 from pathlib import Path
+import sys
 from uuid import uuid4
 
 from celery import states
@@ -16,13 +17,24 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
-from ..utils.task_importer import load_tasks_module
 from celery_app import celery_app
 from database import get_db
 from .location_utils import ensure_location_for_user
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError as KombuOperationalError
+
+_API_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = _API_DIR.parent
+for path in (_API_DIR, _PROJECT_ROOT):
+    path_str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
+try:  # Compatible with both "api" package and local module execution
+    from api.utils.task_importer import load_tasks_module
+except ImportError:  # pragma: no cover - fallback for direct script runs
+    from utils.task_importer import load_tasks_module
 
 
 logger = logging.getLogger(__name__)

@@ -1,15 +1,28 @@
 import base64
 import logging
 from pathlib import Path
+import sys
 from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request
 import schemas
 import settings
-from ..utils.task_importer import load_tasks_module
 from openai_client import is_proxy_active
 
 logger = logging.getLogger(__name__)
+
+
+_API_DIR = Path(__file__).resolve().parents[1]
+_PROJECT_ROOT = _API_DIR.parent
+for path in (_API_DIR, _PROJECT_ROOT):
+    path_str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
+try:  # Compatible with both "api" package and local module execution
+    from api.utils.task_importer import load_tasks_module
+except ImportError:  # pragma: no cover - fallback for direct script runs
+    from utils.task_importer import load_tasks_module
 
 
 router = APIRouter(prefix="/ai", tags=["AI Test"])
