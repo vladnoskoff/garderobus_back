@@ -25,27 +25,48 @@ from .location_utils import ensure_location_for_user
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError as KombuOperationalError
 
-_API_DIR = Path(__file__).resolve().parents[1]
-_PROJECT_ROOT = _API_DIR.parent
-for path in (_API_DIR, _PROJECT_ROOT):
-    path_str = str(path)
-    if path_str not in sys.path:
-        sys.path.insert(0, path_str)
+def _bootstrap_import_paths() -> Path | None:
+    """Ensure project/API paths are on sys.path and locate task_importer."""
+
+    here = Path(__file__).resolve()
+    candidates: list[Path] = []
+
+    # Look through common roots: current file tree, cwd, and their parents
+    candidates.extend([here.parents[1], here.parents[2]])
+    cwd = Path.cwd()
+    candidates.extend([cwd, cwd.parent])
+
+    for base in candidates:
+        api_dir = base if base.name == "api" else base / "api"
+        task_path = api_dir / "utils" / "task_importer.py"
+        if not task_path.exists():
+            continue
+
+        project_root = api_dir.parent
+        for path in (api_dir, project_root):
+            path_str = str(path)
+            if path_str not in sys.path:
+                sys.path.insert(0, path_str)
+
+        return task_path
+
+    return None
 
 
 def _import_task_importer():
     try:  # Prefer package import when project root is on sys.path
         from api.utils.task_importer import load_tasks_module
         return load_tasks_module
-    except ImportError:  # pragma: no cover - fallback for dev runs from api/
+    except ImportError:
         pass
 
-    module_path = _API_DIR / "utils" / "task_importer.py"
-    spec = importlib.util.spec_from_file_location("utils.task_importer", module_path)
-    if spec and spec.loader:
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module.load_tasks_module
+    module_path = _bootstrap_import_paths()
+    if module_path is not None:
+        spec = importlib.util.spec_from_file_location("utils.task_importer", module_path)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module.load_tasks_module
 
     raise ImportError("Unable to import load_tasks_module from utils.task_importer")
 
