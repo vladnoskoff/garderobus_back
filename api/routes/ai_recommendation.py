@@ -5,6 +5,8 @@ from typing import Any, Callable, Dict, Optional
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+import importlib
+import importlib.util
 import logging
 from pathlib import Path
 import sys
@@ -19,11 +21,51 @@ import models
 import schemas
 from celery_app import celery_app
 from database import get_db
-from fastapi import HTTPException, status
 from .location_utils import ensure_location_for_user
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError as KombuOperationalError
+
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_API_DIR = _PROJECT_ROOT / "api"
+
+
+def _import_task_importer() -> Callable[..., Any]:
+    """Import ``load_tasks_module`` robustly across run contexts.
+
+    When ``uvicorn`` runs from ``api/`` the package name is just ``routes.*``.
+    When it runs from repo root, imports might resolve as ``api.routes.*``.
+    This helper makes both scenarios work reliably.
+    """
+
+    search_paths = (_PROJECT_ROOT, _API_DIR)
+    for path in search_paths:
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+    module_names = ("api.utils.task_importer", "utils.task_importer")
+    for name in module_names:
+        try:
+            module = importlib.import_module(name)
+            return module.load_tasks_module
+        except ModuleNotFoundError:
+            continue
+
+    for base in search_paths:
+        candidate = base / "api" / "utils" / "task_importer.py" if (base / "api").is_dir() else base / "utils" / "task_importer.py"
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location("task_importer_fallback", candidate)
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(module)  # type: ignore[call-arg]
+                return module.load_tasks_module
+
+    raise ImportError("Unable to locate utils.task_importer.load_tasks_module")
+
+
+load_tasks_module = _import_task_importer()
 
 
 logger = logging.getLogger(__name__)
@@ -35,78 +77,17 @@ INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
-def _prepare_sys_path() -> None:
-    """Ensure project and api directories are importable for Celery tasks."""
-
-    api_dir = Path(__file__).resolve().parents[1]
-    project_root = api_dir.parent
-
-    for path in (api_dir, project_root):
-        path_str = str(path)
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-
-
-def _load_tasks_module() -> Any:
-    """Load the tasks module, falling back to direct file loading if needed."""
-
-    import importlib
-    import importlib.util
-
-    _prepare_sys_path()
-
-    attempts: list[dict[str, str]] = []
-    last_exc: ImportError | None = None
-
-    def _has_required(module: Any) -> bool:
-        return hasattr(module, "generate_mannequin_task") and hasattr(
-            module, "generate_recommendation_task"
-        )
-
-    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
-
-    for module_path in ("tasks.ai", "api.tasks.ai"):
-        try:
-            module = importlib.import_module(module_path)
-        except ImportError as exc:
-            attempts.append({"module": module_path, "error": str(exc)})
-            last_exc = exc
-            continue
-
-        if _has_required(module):
-            return module
-
-        attempts.append({
-            "module": module_path,
-            "error": "missing required callables",
-            "file": getattr(module, "__file__", "<unknown>"),
-        })
-
-    # If imports were missing callables, try a file-based load before failing.
-    if tasks_file.exists():
-        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            if _has_required(module):
-                return module
-            attempts.append({
-                "module": str(tasks_file),
-                "error": "missing required callables",
-                "file": str(tasks_file),
-            })
-
-    logger.error("AI tasks module missing required callables", extra={"attempts": attempts})
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="AI задачи недоступны (отсутствуют Celery-функции)",
-    ) from last_exc
-
-
 def _get_ai_tasks() -> tuple[Callable[..., Any], Callable[..., Any]]:
     """Lazy-load Celery tasks to avoid startup crashes when PYTHONPATH drifts."""
 
-    module = _load_tasks_module()
+    api_dir = Path(__file__).resolve().parents[1]
+    tasks_file = api_dir / "tasks" / "ai.py"
+    module = load_tasks_module(
+        required_attrs=("generate_mannequin_task", "generate_recommendation_task"),
+        api_dir=api_dir,
+        logger=logger,
+        fallback_file=tasks_file,
+    )
 
     return module.generate_mannequin_task, module.generate_recommendation_task
 

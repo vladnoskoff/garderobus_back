@@ -271,4 +271,3 @@ def shutdown_event() -> None:
 
     engine.dispose()
     cache.close()
-
