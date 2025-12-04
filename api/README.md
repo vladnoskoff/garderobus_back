@@ -66,12 +66,8 @@ REST API для «умного» гардероба, построенный на
 6. **Запустить приложение**
    - Основное пользовательское API:
      ```bash
-    uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    ```
-    При запуске с флагом `--reload` Uvicorn выводит служебные сообщения вида
-    `Will watch for changes in ...`, `Started reloader process ...` и `Application
-    startup complete`. Это нормальный лог авто-перезапуска: он следит за
-    изменениями кода и не блокирует работу API.
+     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+     ```
    - Отдельное API для админ-панели (вынесено в каталог `api_admin`, запускается в отдельном процессе/порте):
      ```bash
      uvicorn api_admin.main:app --host 0.0.0.0 --port 8100 --reload
@@ -190,10 +186,6 @@ CREATE INDEX IF NOT EXISTS idx_wardrobe_locations_user_id ON wardrobe_locations(
 ALTER TABLE clothes ADD COLUMN IF NOT EXISTS care_instructions TEXT;
 ALTER TABLE clothes ADD COLUMN IF NOT EXISTS location_id INTEGER REFERENCES wardrobe_locations(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_clothes_location_id ON clothes(location_id);
-
--- Фото бирки и флаг бирки
-ALTER TABLE clothes ADD COLUMN IF NOT EXISTS label_image_url VARCHAR;
-ALTER TABLE clothes_gallery_images ADD COLUMN IF NOT EXISTS is_label BOOLEAN NOT NULL DEFAULT false;
 ```
 
 ## Основные маршруты API
