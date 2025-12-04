@@ -160,6 +160,18 @@ def mannequin_gender_instruction(gender: Optional[str]) -> str:
     return f"Render a full-body mannequin that reflects the user's gender: {gender}."
 
 
+def _item_reference_image(item) -> Optional[str]:
+    """Return the first available image for an item to anchor the AI output."""
+
+    gallery = getattr(item, "image_gallery", None)
+    if not gallery:
+        url = getattr(item, "image_url", None)
+        return url if url else None
+    if isinstance(gallery, list) and gallery:
+        return gallery[0]
+    return None
+
+
 def build_mannequin_prompt(items: List, weather, gender: Optional[str]) -> str:
     lines = [
         "Create a hyperrealistic studio photograph of a faceless mannequin wearing a cohesive outfit.",
@@ -169,11 +181,14 @@ def build_mannequin_prompt(items: List, weather, gender: Optional[str]) -> str:
         f"Weather context: {weather.condition}, {weather.temperature}°C, humidity {weather.humidity}%, wind {getattr(weather, 'wind_speed', 0) or 0} m/s.",
         "Ensure the outfit feels comfortable for the current weather and coordinates colours harmoniously.",
         mannequin_gender_instruction(gender),
-        "Only use the clothing items listed below. Do not add extra garments, accessories or props.",
+        "Only use the clothing items listed below. Do not add extra garments, accessories or props under any circumstances.",
         "Preserve each garment exactly as described: if the item has no logo, text or print, keep its surfaces plain.",
+        "If an item shows a logo or print in its reference image, keep that logo or print only on that specific garment.",
         "Never invent new graphics, move logos between garments, or add embellishments that are not explicitly listed for the item.",
+        "Do not change base colours or materials. Reproduce the reference images faithfully and do not imagine alternate versions.",
+        "If a garment has a photo, match its silhouette and details precisely; otherwise keep design minimal and unbranded.",
         "If multiple items are listed, do not blend their branding or designs — keep every piece faithful to its own description only.",
-        "Clothing items to include:",
+        "Clothing items to include (each must appear once):",
     ]
 
     for item in items:
@@ -187,8 +202,10 @@ def build_mannequin_prompt(items: List, weather, gender: Optional[str]) -> str:
                 climate_note = f" (подходит при температуре от {temp_min}°C)"
             elif temp_max is not None:
                 climate_note = f" (подходит до {temp_max}°C)"
+        reference_image = _item_reference_image(item)
+        reference_note = f" Reference image: {reference_image}. Replicate this exact garment without inventing alternatives." if reference_image else ""
         lines.append(
-            f"- {base_description.strip()} (season: {getattr(item, 'season', None)}){climate_note}"
+            f"- {base_description.strip()} (season: {getattr(item, 'season', None)}){climate_note}.{reference_note}"
         )
 
     return "\n".join(lines)
