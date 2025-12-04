@@ -7,6 +7,7 @@ import io
 import json
 import logging
 from pathlib import Path
+import sys
 from typing import List, Optional, Sequence
 
 import jwt
@@ -17,13 +18,21 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import func
 
-from api.utils.task_importer import load_tasks_module
 import models
 import schemas as base_schemas
 from database import get_db, get_read_db
 from routes import users as user_routes
 from api_admin import schemas as admin_schemas
 from api_admin.services import system_tools
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_API_DIR = _PROJECT_ROOT / "api"
+for path in (_API_DIR, _PROJECT_ROOT):
+    path_str = str(path)
+    if path_str not in sys.path:
+        sys.path.insert(0, path_str)
+
+from api.utils.task_importer import load_tasks_module
 
 security = HTTPBearer(auto_error=False)
 

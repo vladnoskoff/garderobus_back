@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
-from api.utils.task_importer import load_tasks_module
+from ..utils.task_importer import load_tasks_module
 from celery_app import celery_app
 from database import get_db
 from .location_utils import ensure_location_for_user

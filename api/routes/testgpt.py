@@ -6,7 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, File, Form, HTTPException, Request
 import schemas
 import settings
-from api.utils.task_importer import load_tasks_module
+from ..utils.task_importer import load_tasks_module
 from openai_client import is_proxy_active
 
 logger = logging.getLogger(__name__)
