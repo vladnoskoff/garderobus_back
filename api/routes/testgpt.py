@@ -2,6 +2,8 @@ import base64
 from typing import Optional
 
 import logging
+from pathlib import Path
+import sys
 
 from fastapi import APIRouter, File, Form, HTTPException, Request
 import schemas
@@ -14,10 +16,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Test"])
 
 
+def _prepare_sys_path() -> None:
+    """Ensure project and api directories are importable for Celery tasks."""
+
+    api_dir = Path(__file__).resolve().parents[1]
+    project_root = api_dir.parent
+
+    for path in (api_dir, project_root):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+
 def _get_analyze_task():
     """Lazy-load the analyze task to tolerate missing PYTHONPATH at startup."""
 
     import importlib
+
+    _prepare_sys_path()
 
     module_paths = ("tasks.ai", "api.tasks.ai")
     last_exc: ImportError | None = None

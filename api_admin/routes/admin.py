@@ -6,6 +6,8 @@ import decimal
 import io
 import json
 import logging
+from pathlib import Path
+import sys
 from typing import List, Optional, Sequence
 
 import jwt
@@ -30,10 +32,24 @@ router = APIRouter(prefix="/admin", tags=["Admin Panel"])
 logger = logging.getLogger(__name__)
 
 
+def _prepare_sys_path() -> None:
+    """Ensure project and api directories are importable for Celery tasks."""
+
+    api_dir = Path(__file__).resolve().parents[2] / "api"
+    project_root = api_dir.parent
+
+    for path in (api_dir, project_root):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+
 def _get_mannequin_task():
     """Lazy-load mannequin task to tolerate missing PYTHONPATH on startup."""
 
     import importlib
+
+    _prepare_sys_path()
 
     module_paths = ("tasks.ai", "api.tasks.ai")
     last_exc: ImportError | None = None

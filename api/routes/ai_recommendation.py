@@ -6,6 +6,8 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
 import logging
+from pathlib import Path
+import sys
 from uuid import uuid4
 
 from celery import states
@@ -33,10 +35,24 @@ INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
+def _prepare_sys_path() -> None:
+    """Ensure project and api directories are importable for Celery tasks."""
+
+    api_dir = Path(__file__).resolve().parents[1]
+    project_root = api_dir.parent
+
+    for path in (api_dir, project_root):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+
 def _import_tasks_module():
     """Import the Celery tasks module with fallbacks for missing PYTHONPATH."""
 
     import importlib
+
+    _prepare_sys_path()
 
     module_paths = ("tasks.ai", "api.tasks.ai")
     last_exc: ImportError | None = None
