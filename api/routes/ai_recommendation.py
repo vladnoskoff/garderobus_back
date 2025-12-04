@@ -63,6 +63,8 @@ def _load_tasks_module() -> Any:
             module, "generate_recommendation_task"
         )
 
+    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
+
     for module_path in ("tasks.ai", "api.tasks.ai"):
         try:
             module = importlib.import_module(module_path)
@@ -80,8 +82,7 @@ def _load_tasks_module() -> Any:
             "file": getattr(module, "__file__", "<unknown>"),
         })
 
-    # Fallback to loading directly from the repository file to bypass PYTHONPATH
-    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
+    # If imports were missing callables, try a file-based load before failing.
     if tasks_file.exists():
         spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
         if spec and spec.loader:
