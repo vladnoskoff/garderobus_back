@@ -7,6 +7,7 @@ from uuid import uuid4
 from typing import Optional, Sequence
 
 import base64
+import json
 import shutil
 
 from pydantic import ValidationError
@@ -295,7 +296,7 @@ async def autofill_clothes_fields(
     return _insights_to_autofill(insights)
 
 
-@router.post("/", response_model=schemas.ClothesResponse)
+@router.post("/", response_model=schemas.ClothesResponse | list[schemas.ClothesResponse])
 async def add_clothes(
     user_id: int = Form(...),
     name: Optional[str] = Form(None),
@@ -309,6 +310,9 @@ async def add_clothes(
     temperature_max: Optional[int] = Form(None),
     ai_metadata: Optional[str] = Form(None),
     auto_fill: bool = Form(False),
+    split_into_items: bool = Form(False),
+    images_per_item: int = Form(1),
+    label_image_index: Optional[int] = Form(None),
     location_id: Optional[int] = Form(None),
     language_code: Optional[str] = Form(None),
     files: list[UploadFile] = File(...),
@@ -334,180 +338,278 @@ async def add_clothes(
     if location_id is not None:
         ensure_location_for_user(db, user_id, location_id)
 
-    image_payloads = [content for _, content in uploads]
-
     normalized_language = _normalize_language_code(language_code)
-
-    autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
-    if auto_fill or not all([name, category, season, color]):
-        insights = await _analyze_image_bytes(image_payloads, normalized_language)
-        autofilled_metadata = _insights_to_autofill(insights)
-
-        def _merge_field(
-            current: Optional[str], generated: Optional[str]
-        ) -> Optional[str]:
-            if auto_fill:
-                return generated or current
-            return current or generated
-
-        name = _merge_field(name, autofilled_metadata.name)
-        category = _merge_field(category, autofilled_metadata.category)
-        season = _merge_field(season, autofilled_metadata.season)
-        color = _merge_field(color, autofilled_metadata.color)
-        material = _merge_field(material, autofilled_metadata.material)
-        prompt_description = _merge_field(
-            prompt_description, autofilled_metadata.prompt_description
-        )
-        care_instructions = _merge_field(
-            care_instructions, autofilled_metadata.care_instructions
-        )
-
-        def _merge_temperature(
-            current: Optional[int], generated: Optional[int]
-        ) -> Optional[int]:
-            if generated is None:
-                return current
-            if auto_fill or current is None:
-                return generated
-            return current
-
-        temperature_min = _merge_temperature(
-            temperature_min, autofilled_metadata.temperature_min
-        )
-        temperature_max = _merge_temperature(
-            temperature_max, autofilled_metadata.temperature_max
-        )
-
-        if autofilled_metadata.ai_metadata:
-            ai_metadata = autofilled_metadata.ai_metadata.model_dump_json()
-
-    if not all([name, category, season, color]):
-        raise HTTPException(
-            status_code=422, detail="Не удалось определить обязательные поля одежды"
-        )
-
-    metadata_payload = None
-    if ai_metadata:
+    def _parse_metadata_payload() -> Optional[dict]:
+        if not ai_metadata:
+            return None
         try:
-            if autofilled_metadata and isinstance(ai_metadata, str):
-                metadata_payload = autofilled_metadata.ai_metadata.model_dump()
-            else:
-                metadata_payload = schemas.ClothesInsights.model_validate_json(
-                    ai_metadata
-                ).model_dump()
+            parsed = json.loads(ai_metadata)
+            if isinstance(parsed, dict):
+                return parsed
+            return schemas.ClothesInsights.model_validate(parsed).model_dump()
         except Exception:
+            return None
+
+    base_metadata_payload = _parse_metadata_payload()
+
+    async def _build_fields_for_upload(content: bytes) -> tuple[dict, Optional[dict]]:
+        local_name = name
+        local_category = category
+        local_season = season
+        local_color = color
+        local_material = material
+        local_prompt_description = prompt_description
+        local_care_instructions = care_instructions
+        local_temperature_min = temperature_min
+        local_temperature_max = temperature_max
+        metadata_payload = (
+            json.loads(json.dumps(base_metadata_payload))
+            if base_metadata_payload is not None
+            else None
+        )
+
+        autofilled_metadata: Optional[schemas.ClothesAutoFill] = None
+        if auto_fill or not all(
+            [local_name, local_category, local_season, local_color]
+        ):
+            insights = await _analyze_image_bytes([content], normalized_language)
+            autofilled_metadata = _insights_to_autofill(insights)
+
+            def _merge_field(
+                current: Optional[str], generated: Optional[str]
+            ) -> Optional[str]:
+                if auto_fill:
+                    return generated or current
+                return current or generated
+
+            local_name = _merge_field(local_name, autofilled_metadata.name)
+            local_category = _merge_field(local_category, autofilled_metadata.category)
+            local_season = _merge_field(local_season, autofilled_metadata.season)
+            local_color = _merge_field(local_color, autofilled_metadata.color)
+            local_material = _merge_field(local_material, autofilled_metadata.material)
+            local_prompt_description = _merge_field(
+                local_prompt_description, autofilled_metadata.prompt_description
+            )
+            local_care_instructions = _merge_field(
+                local_care_instructions, autofilled_metadata.care_instructions
+            )
+
+            def _merge_temperature(
+                current: Optional[int], generated: Optional[int]
+            ) -> Optional[int]:
+                if generated is None:
+                    return current
+                if auto_fill or current is None:
+                    return generated
+                return current
+
+            local_temperature_min = _merge_temperature(
+                local_temperature_min, autofilled_metadata.temperature_min
+            )
+            local_temperature_max = _merge_temperature(
+                local_temperature_max, autofilled_metadata.temperature_max
+            )
+
+        if not all([local_name, local_category, local_season, local_color]):
+            raise HTTPException(
+                status_code=422, detail="Не удалось определить обязательные поля одежды"
+            )
+
+        if metadata_payload is None and autofilled_metadata:
+            try:
+                metadata_payload = autofilled_metadata.ai_metadata.model_dump()
+            except Exception:
+                metadata_payload = None
+
+        if metadata_payload is None:
+            metadata_payload = {}
+
+        temp_range = (
+            metadata_payload.get("temp_c_range")
+            if isinstance(metadata_payload, dict)
+            else None
+        )
+        if isinstance(temp_range, (list, tuple)) and temp_range:
+            try:
+                if len(temp_range) >= 2:
+                    if local_temperature_min is None:
+                        local_temperature_min = int(temp_range[0])
+                    if local_temperature_max is None:
+                        local_temperature_max = int(temp_range[1])
+                elif len(temp_range) == 1:
+                    single_temp = int(temp_range[0])
+                    if local_temperature_min is None:
+                        local_temperature_min = single_temp
+                    if local_temperature_max is None:
+                        local_temperature_max = single_temp
+            except (TypeError, ValueError):
+                pass
+
+        manual_range: list[int] = []
+        for value in (local_temperature_min, local_temperature_max):
+            if value is None:
+                continue
+            try:
+                manual_range.append(int(value))
+            except (TypeError, ValueError):
+                continue
+
+        if manual_range:
+            manual_range.sort()
+            if len(manual_range) == 1:
+                metadata_payload["temp_c_range"] = [manual_range[0]]
+            else:
+                metadata_payload["temp_c_range"] = [manual_range[0], manual_range[-1]]
+
+        if not metadata_payload:
             metadata_payload = None
 
-    if metadata_payload is None:
-        metadata_payload = {}
-
-    temp_range = (
-        metadata_payload.get("temp_c_range")
-        if isinstance(metadata_payload, dict)
-        else None
-    )
-    if isinstance(temp_range, (list, tuple)) and temp_range:
-        try:
-            if len(temp_range) >= 2:
-                if temperature_min is None:
-                    temperature_min = int(temp_range[0])
-                if temperature_max is None:
-                    temperature_max = int(temp_range[1])
-            elif len(temp_range) == 1:
-                single_temp = int(temp_range[0])
-                if temperature_min is None:
-                    temperature_min = single_temp
-                if temperature_max is None:
-                    temperature_max = single_temp
-        except (TypeError, ValueError):
-            pass
-
-    manual_range: list[int] = []
-    for value in (temperature_min, temperature_max):
-        if value is None:
-            continue
-        try:
-            manual_range.append(int(value))
-        except (TypeError, ValueError):
-            continue
-
-    if manual_range:
-        manual_range.sort()
-        if len(manual_range) == 1:
-            metadata_payload["temp_c_range"] = [manual_range[0]]
-        else:
-            metadata_payload["temp_c_range"] = [manual_range[0], manual_range[-1]]
-
-    if not metadata_payload:
-        metadata_payload = None
-
-    new_clothes = models.Clothes(
-        user_id=user_id,
-        name=name,
-        category=category,
-        season=season,
-        color=color,
-        material=material,
-        prompt_description=prompt_description or "",
-        care_instructions=care_instructions,
-        location_id=location_id,
-    )
-
-    if metadata_payload:
-        new_clothes.ai_metadata = metadata_payload
-
-    db.add(new_clothes)
-    db.flush()
-
-    location_segment = str(location_id) if location_id is not None else "shared"
-    destination_dir = _gallery_dir(user_id, location_segment, new_clothes.id)
-
-    saved_files: list[tuple[str, bool]] = []
-    try:
-        destination_dir.mkdir(parents=True, exist_ok=True)
-        for index, (upload, content) in enumerate(uploads, start=1):
-            suffix = Path(upload.filename or "item.jpg").suffix
-            if not suffix:
-                suffix = ".jpg"
-            unique_name = f"{index:02d}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{suffix}"
-            save_path = destination_dir / unique_name
-            with open(save_path, "wb") as buffer:
-                buffer.write(content)
-            relative_path = (
-                f"{user_id}/{location_segment}/{new_clothes.id}/{unique_name}"
-            )
-            image_url = _build_image_url(relative_path)
-            saved_files.append((image_url, index == 1))
-    except Exception as exc:
-        shutil.rmtree(destination_dir, ignore_errors=True)
-        db.rollback()
-        raise HTTPException(
-            status_code=500, detail=f"Не удалось сохранить изображение: {exc}"
-        ) from exc
-
-    if not saved_files:
-        shutil.rmtree(destination_dir, ignore_errors=True)
-        db.rollback()
-        raise HTTPException(status_code=500, detail="Не удалось сохранить изображения")
-
-    new_clothes.image_url = saved_files[0][0]
-    for image_url, is_primary in saved_files:
-        db.add(
-            models.ClothesImage(
-                clothes_id=new_clothes.id,
-                image_url=image_url,
-                is_primary=is_primary,
-            )
+        return (
+            {
+                "name": local_name,
+                "category": local_category,
+                "season": local_season,
+                "color": local_color,
+                "material": local_material,
+                "prompt_description": local_prompt_description,
+                "care_instructions": local_care_instructions,
+                "temperature_min": local_temperature_min,
+                "temperature_max": local_temperature_max,
+            },
+            metadata_payload,
         )
 
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        shutil.rmtree(destination_dir, ignore_errors=True)
-        raise
+    async def _create_single_clothes(
+        upload_items: list[tuple[UploadFile, bytes]], label_position: Optional[int]
+    ) -> models.Clothes:
+        fields, metadata_payload = await _build_fields_for_upload(
+            upload_items[0][1]
+        )
+        new_clothes = models.Clothes(
+            user_id=user_id,
+            name=fields["name"],
+            category=fields["category"],
+            season=fields["season"],
+            color=fields["color"],
+            material=fields["material"],
+            prompt_description=fields["prompt_description"] or "",
+            care_instructions=fields["care_instructions"],
+            location_id=location_id,
+        )
 
-    db.refresh(new_clothes)
+        if metadata_payload:
+            new_clothes.ai_metadata = metadata_payload
+
+        db.add(new_clothes)
+        db.flush()
+
+        location_segment = str(location_id) if location_id is not None else "shared"
+        destination_dir = _gallery_dir(user_id, location_segment, new_clothes.id)
+
+        saved_files: list[tuple[str, bool]] = []
+        label_url: Optional[str] = None
+        try:
+            destination_dir.mkdir(parents=True, exist_ok=True)
+            for index, (upload, content) in enumerate(upload_items, start=1):
+                suffix = Path(upload.filename or "item.jpg").suffix
+                if not suffix:
+                    suffix = ".jpg"
+                unique_name = f"{index:02d}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{uuid4().hex}{suffix}"
+                save_path = destination_dir / unique_name
+                with open(save_path, "wb") as buffer:
+                    buffer.write(content)
+                relative_path = (
+                    f"{user_id}/{location_segment}/{new_clothes.id}/{unique_name}"
+                )
+                image_url = _build_image_url(relative_path)
+                is_label = label_position is not None and index == label_position
+                if is_label:
+                    label_url = image_url
+                saved_files.append((image_url, index == 1, is_label))
+        except Exception as exc:
+            shutil.rmtree(destination_dir, ignore_errors=True)
+            db.rollback()
+            raise HTTPException(
+                status_code=500, detail=f"Не удалось сохранить изображение: {exc}"
+            ) from exc
+
+        if not saved_files:
+            shutil.rmtree(destination_dir, ignore_errors=True)
+            db.rollback()
+            raise HTTPException(
+                status_code=500, detail="Не удалось сохранить изображения"
+            )
+
+        new_clothes.image_url = saved_files[0][0]
+        new_clothes.label_image_url = label_url
+
+        for image_url, is_primary, is_label in saved_files:
+            db.add(
+                models.ClothesImage(
+                    clothes_id=new_clothes.id,
+                    image_url=image_url,
+                    is_primary=is_primary,
+                    is_label=is_label,
+                )
+            )
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            shutil.rmtree(destination_dir, ignore_errors=True)
+            raise
+
+        db.refresh(new_clothes)
+        return new_clothes
+
+    def _label_position_for_group(group_size: int) -> Optional[int]:
+        if label_image_index is None:
+            return None
+        if label_image_index < 1:
+            raise HTTPException(
+                status_code=400, detail="Позиция изображения бирки должна быть больше нуля"
+            )
+        if label_image_index > group_size:
+            raise HTTPException(
+                status_code=400,
+                detail="Позиция бирки превышает количество изображений в группе",
+            )
+        return label_image_index
+
+    if images_per_item < 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Количество изображений на вещь должно быть положительным",
+        )
+
+    if split_into_items and len(uploads) > 1:
+        created: list[models.Clothes] = []
+        chunk: list[tuple[UploadFile, bytes]] = []
+        for upload, content in uploads:
+            chunk.append((upload, content))
+            if len(chunk) == images_per_item:
+                created.append(
+                    await _create_single_clothes(
+                        chunk, _label_position_for_group(images_per_item)
+                    )
+                )
+                chunk = []
+
+        if chunk:
+            created.append(
+                await _create_single_clothes(
+                    chunk, _label_position_for_group(len(chunk))
+                )
+            )
+
+        invalidate_clothes_for_user(user_id)
+        invalidate_outfit_history_for_user(user_id)
+        return created
+
+    new_clothes = await _create_single_clothes(
+        uploads, _label_position_for_group(len(uploads))
+    )
     invalidate_clothes_for_user(new_clothes.user_id)
     invalidate_outfit_history_for_user(new_clothes.user_id)
     return new_clothes
@@ -558,6 +660,12 @@ def update_clothes(
                 if cover_relative:
                     filename = Path(cover_relative).name
                     clothes.image_url = _build_image_url(
+                        f"{clothes.user_id}/{new_segment}/{clothes.id}/{filename}"
+                    )
+                label_relative = _relative_image_path(clothes.label_image_url)
+                if label_relative:
+                    filename = Path(label_relative).name
+                    clothes.label_image_url = _build_image_url(
                         f"{clothes.user_id}/{new_segment}/{clothes.id}/{filename}"
                     )
         clothes.location_id = payload.location_id

@@ -5,6 +5,9 @@ import base64
 import decimal
 import io
 import json
+import logging
+from pathlib import Path
+import sys
 from typing import List, Optional, Sequence
 
 import jwt
@@ -25,6 +28,71 @@ from api_admin.services import system_tools
 security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/admin", tags=["Admin Panel"])
+
+logger = logging.getLogger(__name__)
+
+
+def _prepare_sys_path() -> None:
+    """Ensure project and api directories are importable for Celery tasks."""
+
+    api_dir = Path(__file__).resolve().parents[2] / "api"
+    project_root = api_dir.parent
+
+    for path in (api_dir, project_root):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
+
+
+def _get_mannequin_task():
+    """Lazy-load mannequin task with fallbacks to direct file import."""
+
+    import importlib
+    import importlib.util
+
+    _prepare_sys_path()
+
+    attempts: list[dict[str, str]] = []
+    last_exc: ImportError | None = None
+
+    for module_path in ("tasks.ai", "api.tasks.ai"):
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError as exc:
+            attempts.append({"module": module_path, "error": str(exc)})
+            last_exc = exc
+            continue
+
+        task = getattr(module, "generate_mannequin_task", None)
+        if task:
+            return task
+
+        attempts.append({
+            "module": module_path,
+            "error": "missing generate_mannequin_task",
+            "file": getattr(module, "__file__", "<unknown>"),
+        })
+
+    tasks_file = Path(__file__).resolve().parents[2] / "api" / "tasks" / "ai.py"
+    if tasks_file.exists():
+        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            task = getattr(module, "generate_mannequin_task", None)
+            if task:
+                return task
+            attempts.append({
+                "module": str(tasks_file),
+                "error": "missing generate_mannequin_task",
+                "file": str(tasks_file),
+            })
+
+    logger.error("Failed to import generate_mannequin_task", extra={"attempts": attempts})
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="AI задачи недоступны (проверьте PYTHONPATH и установку api)",
+    ) from last_exc
 
 
 def _get_current_user(
@@ -202,6 +270,47 @@ def _build_user_summaries(db: Session, users: Sequence[models.User]) -> List[adm
         )
 
     return summaries
+
+
+@router.post(
+    "/admin/mannequins/refresh",
+    response_model=admin_schemas.AdminActionResponse,
+    summary="Запустить обновление манекенов для всех пользователей",
+)
+def refresh_all_mannequins(
+    _: models.User = Depends(_get_current_user),
+    db: Session = Depends(get_db),
+) -> admin_schemas.AdminActionResponse:
+    mannequin_task = _get_mannequin_task()
+
+    users = db.query(models.User.id).order_by(models.User.id).all()
+    if not users:
+        return admin_schemas.AdminActionResponse(
+            success=False,
+            detail="Нет пользователей для обновления",
+        )
+
+    scheduled = 0
+    for idx, row in enumerate(users):
+        try:
+            mannequin_task.apply_async(
+                args=[],
+                kwargs={"user_id": row.id},
+                countdown=scheduled,
+            )
+        except Exception as exc:  # pragma: no cover - broker issues
+            return admin_schemas.AdminActionResponse(
+                success=False,
+                detail=f"Не удалось запланировать задачу: {exc}",
+                error=str(exc),
+            )
+        if idx % 5 == 4:
+            scheduled += 1
+
+    return admin_schemas.AdminActionResponse(
+        success=True,
+        detail=f"Запланировано {len(users)} генераций манекенов",
+    )
 
 
 def _build_location_details(db: Session, user_id: int) -> List[admin_schemas.AdminUserLocationDetail]:

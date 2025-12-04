@@ -11,8 +11,10 @@
 
   const elements = {
     logoutButton: document.getElementById("logout-button"),
+    refreshMannequinsButton: document.getElementById("refresh-mannequins-button"),
     refreshButton: document.getElementById("refresh-button"),
     createUserButton: document.getElementById("create-user-button"),
+    mannequinRefreshFeedback: document.getElementById("mannequin-refresh-feedback"),
     loadingIndicator: document.getElementById("loading-indicator"),
     loadError: document.getElementById("load-error"),
     tableWrapper: document.getElementById("users-table-wrapper"),
@@ -2905,6 +2907,57 @@
     }
   }
 
+  async function triggerBulkMannequinsRefresh() {
+    if (!elements.refreshMannequinsButton) return;
+
+    const button = elements.refreshMannequinsButton;
+    const feedback = elements.mannequinRefreshFeedback;
+    const originalLabel = button.textContent;
+
+    button.disabled = true;
+    button.textContent = "Запускаем...";
+    if (feedback) {
+      feedback.classList.remove("error", "success");
+      toggleHidden(feedback, true);
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/mannequins/refresh`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const payload = await response.json();
+      const success = response.ok && payload?.success !== false;
+      const detail = payload?.detail || (success ? "Обновление запущено" : "Не удалось запустить обновление");
+
+      if (feedback) {
+        feedback.textContent = detail;
+        feedback.classList.toggle("success", success);
+        feedback.classList.toggle("error", !success);
+        toggleHidden(feedback, false);
+      }
+    } catch (error) {
+      console.error(error);
+      if (feedback) {
+        feedback.textContent = "Не удалось запустить обновление манекенов.";
+        feedback.classList.add("error");
+        feedback.classList.remove("success");
+        toggleHidden(feedback, false);
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
+
   async function loadUsers() {
     if (elements.loadingIndicator) {
       elements.loadingIndicator.textContent = "Загрузка...";
@@ -2968,6 +3021,12 @@
       if (pageType === "users") {
         void refreshActivityMetrics({ silent: false });
       }
+    });
+  }
+
+  if (elements.refreshMannequinsButton) {
+    elements.refreshMannequinsButton.addEventListener("click", () => {
+      void triggerBulkMannequinsRefresh();
     });
   }
 

@@ -471,6 +471,9 @@ class ApiService {
     int? locationId,
     String? promptDescription,
     String? careInstructions,
+    bool splitIntoItems = false,
+    int? imagesPerItem,
+    int? labelImageIndex,
   }) async {
     final storage = const FlutterSecureStorage();
     final userId = await storage.read(key: "user_id");
@@ -520,6 +523,9 @@ class ApiService {
         locationId: locationId,
         promptDescription: promptDescription,
         careInstructions: careInstructions,
+        splitIntoItems: splitIntoItems,
+        imagesPerItem: imagesPerItem,
+        labelImageIndex: labelImageIndex,
       );
       return;
     }
@@ -549,6 +555,18 @@ class ApiService {
 
     if (locationId != null) {
       request.fields['location_id'] = locationId.toString();
+    }
+
+    if (splitIntoItems) {
+      request.fields['split_into_items'] = 'true';
+    }
+
+    if (imagesPerItem != null) {
+      request.fields['images_per_item'] = imagesPerItem.toString();
+    }
+
+    if (labelImageIndex != null) {
+      request.fields['label_image_index'] = labelImageIndex.toString();
     }
 
     for (final image in images) {

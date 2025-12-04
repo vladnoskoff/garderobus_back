@@ -16,6 +16,13 @@ enum _PhotoPermissionAction {
   openSettings,
 }
 
+class _ClothingDraft {
+  _ClothingDraft();
+
+  final List<File> garmentImages = [];
+  final List<File> labelImages = [];
+}
+
 class AddClothesScreen extends StatefulWidget {
   final int? initialLocationId;
 
@@ -32,9 +39,10 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
   final TextEditingController _colorController = TextEditingController();
   final TextEditingController _materialController = TextEditingController();
   String season = '';
-  final List<File> _images = [];
-  late final PageController _imagePageController;
-  int _currentImageIndex = 0;
+  final List<_ClothingDraft> _items = [
+    _ClothingDraft(),
+  ];
+  bool _isMultipleItems = false;
   bool _isLoading = false;
   bool _useAiAutoFill = true;
   int? _selectedLocationId;
@@ -47,7 +55,6 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
   @override
   void initState() {
     super.initState();
-    _imagePageController = PageController();
     _loadUserIdAndLocations();
   }
 
@@ -221,219 +228,420 @@ class _AddClothesScreenState extends State<AddClothesScreen> {
     }
   }
 
-Future<void> _addImageFromCamera() async {
-  final granted = await _requestPermission(Permission.camera);
-  if (!granted) return;
-  try {
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.camera,
-      preferredCameraDevice: CameraDevice.rear,
-    );
-    if (pickedFile != null) {
-      final file = File(pickedFile.path);
-      setState(() {
-        _images.insert(0, file);
-        _currentImageIndex = 0;
-      });
-      if (_imagePageController.hasClients) {
-        _imagePageController.jumpToPage(0);
-      }
-    }
-  } on PlatformException catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Не удалось открыть камеру: ${e.message ?? e.code}')),
-    );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Ошибка при создании фото: $e')),
-    );
+  List<File>? _targetImages({required bool forLabels, required int itemIndex}) {
+    if (itemIndex < 0 || itemIndex >= _items.length) return null;
+    return forLabels ? _items[itemIndex].labelImages : _items[itemIndex].garmentImages;
   }
-}
 
-Future<bool> _ensureGalleryPermission() async {
-  if (Platform.isIOS) {
+  bool _isLabelLimitReached(bool forLabels, List<File> target) {
+    if (!forLabels) return false;
+    if (target.length >= 1) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Можно добавить только одну бирку на вещь')),
+      );
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> _addImageFromCamera({
+    required bool forLabels,
+    required int itemIndex,
+  }) async {
+    final granted = await _requestPermission(Permission.camera);
+    if (!granted) return;
+    try {
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.camera,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (pickedFile != null) {
+        final file = File(pickedFile.path);
+        final target = _targetImages(forLabels: forLabels, itemIndex: itemIndex);
+        if (target == null) return;
+        if (_isLabelLimitReached(forLabels, target)) return;
+        setState(() {
+          target.insert(0, file);
+        });
+      }
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть камеру: ${e.message ?? e.code}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при создании фото: $e')),
+      );
+    }
+  }
+
+  Future<bool> _ensureGalleryPermission() async {
+    if (Platform.isIOS) {
+      return await _requestPermission(Permission.photos);
+    }
+    final storageGranted = await _requestPermission(Permission.storage);
+    if (storageGranted) return true;
     return await _requestPermission(Permission.photos);
   }
-  final storageGranted = await _requestPermission(Permission.storage);
-  if (storageGranted) return true;
-  return await _requestPermission(Permission.photos);
-}
 
-Future<void> _addImagesFromGallery() async {
-  final granted = await _ensureGalleryPermission();
-  if (!granted) return;
-  try {
-    final pickedFiles = await picker.pickMultiImage();
-    if (pickedFiles == null || pickedFiles.isEmpty) {
-      return;
+  Future<void> _addImagesFromGallery({
+    required bool forLabels,
+    required int itemIndex,
+  }) async {
+    final granted = await _ensureGalleryPermission();
+    if (!granted) return;
+    try {
+      final pickedFiles = await picker.pickMultiImage();
+      if (pickedFiles == null || pickedFiles.isEmpty) {
+        return;
+      }
+      final target = _targetImages(forLabels: forLabels, itemIndex: itemIndex);
+      if (target == null) return;
+      if (_isLabelLimitReached(forLabels, target)) return;
+      final existingPaths = target.map((file) => file.path).toSet();
+      final newFiles = pickedFiles
+          .map((picked) => File(picked.path))
+          .where((file) => !existingPaths.contains(file.path))
+          .toList(growable: false);
+      if (newFiles.isEmpty) {
+        return;
+      }
+      setState(() {
+        target.addAll(newFiles.take(forLabels ? 1 - target.length : newFiles.length));
+      });
+    } on PlatformException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось открыть галерею: ${e.message ?? e.code}')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при выборе изображений: $e')),
+      );
     }
-    final existingPaths = _images.map((file) => file.path).toSet();
-    final newFiles = pickedFiles
-        .map((picked) => File(picked.path))
-        .where((file) => !existingPaths.contains(file.path))
-        .toList(growable: false);
-    if (newFiles.isEmpty) {
-      return;
-    }
+  }
+
+  void _removeImage({
+    required bool forLabels,
+    required int index,
+    required int itemIndex,
+  }) {
+    final target = _targetImages(forLabels: forLabels, itemIndex: itemIndex);
+    if (target == null) return;
+    if (index < 0 || index >= target.length) return;
     setState(() {
-      _images.addAll(newFiles);
-      _currentImageIndex = _images.length - newFiles.length;
+      target.removeAt(index);
     });
-    if (_imagePageController.hasClients) {
-      _imagePageController.jumpToPage(_currentImageIndex);
-    }
-  } on PlatformException catch (e) {
+  }
+
+  void _setAsPrimary(int index, int itemIndex) {
+    final target = _targetImages(forLabels: false, itemIndex: itemIndex);
+    if (target == null) return;
+    if (index <= 0 || index >= target.length) return;
+    setState(() {
+      final file = target.removeAt(index);
+      target.insert(0, file);
+    });
+  }
+
+  Future<void> _showAddImageOptions({
+    required bool forLabels,
+    required int itemIndex,
+  }) async {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Не удалось открыть галерею: ${e.message ?? e.code}')),
+    await showModalBottomSheet<void>(
+      context: context,
+      useRootNavigator: true,
+      builder: (context) {
+        final theme = Theme.of(context);
+        final colorScheme = theme.colorScheme;
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 48,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: colorScheme.onSurfaceVariant.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt_outlined),
+                  title: const Text('Сделать фото'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (_isLoading) return;
+                    _addImageFromCamera(forLabels: forLabels, itemIndex: itemIndex);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.image_outlined),
+                  title: const Text('Выбрать из галереи'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (_isLoading) return;
+                    _addImagesFromGallery(
+                      forLabels: forLabels,
+                      itemIndex: itemIndex,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
-  } catch (e) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Ошибка при выборе изображений: $e')),
-    );
-  }
-}
-
-void _removeImage(int index) {
-  if (index < 0 || index >= _images.length) return;
-  setState(() {
-    _images.removeAt(index);
-    if (_images.isEmpty) {
-      _currentImageIndex = 0;
-    } else if (_currentImageIndex >= _images.length) {
-      _currentImageIndex = _images.length - 1;
-    }
-  });
-  if (_imagePageController.hasClients && _images.isNotEmpty) {
-    _imagePageController.jumpToPage(_currentImageIndex);
-  }
-}
-
-void _setAsPrimary(int index) {
-  if (index <= 0 || index >= _images.length) return;
-  setState(() {
-    final file = _images.removeAt(index);
-    _images.insert(0, file);
-    _currentImageIndex = 0;
-  });
-  if (_imagePageController.hasClients) {
-    _imagePageController.jumpToPage(0);
-  }
-}
-
-Widget _buildImagesPreview(ColorScheme colorScheme) {
-  if (_images.isEmpty) {
-    return Container(
-      height: 220,
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceVariant,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      alignment: Alignment.center,
-      child: const Text('Добавьте хотя бы одно фото одежды'),
-    );
   }
 
-  return SizedBox(
-    height: 260,
-    child: Stack(
+  Widget _buildImageCard({
+    required File image,
+    required bool forLabels,
+    required int index,
+    required int itemIndex,
+    required ColorScheme colorScheme,
+    VoidCallback? onSetPrimary,
+  }) {
+    final isPrimary = onSetPrimary != null && index == 0;
+
+    return Stack(
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: PageView.builder(
-            controller: _imagePageController,
-            onPageChanged: (index) {
-              setState(() {
-                _currentImageIndex = index;
-              });
-            },
-            itemCount: _images.length,
-            itemBuilder: (context, index) {
-              return Container(
-                margin: const EdgeInsets.symmetric(horizontal: 4),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceVariant,
-                ),
-                child: Image.file(
-                  _images[index],
-                  fit: BoxFit.cover,
-                  width: double.infinity,
-                ),
-              );
-            },
+          borderRadius: BorderRadius.circular(18),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Image.file(
+              image,
+              fit: BoxFit.cover,
+            ),
           ),
         ),
         Positioned(
-          top: 12,
-          right: 12,
-          child: IconButton(
-            style: IconButton.styleFrom(
-              backgroundColor: colorScheme.surface.withOpacity(0.7),
+          top: 8,
+          right: 8,
+          child: CircleAvatar(
+            radius: 18,
+            backgroundColor: colorScheme.surface.withOpacity(0.8),
+            child: IconButton(
+              iconSize: 18,
+              padding: EdgeInsets.zero,
+              onPressed: _isLoading
+                  ? null
+                  : () => _removeImage(
+                        forLabels: forLabels,
+                        index: index,
+                        itemIndex: itemIndex,
+                      ),
+              icon: const Icon(Icons.close_rounded),
             ),
-            onPressed: _isLoading ? null : () => _removeImage(_currentImageIndex),
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Удалить фото',
           ),
         ),
-        if (_images.length > 1 && _currentImageIndex != 0)
+        if (onSetPrimary != null)
           Positioned(
-            top: 12,
-            left: 12,
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : () => _setAsPrimary(_currentImageIndex),
-              icon: const Icon(Icons.star),
-              label: const Text('Главное фото'),
-            ),
-          ),
-        if (_images.length > 1)
-          Positioned(
-            bottom: 12,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(_images.length, (index) {
-                final bool isActive = index == _currentImageIndex;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: isActive ? 14 : 8,
-                  height: 8,
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? colorScheme.primary
-                        : colorScheme.onSurfaceVariant.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                );
-              }),
+            bottom: 8,
+            left: 8,
+            child: FilterChip(
+              selected: isPrimary,
+              label: Text(isPrimary ? 'Главное' : 'Сделать главным'),
+              avatar: Icon(
+                isPrimary ? Icons.star : Icons.star_border,
+                color:
+                    isPrimary ? colorScheme.onPrimaryContainer : colorScheme.primary,
+              ),
+              onSelected: _isLoading || isPrimary ? null : (_) => onSetPrimary(),
             ),
           ),
       ],
-    ),
-  );
-}
+    );
+  }
+
+  Widget _buildImageGrid({
+    required String title,
+    required String description,
+    required List<File> images,
+    required int itemIndex,
+    required bool forLabels,
+    required ColorScheme colorScheme,
+    void Function()? onAdd,
+    VoidCallback? onAddPressed,
+    void Function(int index)? onSetPrimary,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style:
+              Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          description,
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: colorScheme.onSurfaceVariant.withOpacity(0.8)),
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
+            final itemWidth = (width - 12) / 2;
+            final children = <Widget>[
+              ...List.generate(images.length, (index) {
+                return SizedBox(
+                  width: itemWidth,
+                  child: _buildImageCard(
+                    image: images[index],
+                    forLabels: forLabels,
+                    index: index,
+                    itemIndex: itemIndex,
+                    colorScheme: colorScheme,
+                    onSetPrimary:
+                        onSetPrimary == null ? null : () => onSetPrimary(index),
+                  ),
+                );
+              }),
+              SizedBox(
+                width: itemWidth,
+                child: _buildAddTile(colorScheme: colorScheme, onTap: onAdd ?? onAddPressed),
+              ),
+            ];
+
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: children,
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddTile({
+    required ColorScheme colorScheme,
+    required VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 140,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.4)),
+          color: colorScheme.surfaceVariant.withOpacity(0.4),
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_a_photo_outlined, color: colorScheme.onSurfaceVariant),
+              const SizedBox(height: 8),
+              const Text('Добавить'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        filled: true,
+        fillColor: Theme.of(context).colorScheme.surface,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(18),
+        ),
+      ),
+      validator: validator,
+    );
+  }
 
   Future<void> submit() async {
     if (!_useAiAutoFill && !_formKey.currentState!.validate()) {
       return;
     }
 
-    if (_images.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Добавьте хотя бы одно изображение')),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
+      final bool hasMultiple = _isMultipleItems;
+      List<File> combinedImages;
+      bool splitIntoItems = false;
+      int? imagesPerItem;
+      int? groupLabelIndex;
+
+      if (hasMultiple) {
+        if (_items.any((item) => item.garmentImages.isEmpty)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Добавьте фото для каждой вещи')),
+          );
+          return;
+        }
+
+        final firstItem = _items.first;
+        final firstGarmentCount = firstItem.garmentImages.length;
+        final hasLabels = firstItem.labelImages.isNotEmpty;
+        final expectedTotal = firstGarmentCount + (hasLabels ? 1 : 0);
+
+        final inconsistent = _items.any((item) {
+          final labelMatches = hasLabels ? item.labelImages.isNotEmpty : item.labelImages.isEmpty;
+          return item.garmentImages.length != firstGarmentCount ||
+              !labelMatches ||
+              (item.garmentImages.length + (hasLabels ? 1 : 0)) != expectedTotal;
+        });
+
+        if (inconsistent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Для пакетной загрузки количество фото (и наличие бирки) должно совпадать у каждой вещи.',
+              ),
+            ),
+          );
+          return;
+        }
+
+        combinedImages = _items
+            .expand((item) => [
+                  ...item.garmentImages,
+                  if (hasLabels) item.labelImages.first,
+                ])
+            .toList();
+        splitIntoItems = true;
+        imagesPerItem = expectedTotal;
+        groupLabelIndex = hasLabels ? firstGarmentCount + 1 : null;
+      } else {
+        final single = _items.first;
+        combinedImages = [...single.garmentImages, ...single.labelImages];
+        if (combinedImages.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Добавьте хотя бы одно изображение')),
+          );
+          return;
+        }
+        final bool hasLabels = single.labelImages.isNotEmpty;
+        groupLabelIndex = hasLabels ? single.garmentImages.length + 1 : null;
+      }
+
+      setState(() {
+        _isLoading = true;
+      });
+
       final isOnline = await NetworkService.isConnected();
       await ApiService.addClothes(
         name: _useAiAutoFill ? '' : _nameController.text.trim(),
@@ -443,9 +651,12 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
         material: _materialController.text.trim().isEmpty
             ? null
             : _materialController.text.trim(),
-        images: List<File>.from(_images),
+        images: combinedImages,
         autoFill: _useAiAutoFill,
         locationId: _selectedLocationId,
+        splitIntoItems: splitIntoItems,
+        imagesPerItem: imagesPerItem,
+        labelImageIndex: groupLabelIndex,
       );
 
       if (!mounted) return;
@@ -478,7 +689,6 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     _categoryController.dispose();
     _colorController.dispose();
     _materialController.dispose();
-    _imagePageController.dispose();
     super.dispose();
   }
 
@@ -492,6 +702,7 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
     }
     return null;
   }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -524,298 +735,29 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final targetWidth = math.min(constraints.maxWidth, 820.0);
-            final horizontalPadding = math.max(20.0, (constraints.maxWidth - targetWidth) / 2);
+            final horizontalPadding =
+                math.max(20.0, (constraints.maxWidth - targetWidth) / 2);
 
             return Form(
               key: _formKey,
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
                 padding: EdgeInsets.fromLTRB(
                   horizontalPadding,
-                  24,
+                  16,
                   horizontalPadding,
-                  24 + paddingBottom,
+                  paddingBottom + 16,
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            colorScheme.primaryContainer
-                                .withOpacity(theme.brightness == Brightness.dark ? 0.35 : 0.85),
-                            colorScheme.surfaceVariant
-                                .withOpacity(theme.brightness == Brightness.dark ? 0.3 : 0.7),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(28),
-                        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.all(20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.add_photo_alternate_outlined,
-                                  color: colorScheme.onPrimaryContainer),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Заполните карточку вещи и добавьте фото',
-                                  style: theme.textTheme.titleMedium?.copyWith(
-                                    color: colorScheme.onPrimaryContainer,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          DropdownButtonFormField<bool>(
-                            value: _useAiAutoFill,
-                            decoration: InputDecoration(
-                              labelText: 'Заполнение данных',
-                              border:
-                                  OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
-                              filled: true,
-                              fillColor: colorScheme.surface.withOpacity(
-                                theme.brightness == Brightness.dark ? 0.35 : 0.9,
-                              ),
-                            ),
-                            items: const [
-                              DropdownMenuItem(
-                                value: false,
-                                child: Text('Заполнить самостоятельно'),
-                              ),
-                              DropdownMenuItem(
-                                value: true,
-                                child: Text('Использовать заполнение ИИ'),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                _useAiAutoFill = value ?? false;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          if (_isLocationsLoading)
-                            const LinearProgressIndicator()
-                          else if (_locations.isNotEmpty)
-                            DropdownButtonFormField<int?>(
-                              value: _selectedLocationId,
-                              decoration: InputDecoration(
-                                labelText: 'Локация гардероба',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                                filled: true,
-                                fillColor: colorScheme.surface.withOpacity(
-                                  theme.brightness == Brightness.dark ? 0.35 : 0.9,
-                                ),
-                              ),
-                              items: [
-                                const DropdownMenuItem<int?>(
-                                  value: null,
-                                  child: Text('Без привязки'),
-                                ),
-                                ...locationItems,
-                              ],
-                              onChanged: (value) {
-                                setState(() {
-                                  _selectedLocationId = value;
-                                });
-                                if (value == null) {
-                                  _storage.delete(key: 'selected_location_id');
-                                } else {
-                                  _storage.write(
-                                    key: 'selected_location_id',
-                                    value: value.toString(),
-                                  );
-                                }
-                              },
-                            ),
-                          if (_locations.isEmpty && !_isLocationsLoading)
-                            Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                              decoration: BoxDecoration(
-                                color: colorScheme.surface.withOpacity(
-                                  theme.brightness == Brightness.dark ? 0.25 : 0.85,
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Text(
-                                'Добавьте локации гардероба в настройках, чтобы привязывать вещи.',
-                                style: theme.textTheme.bodyMedium,
-                              ),
-                            ),
-                          const SizedBox(height: 20),
-                          if (_useAiAutoFill)
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: colorScheme.secondaryContainer.withOpacity(
-                                  theme.brightness == Brightness.dark ? 0.35 : 0.7,
-                                ),
-                                borderRadius: BorderRadius.circular(18),
-                              ),
-                              child: Text(
-                                'Загрузите фото, а мы попробуем определить название, категорию и цвет автоматически.',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: colorScheme.onSecondaryContainer,
-                                ),
-                              ),
-                            ),
-                          if (!_useAiAutoFill) ...[
-                            TextFormField(
-                              controller: _nameController,
-                              decoration: InputDecoration(
-                                labelText: 'Название',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Введите название';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _categoryController,
-                              decoration: InputDecoration(
-                                labelText: 'Категория',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Введите категорию';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 14),
-                            DropdownButtonFormField<String>(
-                              value: season.isNotEmpty ? season : null,
-                              decoration: InputDecoration(
-                                labelText: 'Сезон',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              items: const ['Весна', 'Лето', 'Осень', 'Зима']
-                                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                                  .toList(),
-                              onChanged: (value) {
-                                setState(() {
-                                  season = value ?? '';
-                                });
-                              },
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Выберите сезон';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _colorController,
-                              decoration: InputDecoration(
-                                labelText: 'Цвет',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Введите цвет';
-                                }
-                                return null;
-                              },
-                            ),
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _materialController,
-                              decoration: InputDecoration(
-                                labelText: 'Материал (необязательно)',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(18),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 20),
-                          ],
-                          Text(
-                            'Фотографии',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          _buildImagesPreview(colorScheme),
-                          const SizedBox(height: 16),
-                          Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              FilledButton.tonalIcon(
-                                onPressed: _isLoading ? null : _addImageFromCamera,
-                                icon: const Icon(Icons.camera_alt_outlined),
-                                label: const Text('Камера'),
-                              ),
-                              FilledButton.tonalIcon(
-                                onPressed: _isLoading ? null : _addImagesFromGallery,
-                                icon: const Icon(Icons.image_outlined),
-                                label: const Text('Галерея'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'Первое фото станет главным. При необходимости переставьте порядок.',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          FilledButton(
-                            onPressed: _isLoading ? null : submit,
-                            style: FilledButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                            child: _isLoading
-                                ? SizedBox(
-                                    width: 22,
-                                    height: 22,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        colorScheme.onPrimary,
-                                      ),
-                                    ),
-                                  )
-                                : const Text('Добавить'),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildModeToggle(colorScheme),
+                    const SizedBox(height: 16),
+                    _buildDetailsCard(theme, colorScheme, locationItems),
+                    const SizedBox(height: 16),
+                    if (_isMultipleItems)
+                      _buildMultipleItemsSection(theme, colorScheme)
+                    else
+                      _buildSingleItemSection(theme, colorScheme),
                   ],
                 ),
               ),
@@ -825,5 +767,463 @@ Widget _buildImagesPreview(ColorScheme colorScheme) {
       ),
     );
   }
+
+  Widget _buildModeToggle(ColorScheme colorScheme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withOpacity(0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.4)),
+      ),
+      padding: const EdgeInsets.all(6),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildModeButton(
+              label: 'Одна вещь',
+              selected: !_isMultipleItems,
+              onTap: _isLoading
+                  ? null
+                  : () {
+                      setState(() {
+                        _isMultipleItems = false;
+                        if (_items.length > 1) {
+                          _items.removeRange(1, _items.length);
+                        }
+                      });
+                    },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildModeButton(
+              label: 'Несколько вещей',
+              selected: _isMultipleItems,
+              onTap: _isLoading
+                  ? null
+                  : () {
+                      setState(() {
+                        _isMultipleItems = true;
+                      });
+                    },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeButton({
+    required String label,
+    required bool selected,
+    required VoidCallback? onTap,
+  }) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      decoration: BoxDecoration(
+        color: selected ? Theme.of(context).colorScheme.primary : Colors.transparent,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: selected
+                          ? Theme.of(context).colorScheme.onPrimary
+                          : Theme.of(context).colorScheme.onSurface,
+                      fontWeight: FontWeight.w700,
+                    ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailsCard(
+    ThemeData theme,
+    ColorScheme colorScheme,
+    List<DropdownMenuItem<int?>> locationItems,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surface.withOpacity(0.9),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Icon(Icons.style_outlined, color: colorScheme.primary),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Заполните карточку вещи',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Загрузите фото, и мы попробуем определить название, категорию и цвет автоматически.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: [
+              ChoiceChip(
+                label: const Text('Заполнить самостоятельно'),
+                selected: !_useAiAutoFill,
+                onSelected: _isLoading
+                    ? null
+                    : (selected) {
+                        setState(() {
+                          _useAiAutoFill = !selected;
+                        });
+                      },
+              ),
+              ChoiceChip(
+                label: const Text('Использовать заполнение ИИ'),
+                selected: _useAiAutoFill,
+                onSelected: _isLoading
+                    ? null
+                    : (selected) {
+                        setState(() {
+                          _useAiAutoFill = selected;
+                        });
+                      },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_isLocationsLoading)
+            const LinearProgressIndicator(minHeight: 4)
+          else if (_locations.isNotEmpty)
+            DropdownButtonFormField<int?>(
+              value: _selectedLocationId,
+              decoration: InputDecoration(
+                labelText: 'Локация гардероба',
+                filled: true,
+                fillColor: colorScheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              items: [
+                const DropdownMenuItem<int?>(
+                  value: null,
+                  child: Text('Без привязки'),
+                ),
+                ...locationItems,
+              ],
+              onChanged: (value) {
+                setState(() {
+                  _selectedLocationId = value;
+                });
+                if (value == null) {
+                  _storage.delete(key: 'selected_location_id');
+                } else {
+                  _storage.write(
+                    key: 'selected_location_id',
+                    value: value.toString(),
+                  );
+                }
+              },
+            )
+          else
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                color: colorScheme.surface.withOpacity(
+                  theme.brightness == Brightness.dark ? 0.25 : 0.85,
+                ),
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Text(
+                'Добавьте локации гардероба в настройках, чтобы привязывать вещи.',
+                style: theme.textTheme.bodyMedium,
+              ),
+            ),
+          if (!_useAiAutoFill) ...[
+            const SizedBox(height: 18),
+            _buildTextField(
+              controller: _nameController,
+              label: 'Название',
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Введите название' : null,
+            ),
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _categoryController,
+              label: 'Категория',
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Введите категорию' : null,
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: season.isNotEmpty ? season : null,
+              decoration: InputDecoration(
+                labelText: 'Сезон',
+                filled: true,
+                fillColor: colorScheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              items: const ['Весна', 'Лето', 'Осень', 'Зима']
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: (value) {
+                setState(() {
+                  season = value ?? '';
+                });
+              },
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Выберите сезон';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _colorController,
+              label: 'Цвет',
+              validator: (value) =>
+                  value == null || value.trim().isEmpty ? 'Введите цвет' : null,
+            ),
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _materialController,
+              label: 'Материал (необязательно)',
+              validator: null,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSingleItemSection(ThemeData theme, ColorScheme colorScheme) {
+    final item = _items.first;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: colorScheme.surface.withOpacity(0.9),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildImageGrid(
+                title: 'Фотографии вещи',
+                description: 'Добавьте основной вид, спину или другие ракурсы.',
+                images: item.garmentImages,
+                itemIndex: 0,
+                forLabels: false,
+                colorScheme: colorScheme,
+                onAdd: _isLoading
+                    ? null
+                    : () => _showAddImageOptions(forLabels: false, itemIndex: 0),
+                onSetPrimary: (index) => _setAsPrimary(index, 0),
+              ),
+              const SizedBox(height: 18),
+              _buildImageGrid(
+                title: 'Фотографии бирок',
+                description: 'Прикрепите бирку или информацию по уходу за вещью.',
+                images: item.labelImages,
+                itemIndex: 0,
+                forLabels: true,
+                colorScheme: colorScheme,
+                onAdd: _isLoading
+                    ? null
+                    : () => _showAddImageOptions(forLabels: true, itemIndex: 0),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Первое фото станет главным. Бирку можно добавить отдельным фото.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _isLoading ? null : submit,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+          child: _isLoading
+              ? SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      colorScheme.onPrimary,
+                    ),
+                  ),
+                )
+              : const Text('Добавить'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMultipleItemsSection(ThemeData theme, ColorScheme colorScheme) {
+    return Column(
+      children: [
+        ...List.generate(_items.length, (index) {
+          final item = _items[index];
+          return Padding(
+            padding: EdgeInsets.only(bottom: index == _items.length - 1 ? 12 : 16),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.surface.withOpacity(0.9),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.2)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Вещь ${index + 1}',
+                        style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      if (_items.length > 1)
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: _isLoading
+                              ? null
+                              : () {
+                                  setState(() {
+                                    _items.removeAt(index);
+                                  });
+                                },
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  _buildImageGrid(
+                    title: 'Фотографии вещи',
+                    description: 'Добавьте основной вид, спину или другие ракурсы.',
+                    images: item.garmentImages,
+                    itemIndex: index,
+                    forLabels: false,
+                    colorScheme: colorScheme,
+                    onAdd: _isLoading
+                        ? null
+                        : () => _showAddImageOptions(forLabels: false, itemIndex: index),
+                    onSetPrimary: (photoIndex) => _setAsPrimary(photoIndex, index),
+                  ),
+                  const SizedBox(height: 18),
+                  _buildImageGrid(
+                    title: 'Фотографии бирок',
+                    description: 'Прикрепите бирку или информацию по уходу за вещью.',
+                    images: item.labelImages,
+                    itemIndex: index,
+                    forLabels: true,
+                    colorScheme: colorScheme,
+                    onAdd: _isLoading
+                        ? null
+                        : () => _showAddImageOptions(forLabels: true, itemIndex: index),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        const SizedBox(height: 4),
+        OutlinedButton.icon(
+          onPressed: _isLoading
+              ? null
+              : () {
+                  setState(() {
+                    _items.add(_ClothingDraft());
+                  });
+                },
+          icon: const Icon(Icons.add),
+          label: const Text('Добавить ещё одну вещь'),
+          style: OutlinedButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Первое фото станет главным. Для пакетной загрузки используйте одинаковое число фото на каждую вещь.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colorScheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        FilledButton(
+          onPressed: _isLoading ? null : submit,
+          style: FilledButton.styleFrom(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18),
+            ),
+          ),
+          child: _isLoading
+              ? SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      colorScheme.onPrimary,
+                    ),
+                  ),
+                )
+              : const Text('Далее'),
+        ),
+      ],
+    );
+  }
 }
- 
