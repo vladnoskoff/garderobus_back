@@ -16,6 +16,7 @@ from slowapi.errors import RateLimitExceeded
 import models
 import settings
 from cache import cache
+from celery_app import celery_app
 from database import engine
 from logging_config import configure_logging, reset_request_context, set_request_context
 from observability import configure_observability
@@ -331,17 +332,32 @@ def rate_limit_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
 
 
 @app.get("/healthz", tags=["health"], summary="Service health probe")
-def healthcheck() -> dict[str, str]:
+def healthcheck() -> dict[str, object]:
     """Simple endpoint used by load balancers and orchestrators."""
 
     uptime_seconds = time.time() - _START_TIME
     started_at = datetime.fromtimestamp(_START_TIME, tz=timezone.utc)
+
+    celery_connection = {
+        "broker_available": False,
+        "broker_auth_provided": False,
+        "broker_user": None,
+    }
+    try:
+        with celery_app.connection_for_read() as connection:
+            celery_connection["broker_user"] = connection.userid or None
+            celery_connection["broker_auth_provided"] = bool(connection.userid)
+            connection.ensure_connection(max_retries=0)
+            celery_connection["broker_available"] = True
+    except Exception:
+        logger.warning("Celery broker probe failed", exc_info=True)
 
     return {
         "status": "ok",
         "uptime_seconds": uptime_seconds,
         "uptime_human": _humanize_duration(uptime_seconds),
         "started_at": started_at.isoformat(),
+        "celery": celery_connection,
     }
 
 
