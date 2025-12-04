@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import logging
 from pathlib import Path
-import sys
 from uuid import uuid4
 
 from celery import states
@@ -17,9 +16,9 @@ from sqlalchemy.orm import Session
 
 import models
 import schemas
+from api.utils.task_importer import load_tasks_module
 from celery_app import celery_app
 from database import get_db
-from fastapi import HTTPException, status
 from .location_utils import ensure_location_for_user
 
 from celery.exceptions import CeleryError
@@ -35,77 +34,17 @@ INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
-def _prepare_sys_path() -> None:
-    """Ensure project and api directories are importable for Celery tasks."""
-
-    api_dir = Path(__file__).resolve().parents[1]
-    project_root = api_dir.parent
-
-    for path in (api_dir, project_root):
-        path_str = str(path)
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-
-
-def _load_tasks_module() -> Any:
-    """Load the tasks module, falling back to direct file loading if needed."""
-
-    import importlib
-    import importlib.util
-
-    _prepare_sys_path()
-
-    attempts: list[dict[str, str]] = []
-    last_exc: ImportError | None = None
-
-    def _has_required(module: Any) -> bool:
-        return hasattr(module, "generate_mannequin_task") and hasattr(
-            module, "generate_recommendation_task"
-        )
-
-    for module_path in ("tasks.ai", "api.tasks.ai"):
-        try:
-            module = importlib.import_module(module_path)
-        except ImportError as exc:
-            attempts.append({"module": module_path, "error": str(exc)})
-            last_exc = exc
-            continue
-
-        if _has_required(module):
-            return module
-
-        attempts.append({
-            "module": module_path,
-            "error": "missing required callables",
-            "file": getattr(module, "__file__", "<unknown>"),
-        })
-
-    # Fallback to loading directly from the repository file to bypass PYTHONPATH
-    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
-    if tasks_file.exists():
-        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            if _has_required(module):
-                return module
-            attempts.append({
-                "module": str(tasks_file),
-                "error": "missing required callables",
-                "file": str(tasks_file),
-            })
-
-    logger.error("AI tasks module missing required callables", extra={"attempts": attempts})
-    raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="AI задачи недоступны (отсутствуют Celery-функции)",
-    ) from last_exc
-
-
 def _get_ai_tasks() -> tuple[Callable[..., Any], Callable[..., Any]]:
     """Lazy-load Celery tasks to avoid startup crashes when PYTHONPATH drifts."""
 
-    module = _load_tasks_module()
+    api_dir = Path(__file__).resolve().parents[1]
+    tasks_file = api_dir / "tasks" / "ai.py"
+    module = load_tasks_module(
+        required_attrs=("generate_mannequin_task", "generate_recommendation_task"),
+        api_dir=api_dir,
+        logger=logger,
+        fallback_file=tasks_file,
+    )
 
     return module.generate_mannequin_task, module.generate_recommendation_task
 

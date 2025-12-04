@@ -1,13 +1,12 @@
 import base64
-from typing import Optional
-
 import logging
 from pathlib import Path
-import sys
+from typing import Optional
 
 from fastapi import APIRouter, File, Form, HTTPException, Request
 import schemas
 import settings
+from api.utils.task_importer import load_tasks_module
 from openai_client import is_proxy_active
 
 logger = logging.getLogger(__name__)
@@ -16,67 +15,18 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Test"])
 
 
-def _prepare_sys_path() -> None:
-    """Ensure project and api directories are importable for Celery tasks."""
-
-    api_dir = Path(__file__).resolve().parents[1]
-    project_root = api_dir.parent
-
-    for path in (api_dir, project_root):
-        path_str = str(path)
-        if path_str not in sys.path:
-            sys.path.insert(0, path_str)
-
-
 def _get_analyze_task():
-    """Lazy-load the analyze task with fallbacks to direct file import."""
+    api_dir = Path(__file__).resolve().parents[1]
+    tasks_file = api_dir / "tasks" / "ai.py"
 
-    import importlib
-    import importlib.util
+    module = load_tasks_module(
+        required_attrs=("analyze_clothes_image_task",),
+        api_dir=api_dir,
+        logger=logger,
+        fallback_file=tasks_file,
+    )
 
-    _prepare_sys_path()
-
-    attempts: list[dict[str, str]] = []
-    last_exc: ImportError | None = None
-
-    for module_path in ("tasks.ai", "api.tasks.ai"):
-        try:
-            module = importlib.import_module(module_path)
-        except ImportError as exc:
-            attempts.append({"module": module_path, "error": str(exc)})
-            last_exc = exc
-            continue
-
-        task = getattr(module, "analyze_clothes_image_task", None)
-        if task:
-            return task
-
-        attempts.append({
-            "module": module_path,
-            "error": "missing analyze_clothes_image_task",
-            "file": getattr(module, "__file__", "<unknown>"),
-        })
-
-    tasks_file = Path(__file__).resolve().parents[1] / "tasks" / "ai.py"
-    if tasks_file.exists():
-        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
-        if spec and spec.loader:
-            module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            task = getattr(module, "analyze_clothes_image_task", None)
-            if task:
-                return task
-            attempts.append({
-                "module": str(tasks_file),
-                "error": "missing analyze_clothes_image_task",
-                "file": str(tasks_file),
-            })
-
-    logger.error("Failed to import analyze_clothes_image_task", extra={"attempts": attempts})
-    raise HTTPException(
-        status_code=500,
-        detail="AI анализ недоступен (проверьте PYTHONPATH и установку api)",
-    ) from last_exc
+    return module.analyze_clothes_image_task
 
 
 def _encode_payload(image_url: Optional[str], file: Optional[bytes]) -> dict:
