@@ -17,12 +17,7 @@ import models
 import schemas
 from celery_app import celery_app
 from database import get_db
-try:
-    from tasks.ai import generate_mannequin_task, generate_recommendation_task
-except ImportError as exc:  # pragma: no cover - fallback for misaligned PYTHONPATH
-    raise ImportError(
-        "Не удалось импортировать Celery-задачи AI. Убедитесь, что PYTHONPATH включает директорию api."
-    ) from exc
+from fastapi import HTTPException, status
 from .location_utils import ensure_location_for_user
 
 from celery.exceptions import CeleryError
@@ -36,6 +31,21 @@ router = APIRouter(prefix="/ai", tags=["AI Recommendations"])
 
 INLINE_TASK_RESULTS: Dict[str, schemas.TaskStatusResponse] = {}
 INLINE_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+
+
+def _get_ai_tasks() -> tuple[Callable[..., Any], Callable[..., Any]]:
+    """Lazy-load Celery tasks to avoid startup crashes when PYTHONPATH drifts."""
+
+    try:
+        from tasks.ai import generate_mannequin_task, generate_recommendation_task
+    except ImportError as exc:  # pragma: no cover - runtime guard for misaligned PYTHONPATH
+        logger.exception("Failed to import AI tasks")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AI задачи недоступны (проверьте PYTHONPATH и установку api пакета)",
+        ) from exc
+
+    return generate_mannequin_task, generate_recommendation_task
 
 
 def _has_active_celery_workers() -> bool:
@@ -108,6 +118,7 @@ def _build_task_status_response(
     summary="Запуск генерации AI-рекомендаций",
 )
 async def enqueue_recommendation(user_id: int, request: Request) -> schemas.TaskSubmissionResponse:
+    _, generate_recommendation_task = _get_ai_tasks()
     return await _enqueue_task(
         generate_recommendation_task,
         request=request,
@@ -127,6 +138,7 @@ async def enqueue_mannequin_generation(
         default=None, description="Выбор гардероба по локации"
     ),
 ) -> schemas.TaskSubmissionResponse:
+    generate_mannequin_task, _ = _get_ai_tasks()
     return await _enqueue_task(
         generate_mannequin_task,
         request=request,
