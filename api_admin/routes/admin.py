@@ -25,15 +25,6 @@ from routes import users as user_routes
 from api_admin import schemas as admin_schemas
 from api_admin.services import system_tools
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_API_DIR = _PROJECT_ROOT / "api"
-for path in (_API_DIR, _PROJECT_ROOT):
-    path_str = str(path)
-    if path_str not in sys.path:
-        sys.path.insert(0, path_str)
-
-from api.utils.task_importer import load_tasks_module
-
 security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/admin", tags=["Admin Panel"])
@@ -41,18 +32,67 @@ router = APIRouter(prefix="/admin", tags=["Admin Panel"])
 logger = logging.getLogger(__name__)
 
 
-def _get_mannequin_task():
+def _prepare_sys_path() -> None:
+    """Ensure project and api directories are importable for Celery tasks."""
+
     api_dir = Path(__file__).resolve().parents[2] / "api"
-    tasks_file = api_dir / "tasks" / "ai.py"
+    project_root = api_dir.parent
 
-    module = load_tasks_module(
-        required_attrs=("generate_mannequin_task",),
-        api_dir=api_dir,
-        logger=logger,
-        fallback_file=tasks_file,
-    )
+    for path in (api_dir, project_root):
+        path_str = str(path)
+        if path_str not in sys.path:
+            sys.path.insert(0, path_str)
 
-    return module.generate_mannequin_task
+
+def _get_mannequin_task():
+    """Lazy-load mannequin task with fallbacks to direct file import."""
+
+    import importlib
+    import importlib.util
+
+    _prepare_sys_path()
+
+    attempts: list[dict[str, str]] = []
+    last_exc: ImportError | None = None
+
+    for module_path in ("tasks.ai", "api.tasks.ai"):
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError as exc:
+            attempts.append({"module": module_path, "error": str(exc)})
+            last_exc = exc
+            continue
+
+        task = getattr(module, "generate_mannequin_task", None)
+        if task:
+            return task
+
+        attempts.append({
+            "module": module_path,
+            "error": "missing generate_mannequin_task",
+            "file": getattr(module, "__file__", "<unknown>"),
+        })
+
+    tasks_file = Path(__file__).resolve().parents[2] / "api" / "tasks" / "ai.py"
+    if tasks_file.exists():
+        spec = importlib.util.spec_from_file_location("garderobus_tasks_ai", tasks_file)
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            task = getattr(module, "generate_mannequin_task", None)
+            if task:
+                return task
+            attempts.append({
+                "module": str(tasks_file),
+                "error": "missing generate_mannequin_task",
+                "file": str(tasks_file),
+            })
+
+    logger.error("Failed to import generate_mannequin_task", extra={"attempts": attempts})
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="AI задачи недоступны (проверьте PYTHONPATH и установку api)",
+    ) from last_exc
 
 
 def _get_current_user(
@@ -250,28 +290,22 @@ def refresh_all_mannequins(
             detail="Нет пользователей для обновления",
         )
 
-    delay_seconds = 0
     scheduled = 0
     for idx, row in enumerate(users):
         try:
             mannequin_task.apply_async(
                 args=[],
                 kwargs={"user_id": row.id},
-                countdown=delay_seconds,
+                countdown=scheduled,
             )
         except Exception as exc:  # pragma: no cover - broker issues
-            logger.exception(
-                "Failed to enqueue mannequin refresh", extra={"user_id": row.id, "scheduled": scheduled}
-            )
             return admin_schemas.AdminActionResponse(
                 success=False,
-                detail=f"Не удалось запланировать задачу для пользователя {row.id}",
+                detail=f"Не удалось запланировать задачу: {exc}",
                 error=str(exc),
             )
-
-        scheduled += 1
         if idx % 5 == 4:
-            delay_seconds += 1
+            scheduled += 1
 
     return admin_schemas.AdminActionResponse(
         success=True,
