@@ -237,6 +237,14 @@ async def _run_inline_task(
     task_kwargs: dict[str, Any],
 ) -> None:
     loop = asyncio.get_running_loop()
+    task_name = getattr(task, "name", repr(task))
+
+    task_tracking.upsert_task_run(
+        task_id=task_id,
+        name=task_name,
+        status="running",
+        progress=0,
+    )
 
     def _invoke_task() -> AsyncResult | EagerResult:
         return task.apply(args=[], kwargs=task_kwargs, throw=False)
@@ -252,9 +260,33 @@ async def _run_inline_task(
             progress=0,
             error=schemas.TaskErrorPayload(status_code=500, detail=str(exc)),
         )
+        task_tracking.upsert_task_run(
+            task_id=task_id,
+            name=task_name,
+            status="failure",
+            error_message=str(exc),
+            log_excerpt=str(exc),
+        )
     else:
         status_response = _build_task_status_response(task_id, inline_result, None)
         INLINE_TASK_RESULTS[task_id] = status_response
+
+        if inline_result.failed():
+            error_message = str(inline_result.result)
+            task_tracking.upsert_task_run(
+                task_id=task_id,
+                name=task_name,
+                status="failure",
+                error_message=error_message,
+                log_excerpt=inline_result.traceback or error_message,
+            )
+        else:
+            task_tracking.upsert_task_run(
+                task_id=task_id,
+                name=task_name,
+                status="success",
+                progress=100,
+            )
 
 
 async def _enqueue_task(
@@ -276,6 +308,12 @@ async def _enqueue_task(
             retries=0,
             progress=0,
         )
+        task_tracking.upsert_task_run(
+            task_id=task_id,
+            name=task_name,
+            status="pending",
+            progress=0,
+        )
         asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
         return _submission_response(task_id, request)
 
@@ -293,6 +331,12 @@ async def _enqueue_task(
             task_id=task_id,
             status="pending",
             retries=0,
+            progress=0,
+        )
+        task_tracking.upsert_task_run(
+            task_id=task_id,
+            name=task_name,
+            status="pending",
             progress=0,
         )
         asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
