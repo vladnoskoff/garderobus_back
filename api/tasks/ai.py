@@ -14,6 +14,8 @@ from celery import shared_task
 from celery.utils.log import get_task_logger
 from sqlalchemy.orm import Session
 
+import requests
+
 import models
 import schemas
 import settings
@@ -267,6 +269,42 @@ def _build_inline_error(detail: str, status_code: int = 500) -> dict:
     return {"status": "error", "status_code": status_code, "detail": detail}
 
 
+def _extract_image_b64(response) -> str:
+    """Return a base64 payload from an OpenAI image response.
+
+    The upstream client may return either ``b64_json`` or a remote URL depending on
+    defaults and SDK version. This helper normalizes to a base64 string that can be
+    persisted via ``save_mannequin_image``.
+    """
+
+    data = getattr(response, "data", None) or []
+    if not data:
+        raise ValueError("No image data returned from OpenAI")
+
+    first = data[0]
+    b64_value = getattr(first, "b64_json", None)
+    if not b64_value and isinstance(first, dict):
+        b64_value = first.get("b64_json")
+
+    if b64_value:
+        return b64_value
+
+    url_value = getattr(first, "url", None)
+    if not url_value and isinstance(first, dict):
+        url_value = first.get("url")
+
+    if not url_value:
+        raise ValueError("Image response missing both b64_json and url fields")
+
+    try:
+        download = requests.get(url_value, timeout=30)
+        download.raise_for_status()
+    except Exception as exc:  # pragma: no cover - network errors are runtime concerns
+        raise RuntimeError(f"Failed to download generated image: {exc}")
+
+    return base64.b64encode(download.content).decode("utf-8")
+
+
 @shared_task(bind=True, name="generate_mannequin_task")
 def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = None) -> dict:
     """Generate a mannequin image strictly from the user's wardrobe items."""
@@ -314,9 +352,8 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
                 size="1024x1536",
                 quality="hd",
                 n=1,
-                response_format="b64_json",
             )
-            image_b64 = response.data[0].b64_json  # type: ignore[assignment]
+            image_b64 = _extract_image_b64(response)
         except Exception as exc:  # pragma: no cover - depends on external API
             logger.exception("Image generation failed for mannequin task")
             return _build_inline_error(str(exc))
