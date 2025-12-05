@@ -350,7 +350,7 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
                 model="gpt-image-1",
                 prompt=prompt,
                 size="1024x1536",
-                quality="hd",
+                quality="high",
                 n=1,
             )
             image_b64 = _extract_image_b64(response)
