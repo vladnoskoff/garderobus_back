@@ -478,7 +478,12 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
 
 def _serialize_task_run(record: models.TaskRun) -> schemas.AdminTaskRun:
     progress = record.progress or 0
-    if record.status == "success":
+
+    # Consider any successfully finished task as 100% complete, even if the stored
+    # progress value was lower (e.g., if only partial updates were persisted).
+    if record.status == "success" or (
+        record.finished_at is not None and record.status != "failure"
+    ):
         progress = 100
 
     return schemas.AdminTaskRun(
