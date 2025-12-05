@@ -184,7 +184,7 @@ async def enforce_authentication(request: Request, call_next):
     if request.method == "OPTIONS":
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    if is_public_path(request.url.path, extra_public=extra_public):
+    if is_public_path(request.url.path, method=request.method, extra_public=extra_public):
         return await call_next(request)
 
     credentials = await auth_scheme(request)

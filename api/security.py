@@ -43,6 +43,14 @@ _PUBLIC_ROUTE_PREFIXES: tuple[str, ...] = (
     "/users/login",
 )
 
+# Read-only routes that can be fetched without auth (used by public widgets/cron jobs).
+_PUBLIC_GET_PREFIXES: tuple[str, ...] = (
+    "/users/",
+    "/locations/",
+    "/clothes/user",
+    "/weather/user",
+)
+
 
 def _blocklist_path() -> Path:
     raw = os.getenv("IP_BLOCKLIST_PATH")
@@ -139,7 +147,9 @@ def detect_client_origin(
     return ("unknown", "")
 
 
-def is_public_path(path: str, extra_public: Optional[Iterable[str]] = None) -> bool:
+def is_public_path(
+    path: str, *, method: Optional[str] = None, extra_public: Optional[Iterable[str]] = None
+) -> bool:
     """Return True when path should bypass auth enforcement."""
 
     normalized = path.rstrip("/") or "/"
@@ -148,6 +158,11 @@ def is_public_path(path: str, extra_public: Optional[Iterable[str]] = None) -> b
         return True
 
     if extra_public and any(normalized.startswith(prefix.rstrip("/")) for prefix in extra_public):
+        return True
+
+    if method and method.upper() == "GET" and any(
+        normalized.startswith(prefix) for prefix in _PUBLIC_GET_PREFIXES
+    ):
         return True
 
     return any(normalized.startswith(prefix) for prefix in _PUBLIC_ROUTE_PREFIXES)
