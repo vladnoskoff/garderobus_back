@@ -251,7 +251,7 @@ def rate_limit_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
 
 
 @app.get("/healthz", tags=["health"], summary="Service health probe")
-def healthcheck() -> dict[str, str]:
+def healthcheck() -> dict[str, object]:
     """Simple endpoint used by load balancers and orchestrators."""
 
     uptime_seconds = time.time() - _START_TIME
