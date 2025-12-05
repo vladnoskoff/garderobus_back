@@ -17,6 +17,7 @@ from typing import Any, List, Optional
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError
 from fastapi import HTTPException, status
+from database import SessionLocal
 
 from celery_app import celery_app
 import models
@@ -473,6 +474,60 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
         tasks=all_tasks,
         broker_available=True,
     )
+
+
+def _serialize_task_run(record: models.TaskRun) -> schemas.AdminTaskRun:
+    return schemas.AdminTaskRun(
+        id=record.id,
+        name=record.name,
+        status=record.status,
+        progress=record.progress or 0,
+        error_message=record.error_message,
+        log_excerpt=record.log_excerpt,
+        created_at=record.created_at,
+        started_at=record.started_at,
+        finished_at=record.finished_at,
+        updated_at=record.updated_at,
+        meta=record.meta,
+    )
+
+
+def list_task_runs(
+    *, status: Optional[str], name: Optional[str], limit: int, page: int
+) -> schemas.AdminTaskRunList:
+    with SessionLocal() as session:
+        query = session.query(models.TaskRun)
+        if status:
+            query = query.filter(models.TaskRun.status == status)
+        if name:
+            query = query.filter(models.TaskRun.name == name)
+
+        total = query.count()
+        records = (
+            query.order_by(models.TaskRun.created_at.desc())
+            .offset(max(page - 1, 0) * limit)
+            .limit(limit)
+            .all()
+        )
+
+    return schemas.AdminTaskRunList(
+        tasks=[_serialize_task_run(record) for record in records],
+        total=total,
+        page=page,
+        limit=limit,
+    )
+
+
+def get_task_run(task_id: str) -> schemas.AdminTaskRun:
+    with SessionLocal() as session:
+        record = session.get(models.TaskRun, task_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Задача не найдена",
+            )
+
+    return _serialize_task_run(record)
 
 
 def read_managed_file(relative_path: str) -> schemas.AdminCodeFile:

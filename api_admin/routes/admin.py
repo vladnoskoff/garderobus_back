@@ -459,6 +459,25 @@ def get_queue_snapshot(
     return system_tools.get_queue_snapshot()
 
 
+@router.get("/system/tasks", response_model=admin_schemas.AdminTaskRunList)
+def list_task_runs(
+    status: Optional[str] = Query(None, description="Фильтр по статусу"),
+    name: Optional[str] = Query(None, description="Фильтр по имени задачи"),
+    limit: int = Query(25, ge=1, le=200),
+    page: int = Query(1, ge=1),
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminTaskRunList:
+    return system_tools.list_task_runs(status=status, name=name, limit=limit, page=page)
+
+
+@router.get("/system/tasks/{task_id}", response_model=admin_schemas.AdminTaskRun)
+def get_task_run_detail(
+    task_id: str,
+    _: models.User = Depends(_get_current_user),
+) -> admin_schemas.AdminTaskRun:
+    return system_tools.get_task_run(task_id)
+
+
 @router.get("/system/events", response_model=admin_schemas.AdminSystemEventList)
 def get_system_events(
     level: Optional[str] = Query(None, pattern=r"^(info|warning|error)$"),

@@ -338,3 +338,19 @@ class NotificationRule(Base):
         nullable=True,
     )
     filters = Column(JSON, nullable=True)
+
+
+class TaskRun(Base):
+    __tablename__ = "task_runs"
+
+    id = Column(String(128), primary_key=True)
+    name = Column(String(255), nullable=False)
+    status = Column(String(32), nullable=False, default="pending", server_default="pending")
+    progress = Column(Integer, nullable=False, default=0, server_default="0")
+    error_message = Column(Text, nullable=True)
+    log_excerpt = Column(Text, nullable=True)
+    created_at = Column(TIMESTAMP, nullable=False, server_default=func.now())
+    started_at = Column(TIMESTAMP, nullable=True)
+    finished_at = Column(TIMESTAMP, nullable=True)
+    updated_at = Column(TIMESTAMP, server_default=func.now(), onupdate=func.now())
+    meta = Column(JSON, nullable=True)

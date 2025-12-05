@@ -22,6 +22,7 @@ from database import SessionLocal
 from openai_client import get_openai_client
 from routes.location_utils import resolve_location_and_coordinates
 from routes.weather import get_weather_by_coordinates
+from task_tracking import update_progress
 
 MANNEQUIN_DIR = settings.MANNEQUIN_IMAGE_DIR
 MANNEQUIN_DIR.mkdir(parents=True, exist_ok=True)
@@ -270,6 +271,7 @@ def _build_inline_error(detail: str, status_code: int = 500) -> dict:
 def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = None) -> dict:
     """Generate a mannequin image strictly from the user's wardrobe items."""
 
+    update_progress(self, 5, "Подготовка данных пользователя")
     with SessionLocal() as db:  # type: Session
         user: Optional[models.User] = db.query(models.User).get(user_id)
         if not user:
@@ -281,6 +283,7 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
             logger.exception("Failed to resolve location for mannequin task")
             return _build_inline_error(str(exc), status_code=400)
 
+        update_progress(self, 15, "Получаем погоду и гардероб")
         try:
             weather_payload = get_weather_by_coordinates(lat=lat, lon=lon, db=db)
         except Exception as exc:  # pragma: no cover - external API may fail
@@ -300,6 +303,7 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
         if not selected_items:
             return _build_inline_error("Не удалось подобрать вещи для манекена")
 
+        update_progress(self, 35, "Собираем промпт для генерации")
         prompt = build_mannequin_prompt(selected_items, weather, user.gender)
 
         try:
@@ -317,6 +321,7 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
             logger.exception("Image generation failed for mannequin task")
             return _build_inline_error(str(exc))
 
+        update_progress(self, 75, "Сохраняем изображение и историю")
         location_segment = _mannequin_location_segment(location_id)
         image_url = save_mannequin_image(image_b64, user_id, location_segment)
 
@@ -333,6 +338,7 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
 
         invalidate_outfit_history_for_user(user_id)
 
+        update_progress(self, 95, "Подготовка ответа")
         return {
             "status": "success",
             "result": schemas.MannequinResponse(
@@ -347,6 +353,7 @@ def generate_mannequin_task(self, *, user_id: int, location_id: Optional[int] = 
 def generate_recommendation_task(self, *, user_id: int) -> dict:
     """Produce stylist recommendations based on recent outfits and wardrobe."""
 
+    update_progress(self, 5, "Собираем недавние образы")
     with SessionLocal() as db:  # type: Session
         user: Optional[models.User] = db.query(models.User).get(user_id)
         if not user:
@@ -388,6 +395,7 @@ def generate_recommendation_task(self, *, user_id: int) -> dict:
             )
             weather_map = {item.id: item for item in weathers}
 
+        update_progress(self, 30, "Готовим историю для модели")
         history_snapshot: list[dict] = []
         for outfit in outfits:
             clothing_details = []
@@ -428,6 +436,7 @@ def generate_recommendation_task(self, *, user_id: int) -> dict:
         for item in wardrobe_items:
             prompt_lines.append(json.dumps(_serialize_mannequin_item(item).model_dump(), ensure_ascii=False))
 
+        update_progress(self, 60, "Запрашиваем рекомендации у модели")
         try:
             client = get_openai_client()
             completion = client.chat.completions.create(
@@ -443,6 +452,7 @@ def generate_recommendation_task(self, *, user_id: int) -> dict:
             logger.exception("Recommendation generation failed")
             return _build_inline_error(str(exc))
 
+        update_progress(self, 95, "Подготавливаем результат")
         return {
             "status": "success",
             "result": {"recommendation": advice},

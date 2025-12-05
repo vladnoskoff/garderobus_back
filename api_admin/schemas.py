@@ -96,6 +96,27 @@ class AdminQueueSnapshot(BaseModel):
     error: Optional[str] = None
 
 
+class AdminTaskRun(BaseModel):
+    id: str
+    name: str
+    status: str
+    progress: int = 0
+    error_message: Optional[str] = None
+    log_excerpt: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
+class AdminTaskRunList(BaseModel):
+    tasks: List[AdminTaskRun] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    limit: int = 50
+
+
 class AdminCodeFile(BaseModel):
     path: str
     content: str
