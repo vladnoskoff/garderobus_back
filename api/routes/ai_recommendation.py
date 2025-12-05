@@ -271,14 +271,23 @@ async def _run_inline_task(
         status_response = _build_task_status_response(task_id, inline_result, None)
         INLINE_TASK_RESULTS[task_id] = status_response
 
-        if inline_result.failed():
-            error_message = str(inline_result.result)
+        payload = inline_result.result
+        payload_status = payload.get("status") if isinstance(payload, dict) else None
+        if inline_result.failed() or payload_status == "error":
+            error_message = None
+            log_excerpt = None
+            if isinstance(payload, dict):
+                error_message = str(payload.get("detail") or payload.get("message") or "") or None
+                log_excerpt = payload.get("log_excerpt") or payload.get("traceback") or error_message
+            if error_message is None:
+                error_message = str(inline_result.result)
             task_tracking.upsert_task_run(
                 task_id=task_id,
                 name=task_name,
                 status="failure",
+                progress=100,
                 error_message=error_message,
-                log_excerpt=inline_result.traceback or error_message,
+                log_excerpt=log_excerpt or inline_result.traceback or error_message,
             )
         else:
             task_tracking.upsert_task_run(

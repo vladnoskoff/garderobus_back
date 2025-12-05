@@ -61,15 +61,36 @@ def _track_start(task_id=None, task=None, *args, **kwargs):
     )
 
 
+def _is_error_payload(result) -> tuple[bool, str | None]:
+    """Identify application-level error payloads returned as successful Celery results."""
+
+    if not isinstance(result, dict):
+        return False, None
+
+    if result.get("status") != "error":
+        return False, None
+
+    detail = result.get("detail")
+    if detail is None:
+        detail = result.get("message")
+    return True, str(detail) if detail is not None else None
+
+
 @signals.task_success.connect
 def _track_success(sender=None, result=None, **kwargs):
     task_id = kwargs.get("task_id")
     name = getattr(sender, "name", str(sender)) if sender is not None else ""
+
+    is_error, detail = _is_error_payload(result)
+    status = "failure" if is_error else "success"
+
     task_tracking.upsert_task_run(
         task_id=str(task_id or ""),
         name=name,
-        status="success",
+        status=status,
         progress=100,
+        error_message=detail if is_error else None,
+        log_excerpt=detail if is_error else None,
     )
 
 
