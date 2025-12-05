@@ -118,6 +118,13 @@ curl -X GET 'http://localhost:8000/outfits/history?limit=5' \
 ## Mock-данные
 В каталоге [`api/docs/fixtures`](api/docs/fixtures/README.md) лежат готовые JSON-файлы для локальной разработки (пользователь, локации, одежда, погода, аутфиты) и пошаговая инструкция по их загрузке через `curl`/`jq`.
 
+## Мониторинг задач
+- Публичный статус конкретной AI-задачи доступен по `GET /ai/tasks/{task_id}` (для GET не требуется авторизация).
+- Полная история и детали запусков (прогресс, ошибки, логи) доступны в админке: `GET /admin/system/tasks` и `GET /admin/system/tasks/{task_id}`.
+- Снимок живой очереди Celery — `GET /admin/system/queue`.
+
+Подробности и параметры см. в [docs/admin_tasks.md](docs/admin_tasks.md).
+
 ## Документация и OpenAPI
 - Swagger UI — `http://localhost:8000/docs`, Redoc — `http://localhost:8000/redoc`.
 - OpenAPI схема — `http://localhost:8000/openapi.json`. Артефакт можно сгенерировать без запуска сервера: `make openapi-fixtures` (использует SQLite и подставные ключи).
