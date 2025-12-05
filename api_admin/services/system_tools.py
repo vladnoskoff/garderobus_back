@@ -477,11 +477,15 @@ def get_queue_snapshot() -> schemas.AdminQueueSnapshot:
 
 
 def _serialize_task_run(record: models.TaskRun) -> schemas.AdminTaskRun:
+    progress = record.progress or 0
+    if record.status == "success":
+        progress = 100
+
     return schemas.AdminTaskRun(
         id=record.id,
         name=record.name,
         status=record.status,
-        progress=record.progress or 0,
+        progress=progress,
         error_message=record.error_message,
         log_excerpt=record.log_excerpt,
         created_at=record.created_at,
