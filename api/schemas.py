@@ -1,5 +1,5 @@
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from pydantic import AliasChoices, BaseModel, Field, root_validator
 
@@ -20,6 +20,9 @@ class TaskStatusResponse(BaseModel):
     result: Optional[Dict[str, Any]] = None
     error: Optional[TaskErrorPayload] = None
     retries: int = 0
+    progress: Optional[int] = None
+    message: Optional[str] = None
+    log_excerpt: Optional[str] = None
 
 
 class UserCreate(BaseModel):

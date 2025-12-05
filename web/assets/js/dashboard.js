@@ -142,6 +142,13 @@
     queueTotalPill: document.getElementById("queue-total-pill"),
     queueStateBadges: document.getElementById("queue-state-badges"),
     queueUpdatedAt: document.getElementById("queue-updated-at"),
+    taskHistoryList: document.getElementById("task-history-list"),
+    taskHistoryEmpty: document.getElementById("task-history-empty"),
+    taskHistoryError: document.getElementById("task-history-error"),
+    taskHistoryLoading: document.getElementById("task-history-loading"),
+    taskHistoryRefresh: document.getElementById("task-history-refresh"),
+    taskHistoryUpdatedAt: document.getElementById("task-history-updated-at"),
+    taskHistoryTotal: document.getElementById("task-history-total"),
     databaseSummaryBody: document.getElementById("database-summary-body"),
     databaseSummaryWrapper: document.getElementById("database-summary-wrapper"),
     databaseSummaryLoading: document.getElementById("database-summary-loading"),
@@ -200,6 +207,9 @@
     queueSnapshot: null,
     queueLoadedOnce: false,
     queueLoading: false,
+    taskHistory: [],
+    taskHistoryLoadedOnce: false,
+    taskHistoryLoading: false,
     databaseTables: [],
     databaseSelectedTable: "",
   };
@@ -623,6 +633,177 @@
       state.queueLoading = false;
       if (elements.queueLoading) {
         toggleHidden(elements.queueLoading, true);
+      }
+    }
+  }
+
+  function formatTaskStatus(status) {
+    const normalized = (status || "").toLowerCase();
+    const map = {
+      pending: "Ожидание",
+      running: "Выполняется",
+      success: "Завершена",
+      failure: "Ошибка",
+    };
+    return map[normalized] || status || "—";
+  }
+
+  function renderTaskHistory(tasks) {
+    if (!elements.taskHistoryList) {
+      return;
+    }
+
+    elements.taskHistoryList.innerHTML = "";
+    const items = Array.isArray(tasks) ? [...tasks] : [];
+    items.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+
+    if (!items.length) {
+      toggleHidden(elements.taskHistoryEmpty, false);
+      return;
+    }
+    toggleHidden(elements.taskHistoryEmpty, true);
+
+    items.forEach((task) => {
+      const details = document.createElement("details");
+      details.className = "queue-item";
+
+      const summary = document.createElement("summary");
+      summary.className = "queue-item-header";
+
+      const title = document.createElement("div");
+      title.className = "queue-item-title";
+
+      const name = document.createElement("strong");
+      name.textContent = task.name || "Задача";
+      title.appendChild(name);
+
+      const idSpan = document.createElement("span");
+      idSpan.className = "text-muted";
+      idSpan.textContent = `ID: ${task.id}`;
+      title.appendChild(idSpan);
+
+      const meta = document.createElement("div");
+      meta.className = "queue-item-meta";
+
+      const statusMeta = document.createElement("span");
+      statusMeta.textContent = `Статус: ${formatTaskStatus(task.status)}`;
+      meta.appendChild(statusMeta);
+
+      const progressMeta = document.createElement("span");
+      progressMeta.textContent = `Прогресс: ${task.progress ?? 0}%`;
+      meta.appendChild(progressMeta);
+
+      if (task.finished_at) {
+        const finishedMeta = document.createElement("span");
+        finishedMeta.textContent = `Завершено: ${formatDate(task.finished_at, true)}`;
+        meta.appendChild(finishedMeta);
+      } else if (task.started_at) {
+        const startedMeta = document.createElement("span");
+        startedMeta.textContent = `Начато: ${formatDate(task.started_at, true)}`;
+        meta.appendChild(startedMeta);
+      } else if (task.created_at) {
+        const createdMeta = document.createElement("span");
+        createdMeta.textContent = `Создано: ${formatDate(task.created_at, true)}`;
+        meta.appendChild(createdMeta);
+      }
+
+      summary.appendChild(title);
+      summary.appendChild(meta);
+      details.appendChild(summary);
+
+      const body = document.createElement("div");
+      body.className = "queue-item-details";
+
+      const timing = document.createElement("div");
+      timing.className = "queue-item-meta";
+      timing.style.marginBottom = "8px";
+      timing.textContent = `Создано: ${formatDate(task.created_at, true)} · Обновлено: ${formatDate(task.updated_at, true)}`;
+      body.appendChild(timing);
+
+      if (task.meta && task.meta.message) {
+        const progressNote = document.createElement("div");
+        progressNote.className = "text-muted";
+        progressNote.textContent = `Последний шаг: ${task.meta.message}`;
+        body.appendChild(progressNote);
+      }
+
+      if (task.log_excerpt) {
+        const logLabel = document.createElement("div");
+        logLabel.className = "text-muted";
+        logLabel.style.marginTop = "8px";
+        logLabel.textContent = "Лог";
+
+        const logPre = document.createElement("pre");
+        logPre.className = "queue-args";
+        logPre.textContent = task.log_excerpt;
+
+        body.appendChild(logLabel);
+        body.appendChild(logPre);
+      }
+
+      if (task.error_message) {
+        const errorBox = document.createElement("div");
+        errorBox.className = "alert danger";
+        errorBox.style.marginTop = "8px";
+        errorBox.textContent = task.error_message;
+        body.appendChild(errorBox);
+      }
+
+      details.appendChild(body);
+      elements.taskHistoryList.appendChild(details);
+    });
+  }
+
+  function renderTaskHistorySummary(payload) {
+    if (elements.taskHistoryTotal) {
+      const total = payload?.total ?? 0;
+      elements.taskHistoryTotal.textContent = `Записей: ${total}`;
+    }
+    if (elements.taskHistoryUpdatedAt) {
+      elements.taskHistoryUpdatedAt.textContent = `Обновлено: ${new Date().toLocaleString("ru-RU")}`;
+    }
+  }
+
+  async function loadTaskHistory({ showLoader = true } = {}) {
+    if (!elements.taskHistoryList) {
+      return;
+    }
+
+    state.taskHistoryLoading = true;
+    toggleHidden(elements.taskHistoryEmpty, true);
+    showAlert(elements.taskHistoryError, "");
+    elements.taskHistoryList.innerHTML = "";
+    if (elements.taskHistoryLoading) {
+      elements.taskHistoryLoading.textContent = "Загрузка истории задач...";
+      toggleHidden(elements.taskHistoryLoading, !showLoader);
+    }
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/admin/system/tasks?limit=50`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("authToken")}` },
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Task history request failed with status ${response.status}`);
+      }
+
+      const payload = await response.json();
+      state.taskHistory = payload?.tasks || [];
+      state.taskHistoryLoadedOnce = true;
+      renderTaskHistory(payload?.tasks || []);
+      renderTaskHistorySummary(payload);
+    } catch (error) {
+      console.error(error);
+      showAlert(elements.taskHistoryError, "Не удалось загрузить историю задач. Попробуйте позже.");
+    } finally {
+      state.taskHistoryLoading = false;
+      if (elements.taskHistoryLoading) {
+        toggleHidden(elements.taskHistoryLoading, true);
       }
     }
   }
@@ -3041,6 +3222,7 @@
       void refreshSystemMetrics({ showLoader: true });
       void loadSystemEvents({ resetPage: true });
       void loadQueueSnapshot({ showLoader: false, silent: true });
+      void loadTaskHistory({ showLoader: false });
     });
   }
 
@@ -3048,12 +3230,19 @@
     elements.queueButton.addEventListener("click", () => {
       openDrawer("queue");
       void loadQueueSnapshot({ showLoader: true });
+      void loadTaskHistory({ showLoader: true });
     });
   }
 
   if (elements.queueRefresh) {
     elements.queueRefresh.addEventListener("click", () => {
       void loadQueueSnapshot({ showLoader: true });
+    });
+  }
+
+  if (elements.taskHistoryRefresh) {
+    elements.taskHistoryRefresh.addEventListener("click", () => {
+      void loadTaskHistory({ showLoader: true });
     });
   }
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Optional
 
+from typing_extensions import Literal
 from pydantic import BaseModel, Field
 
 
@@ -94,6 +95,27 @@ class AdminQueueSnapshot(BaseModel):
     tasks: List[AdminQueueTask] = Field(default_factory=list)
     broker_available: bool = True
     error: Optional[str] = None
+
+
+class AdminTaskRun(BaseModel):
+    id: str
+    name: str
+    status: str
+    progress: int = 0
+    error_message: Optional[str] = None
+    log_excerpt: Optional[str] = None
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    meta: Optional[Dict[str, Any]] = None
+
+
+class AdminTaskRunList(BaseModel):
+    tasks: List[AdminTaskRun] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    limit: int = 50
 
 
 class AdminCodeFile(BaseModel):

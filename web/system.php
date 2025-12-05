@@ -125,6 +125,25 @@ $apiBaseUrl = rtrim(getenv('API_BASE_URL') ?: $guessedBaseUrl, '/');
             <p id="queue-empty" class="text-muted hidden">Очередь пуста.</p>
 
             <div id="queue-list" class="queue-list"></div>
+
+            <hr />
+
+            <div class="flex-between queue-summary">
+              <div class="flex-column gap-xs">
+                <h4 style="margin: 0;">История задач</h4>
+                <div class="status-pill" id="task-history-total">Записей: —</div>
+              </div>
+              <div class="flex gap-sm" style="flex-wrap: wrap;">
+                <span class="text-muted" id="task-history-updated-at">—</span>
+                <button class="secondary" type="button" id="task-history-refresh">Обновить</button>
+              </div>
+            </div>
+
+            <div id="task-history-error" class="alert hidden" style="margin-top: 12px;"></div>
+            <p id="task-history-loading" class="text-muted">Загрузка истории задач...</p>
+            <p id="task-history-empty" class="text-muted hidden">Нет завершённых задач.</p>
+
+            <div id="task-history-list" class="queue-list"></div>
           </section>
 
             <section id="drawer-code-editor" class="drawer-section hidden">

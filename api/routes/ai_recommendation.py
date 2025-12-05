@@ -22,6 +22,7 @@ import schemas
 from celery_app import celery_app
 from database import get_db
 from .location_utils import ensure_location_for_user
+import task_tracking
 
 from celery.exceptions import CeleryError
 from kombu.exceptions import OperationalError as KombuOperationalError
@@ -115,13 +116,34 @@ def _submission_response(task_id: str, request: Request) -> schemas.TaskSubmissi
     )
 
 
+def _normalize_progress(progress: Any) -> Optional[int]:
+    try:
+        value = int(progress)
+    except (TypeError, ValueError):
+        return None
+    return max(0, min(100, value))
+
+
 def _build_task_status_response(
-    task_id: str, result: AsyncResult | EagerResult
+    task_id: str, result: AsyncResult | EagerResult, task_run: models.TaskRun | None
 ) -> schemas.TaskStatusResponse:
     state = result.state or states.PENDING
-    status = state.lower()
+    status = "running" if str(state).upper() in {"PROGRESS", states.STARTED} else state.lower()
     raw_retries = getattr(result, "retries", 0)
     retries = int(raw_retries or 0)
+
+    progress: Optional[int] = None
+    message: Optional[str] = None
+    log_excerpt: Optional[str] = None
+
+    if isinstance(result.info, dict):
+        progress = _normalize_progress(result.info.get("progress"))
+        message = str(result.info.get("message") or result.info.get("detail") or "") or None
+        log_excerpt = (
+            str(result.info.get("log_excerpt")) if result.info.get("log_excerpt") else None
+        )
+    elif result.info:
+        log_excerpt = str(result.info)
 
     response = schemas.TaskStatusResponse(
         task_id=task_id,
@@ -146,12 +168,31 @@ def _build_task_status_response(
                 response.result = payload
         elif payload is not None:
             response.result = {"value": payload}
+        if progress is None:
+            progress = 100
     elif state == states.FAILURE:
         response.status = "failure"
         response.error = schemas.TaskErrorPayload(
             status_code=500,
             detail=str(result.info),
         )
+
+    if task_run is not None:
+        progress = progress if progress is not None else task_run.progress
+        if not message:
+            message = task_run.log_excerpt
+        if log_excerpt is None and task_run.log_excerpt:
+            log_excerpt = task_run.log_excerpt
+        if response.error is None and task_run.error_message:
+            response.error = schemas.TaskErrorPayload(status_code=500, detail=task_run.error_message)
+        if state == states.PENDING and task_run.status:
+            response.status = task_run.status
+
+    normalized_progress = _normalize_progress(progress)
+    if normalized_progress is not None:
+        response.progress = normalized_progress
+    response.message = message
+    response.log_excerpt = log_excerpt
 
     return response
 
@@ -196,6 +237,14 @@ async def _run_inline_task(
     task_kwargs: dict[str, Any],
 ) -> None:
     loop = asyncio.get_running_loop()
+    task_name = getattr(task, "name", repr(task))
+
+    task_tracking.upsert_task_run(
+        task_id=task_id,
+        name=task_name,
+        status="running",
+        progress=0,
+    )
 
     def _invoke_task() -> AsyncResult | EagerResult:
         return task.apply(args=[], kwargs=task_kwargs, throw=False)
@@ -208,11 +257,45 @@ async def _run_inline_task(
             task_id=task_id,
             status="failure",
             retries=0,
+            progress=0,
             error=schemas.TaskErrorPayload(status_code=500, detail=str(exc)),
         )
+        task_tracking.upsert_task_run(
+            task_id=task_id,
+            name=task_name,
+            status="failure",
+            error_message=str(exc),
+            log_excerpt=str(exc),
+        )
     else:
-        status_response = _build_task_status_response(task_id, inline_result)
+        status_response = _build_task_status_response(task_id, inline_result, None)
         INLINE_TASK_RESULTS[task_id] = status_response
+
+        payload = inline_result.result
+        payload_status = payload.get("status") if isinstance(payload, dict) else None
+        if inline_result.failed() or payload_status == "error":
+            error_message = None
+            log_excerpt = None
+            if isinstance(payload, dict):
+                error_message = str(payload.get("detail") or payload.get("message") or "") or None
+                log_excerpt = payload.get("log_excerpt") or payload.get("traceback") or error_message
+            if error_message is None:
+                error_message = str(inline_result.result)
+            task_tracking.upsert_task_run(
+                task_id=task_id,
+                name=task_name,
+                status="failure",
+                progress=100,
+                error_message=error_message,
+                log_excerpt=log_excerpt or inline_result.traceback or error_message,
+            )
+        else:
+            task_tracking.upsert_task_run(
+                task_id=task_id,
+                name=task_name,
+                status="success",
+                progress=100,
+            )
 
 
 async def _enqueue_task(
@@ -232,6 +315,13 @@ async def _enqueue_task(
             task_id=task_id,
             status="pending",
             retries=0,
+            progress=0,
+        )
+        task_tracking.upsert_task_run(
+            task_id=task_id,
+            name=task_name,
+            status="pending",
+            progress=0,
         )
         asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
         return _submission_response(task_id, request)
@@ -250,6 +340,13 @@ async def _enqueue_task(
             task_id=task_id,
             status="pending",
             retries=0,
+            progress=0,
+        )
+        task_tracking.upsert_task_run(
+            task_id=task_id,
+            name=task_name,
+            status="pending",
+            progress=0,
         )
         asyncio.create_task(_run_inline_task(task, task_id, task_kwargs))
         return _submission_response(task_id, request)
@@ -269,7 +366,8 @@ async def get_task_status(task_id: str) -> schemas.TaskStatusResponse:
         return inline_response
 
     result = AsyncResult(task_id, app=celery_app)
-    return _build_task_status_response(task_id, result)
+    task_run = task_tracking.get_task_run(task_id)
+    return _build_task_status_response(task_id, result, task_run)
 
 
 @router.get(

@@ -184,7 +184,7 @@ async def enforce_authentication(request: Request, call_next):
     if request.method == "OPTIONS":
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    if is_public_path(request.url.path, extra_public=extra_public):
+    if is_public_path(request.url.path, method=request.method, extra_public=extra_public):
         return await call_next(request)
 
     credentials = await auth_scheme(request)
@@ -251,7 +251,7 @@ def rate_limit_handler(_: Request, exc: RateLimitExceeded) -> JSONResponse:
 
 
 @app.get("/healthz", tags=["health"], summary="Service health probe")
-def healthcheck() -> dict[str, str]:
+def healthcheck() -> dict[str, object]:
     """Simple endpoint used by load balancers and orchestrators."""
 
     uptime_seconds = time.time() - _START_TIME
