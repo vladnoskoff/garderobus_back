@@ -50,6 +50,7 @@ _PUBLIC_GET_PREFIXES: tuple[str, ...] = (
     "/clothes/user",
     "/weather/user",
     "/ai/mannequin/",
+    "/ai/tasks/",
 )
 
 

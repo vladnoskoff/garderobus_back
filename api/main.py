@@ -91,11 +91,11 @@ def _custom_openapi():
     schema.setdefault("security", default_security)
 
     for path, operations in schema.get("paths", {}).items():
-        requires_auth = not is_public_path(path)
-        for operation in operations.values():
+        for method_name, operation in operations.items():
             if not isinstance(operation, dict):
                 continue
 
+            requires_auth = not is_public_path(path, method=method_name.upper())
             if not requires_auth:
                 operation.setdefault("security", [])
                 continue
@@ -104,7 +104,9 @@ def _custom_openapi():
             if existing_security is None:
                 operation["security"] = list(default_security)
             else:
-                has_bearer = any("HTTPBearer" in entry for entry in existing_security if isinstance(entry, dict))
+                has_bearer = any(
+                    "HTTPBearer" in entry for entry in existing_security if isinstance(entry, dict)
+                )
                 if not has_bearer:
                     operation["security"] = existing_security + list(default_security)
 
