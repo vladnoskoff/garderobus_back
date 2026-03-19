@@ -33,18 +33,44 @@ flutter pub get
 
 ## 3. Настройка iOS
 
-В файле `ios/Runner/Info.plist` добавьте ключи с описанием причин использования камеры и фотогалереи:
+### 3.1 Info.plist
+
+В файле `ios/Runner/Info.plist` необходимо указать все причины обращения к фото и камере. Для корректной работы с новой политикой iOS 14+ добавьте **оба** ключа для фотогалереи:
 
 ```xml
 <key>NSCameraUsageDescription</key>
 <string>Для добавления фотографий одежды требуется доступ к камере.</string>
 <key>NSPhotoLibraryUsageDescription</key>
-<string>Для загрузки изображений одежды требуется доступ к фотогалерее.</string>
+<string>Для выбора изображений одежды требуется доступ к вашей фотогалерее.</string>
+<key>NSPhotoLibraryAddUsageDescription</key>
+<string>Для сохранения обработанных изображений гардероба требуется разрешение на добавление фото.</string>
 <key>NSFaceIDUsageDescription</key>
 <string>Face ID используется для быстрого входа в приложение вместо PIN-кода.</string>
 ```
 
-После этого выполните `cd ios && pod install` (или `flutter pub get`, который запустит `pod install` автоматически).
+Без `NSPhotoLibraryAddUsageDescription` iOS не добавит пункт «Фото» в настройках приложения и не покажет системный диалог при запросе `Permission.photos`, из-за чего кнопки «Камера»/«Галерея» останутся нерабочими.
+
+### 3.2 Подключение нужных фич в Podfile
+
+Плагин `permission_handler` на iOS собирает только те разрешения, которые явно включены в `ios/Podfile`. Откройте файл и в блоке `post_install` добавьте флаги для камеры и фотогалереи. **Не удаляйте** строку `flutter_additional_ios_build_settings(target)`, которая подключает генерацию плагинов Flutter — без неё Xcode не найдёт зависимости:
+
+```ruby
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    target.build_configurations.each do |config|
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
+        '$(inherited)',
+        'PERMISSION_CAMERA=1',
+        'PERMISSION_PHOTOS=1'
+      ]
+    end
+  end
+end
+```
+
+После обновления `Info.plist` и `Podfile` выполните `cd ios && pod install` (или `flutter pub get`, который автоматически вызовет `pod install`).
 
 ## 4. Очистка кеша (при необходимости)
 
