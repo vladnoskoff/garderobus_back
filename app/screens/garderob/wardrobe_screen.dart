@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -24,6 +25,9 @@ class WardrobeScreen extends StatefulWidget {
 }
 
 class _WardrobeScreenState extends State<WardrobeScreen> {
+  static const Duration _locationsLoadTimeout = Duration(seconds: 15);
+  static const Duration _clothesLoadTimeout = Duration(seconds: 25);
+
   final storage = const FlutterSecureStorage();
   List<Clothes> clothes = [];
   List<Clothes> _allClothes = [];
@@ -98,7 +102,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
         });
       }
 
-      final locations = await ApiService.getWardrobeLocations(_userId!);
+      final locations = await ApiService.getWardrobeLocations(_userId!).timeout(
+        _locationsLoadTimeout,
+        onTimeout: () => throw TimeoutException('Wardrobe locations request timed out'),
+      );
       await StartupService.cacheLocations(_userId!, locations);
       final storedLocationIdString = await storage.read(key: 'selected_location_id');
       int? storedLocationId = storedLocationIdString != null
@@ -125,6 +132,10 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       if (resolvedLocationId != storedLocationId) {
         await _persistSelectedLocation(resolvedLocationId);
       }
+    } on TimeoutException {
+      setState(() {
+        _error = 'Не удалось загрузить локации вовремя. Попробуйте обновить экран.';
+      });
     } catch (e) {
       setState(() {
         _error = l10n.getStringWithPlaceholders(
@@ -212,11 +223,22 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
       final parsed = await ApiService.getUserClothes(
         _userId!,
         locationId: selectedLocationId,
+      ).timeout(
+        _clothesLoadTimeout,
+        onTimeout: () => throw TimeoutException('Wardrobe clothes request timed out'),
       );
       setState(() {
         _allClothes = parsed;
         clothes = _filterClothes(parsed);
         isLoading = false;
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        _error = 'Загрузка вещей заняла слишком много времени. Проверьте API и попробуйте снова.';
+        clothes = [];
+        _allClothes = [];
       });
     } catch (e) {
       if (!mounted) return;

@@ -58,7 +58,7 @@ class FisheyeNavigationBar extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               child: SizedBox(
-                height: 44,
+                height: 48,
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -106,14 +106,14 @@ class _FisheyeItem extends StatelessWidget {
     final bool isNeighbor = distance == 1;
 
     final double targetScale = isSelected
-        ? 1.05
+        ? 1.03
         : isNeighbor
-            ? 1.015
+            ? 1.01
             : 0.97;
     final double targetYOffset = isSelected
-        ? 0.6
+        ? -0.4
         : isNeighbor
-            ? 0.3
+            ? -0.2
             : 0;
 
     return Expanded(
@@ -146,7 +146,7 @@ class _FisheyeItem extends StatelessWidget {
             curve: Curves.easeOutCubic,
             margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: EdgeInsets.symmetric(
-              horizontal: isSelected ? 14 : 0,
+              horizontal: isSelected ? 10 : 0,
               vertical: 6,
             ),
             decoration: BoxDecoration(
@@ -205,26 +205,31 @@ class _SelectedNavContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          item.selectedIcon,
-          size: 18,
-          color: colorScheme.onPrimary,
-        ),
-        const SizedBox(width: 5),
-        Text(
-          item.label,
-          style: TextStyle(
-            fontSize: 9.5,
-            fontWeight: FontWeight.w600,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            item.selectedIcon,
+            size: 18,
             color: colorScheme.onPrimary,
-            letterSpacing: 0.2,
           ),
-        ),
-      ],
+          const SizedBox(width: 5),
+          Text(
+            item.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w600,
+              color: colorScheme.onPrimary,
+              letterSpacing: 0.2,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -252,25 +257,30 @@ class _UnselectedNavContent extends StatelessWidget {
 
     final Color textColor = iconColor.withOpacity(isNeighbor ? 0.95 : 0.78);
 
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Icon(
-          item.icon,
-          size: 18,
-          color: iconColor,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          item.label,
-          style: TextStyle(
-            fontSize: 8.5,
-            fontWeight: FontWeight.w600,
-            color: textColor,
-            letterSpacing: 0.1,
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            item.icon,
+            size: 18,
+            color: iconColor,
           ),
-        ),
-      ],
+          const SizedBox(height: 2),
+          Text(
+            item.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 8.5,
+              fontWeight: FontWeight.w600,
+              color: textColor,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

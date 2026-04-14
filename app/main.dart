@@ -51,7 +51,6 @@ class WardrobeApp extends StatelessWidget {
             ? Typography.material2021().black
             : Typography.material2021().white)
         .apply(
-      fontSizeFactor: 1.05,
       bodyColor: colorScheme.onSurface,
       displayColor: colorScheme.onSurface,
     );
@@ -151,4 +150,3 @@ class WardrobeApp extends StatelessWidget {
     );
   }
 }
-
