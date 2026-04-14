@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -20,6 +21,7 @@ class ApiService {
   static const String defaultHomeCoordinates = '55.755826, 37.617299';
   static final storage = FlutterSecureStorage();
   static String? _sessionToken;
+  static const Duration _requestTimeout = Duration(seconds: 20);
 
   static void rememberAccessToken(String? token) {
     final normalized = token?.trim();
@@ -419,7 +421,9 @@ class ApiService {
         : Uri.parse('$baseUrl/clothes/user/$userId');
 
     try {
-      final response = await http.get(uri, headers: await _authHeaders());
+      final response = await http
+          .get(uri, headers: await _authHeaders())
+          .timeout(_requestTimeout);
 
       if (response.statusCode == 200) {
         final utf8Response = utf8.decode(response.bodyBytes); // Для корректной обработки русских символов
@@ -434,6 +438,10 @@ class ApiService {
         }
       }
       throw Exception('Ошибка при получении одежды пользователя');
+    } on TimeoutException {
+      final cached = await LocalStorageService.getCachedClothes(userId);
+      if (cached.isNotEmpty) return cached;
+      throw Exception('Таймаут при загрузке вещей. Проверьте сеть или API.');
     } catch (_) {
       final cached = await LocalStorageService.getCachedClothes(userId);
       if (cached.isNotEmpty) return cached;
@@ -990,10 +998,12 @@ class ApiService {
   }
 
   static Future<List<dynamic>> getWardrobeLocations(int userId) async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/locations/$userId'),
-      headers: await _authHeaders(),
-    );
+    final response = await http
+        .get(
+          Uri.parse('$baseUrl/locations/$userId'),
+          headers: await _authHeaders(),
+        )
+        .timeout(_requestTimeout);
     if (response.statusCode == 200) {
       return jsonDecode(utf8.decode(response.bodyBytes));
     } else {
